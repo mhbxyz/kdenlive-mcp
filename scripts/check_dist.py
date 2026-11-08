@@ -18,7 +18,7 @@ NAME = "mcp-kdenlive"
 SERVER_NAME = "io.github.mhbxyz/kdenlive-mcp"
 FORBIDDEN = re.compile(
     r"^research/|(^|/)(\.github|\.git|\.venv|__pycache__|\.pytest_cache|dist|build)(/|$)"
-    r"|\.pyc$|(^|/)\.env|\.pem$|\.key$|(^|/)id_rsa|^(?!tests/fixtures/).*\.kdenlive$"
+    r"|\.pyc$|(^|/)\.env|\.pem$|\.key$|(^|/)id_rsa|^(?!tests/fixtures/|src/mcp_kdenlive/templates/|mcp_kdenlive/templates/).*\.kdenlive$"
 )
 
 
@@ -59,7 +59,7 @@ def main() -> None:
         ):
             if required not in names:
                 fail(f"wheel lacks {required}")
-        if any(n.startswith("tests/") or n.endswith(".kdenlive") for n in names):
+        if any(n.startswith("tests/") for n in names):
             fail("wheel contains tests")
         meta_name = next(n for n in names if n.endswith(".dist-info/METADATA"))
         wheel_version = check_metadata(whl.read(meta_name).decode(), "wheel")
