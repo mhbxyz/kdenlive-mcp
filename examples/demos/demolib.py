@@ -23,7 +23,10 @@ from typing import Any
 from mcp import Client, StdioServerParameters
 
 # Variables the server needs; everything else (tokens, credentials…) stays out of the child.
-_PASS = ("PATH", "HOME", "USER", "LANG", "TZ", "TMPDIR", "XDG_RUNTIME_DIR", "XDG_DATA_DIRS")
+_PASS = (
+    "PATH", "HOME", "USER", "LANG", "TZ", "TMPDIR", "XDG_RUNTIME_DIR", "XDG_DATA_DIRS",
+    "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",  # MLT 7.22's Qt module needs a display (#90)
+)  # fmt: skip
 _PASS_PREFIXES = ("LC_", "MLT_", "KDENLIVE_MCP_", "COVERAGE_")
 
 

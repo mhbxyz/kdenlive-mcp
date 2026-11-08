@@ -154,6 +154,16 @@ and checks picture and sound; locally, melt and Kdenlive 26.08.2 renders of a pr
 crossfades have the same streams and duration, frame colours within 12/255 and mean audio level
 within 1.5 dB. Known differences: no proxies or render zones, Kdenlive's `in`/`out` not set.
 
+**Display (MLT 7.22, #90):** MLT's Qt module draws titles and composites video tracks
+(`qtblend`, used by every Kdenlive 26 project with two video tracks or more). With MLT 7.22
+(Ubuntu 24.04) it refuses to load without an X11 display, even with `QT_QPA_PLATFORM=offscreen`:
+titles become MLT's opaque *INVALID* placeholder and the lower tracks disappear, while melt still
+exits 0. The melt engine therefore passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` from the
+server's environment (Qt still draws offscreen: no window opens), and a render whose log shows the
+module refusing to load **fails** with an explanation instead of succeeding. On such a system,
+add `DISPLAY` to the server's `env` in the MCP client configuration (many clients start servers
+with a minimal environment), or run it under `xvfb-run -a`. MLT 7.42 renders headless.
+
 ### Kdenlive engine checks
 
 Kdenlive's own behaviour drives the checks:

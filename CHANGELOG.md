@@ -19,6 +19,10 @@ migration notes in the same entry.
 
 - **melt render engine (#42):** `render_project` and `start_render` take `engine` (`auto`, `kdenlive`, `melt`). `auto` renders with MLT's melt when Kdenlive has no `--render` (before 24.02, e.g. Ubuntu 24.04's 23.08) or when the project has subtitles (Kdenlive 26.08.2 crashes on them), using the preset's arguments filled with its defaults. Results report the `engine`; melt renders carry a warning that they are not Kdenlive's own render path.
 
+### Fixed
+
+- **melt engine without a display (#90):** with MLT 7.22 (Ubuntu 24.04), titles rendered as MLT's *INVALID* placeholder and video tracks were not composited, yet the render succeeded: MLT's Qt module needs an X display there. The melt engine now passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` (Qt still draws offscreen) and fails with an explanation (display, `xvfb-run`, newer MLT) when the module cannot load.
+
 ### Changed
 
 - **Work folders (#65):** temporary folders for renders and MLT probes are created in `$XDG_CACHE_HOME/kdenlive-mcp/tmp` instead of the system temp folder.

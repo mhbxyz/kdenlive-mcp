@@ -52,6 +52,14 @@ Projects *saved* by 24.x/25.x need Kdenlive's GUI: in the headless lab these App
 register on neither the accessibility bus nor the session D-Bus, so the files are produced by
 hand (#86).
 
+## Headless rendering with MLT 7.22 (#90)
+
+MLT 7.22's Qt module (`kdenlivetitle`, `qtblend`) needs an X11 display, even with
+`QT_QPA_PLATFORM=offscreen`; MLT 7.42 does not. Reproduced in `ubuntu:24.04` (Docker). The melt
+engine passes the display variables through and fails clearly without one; the CI
+`Integration` job runs under `xvfb-run` and an e2e test composites two video tracks with both
+engines.
+
 ## Tested versions
 
 | Environment | Kdenlive | MLT | FFmpeg | Python | What is exercised |
