@@ -10,6 +10,8 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 | `get_timeline` | yes | Tracks, clips, mixes, compositions and guides of one sequence |
 | `list_project_media` | yes | Bin media with resolved paths and status, effect/transition asset files, optional ffprobe data |
 | `probe_media` | yes | ffprobe metadata for one local file |
+| `list_render_presets` | yes | Render presets of the installed Kdenlive |
+| `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 
 ## `inspect_project(path)`
 
@@ -91,3 +93,42 @@ Fonts and images inside titles, installed effect plugins, and full media decodab
 Absolute local path only; URLs and relative paths are refused. Returns the file status and
 ffprobe data: container, duration, size, and per stream the codec, dimensions, rational
 `frame_rate`, `rotation`, sample rate and channels. Missing metadata is `null`.
+
+## `list_render_presets()`
+
+Reads Kdenlive's preset files in Kdenlive's own order, with later files overriding earlier ones:
+
+1. the first `kdenlive/export/profiles.xml` found in `XDG_DATA_HOME`, `XDG_DATA_DIRS` or next to the `kdenlive` executable;
+2. other `*.xml` files in `$XDG_DATA_HOME/kdenlive/export/`;
+3. `customprofiles.xml`.
+
+Codec support by the installed MLT and FFmpeg is only known when rendering.
+
+## `render_project(path, output, preset="MP4-H264/AAC", overwrite=False, allow_missing_media=False, timeout_seconds=3600)`
+
+Runs `kdenlive --render --render-preset <preset> <project> <temporary output>`. Kdenlive's
+own behaviour drives the checks:
+
+| Kdenlive behaviour observed (26.08.2) | What the server does first |
+|---|---|
+| Unknown preset name: exits 0 and silently renders with another preset | Rejects names absent from the preset files (`unknown_preset`) |
+| Missing media: exits 0 and renders gaps | Rejects (`missing_media`) unless `allow_missing_media=true`, which adds a warning |
+| Nonexistent project: crashes (exit 139) | The project is loaded and validated first |
+| Existing output: refuses (exit 1) | `output_exists`, unless `overwrite=true` |
+| `--render` / `--render-preset` unknown in Kdenlive 23.08 (Ubuntu 24.04) | `unsupported_kdenlive`, detected from `kdenlive --help`; a `melt` fallback is tracked in #42 |
+
+### Execution
+
+- **Atomic publication:** the render goes to a hidden temporary file next to the output. Only after a successful, validated render is it moved into place (atomic `rename`). With `overwrite=true`, an existing file is replaced only at that moment, so a failed render leaves it untouched.
+- **Isolation:** Kdenlive runs headless (`QT_QPA_PLATFORM=offscreen`), without a session D-Bus, and with a private, temporary configuration and cache directory. Your Kdenlive settings, recent files and thumbnail cache are not touched. Custom presets in `XDG_DATA_HOME` remain available.
+- **Timeout:** the process group (Kdenlive and `kdenlive_render`) is stopped when `timeout_seconds` is exceeded.
+- **Separate outcomes:** `process_completed` says whether Kdenlive exited successfully. `validation` is a separate ffprobe check: at least one audio or video stream, and a duration within max(0.25 s, 2 %) of the active sequence. `state` is `succeeded` only if both pass.
+- **Disk state only:** the project file on disk is rendered. A project open in Kdenlive with unsaved changes renders as last saved.
+- **Output paths:** the output must be an absolute path in an existing, writable directory. It cannot be the project file or one of its media files. A file extension that differs from the preset's is reported as a warning.
+
+### Limits
+
+- **No visual check:** subjective visual or audio correctness is not checked.
+- **Defaults:** rendering uses the preset's default quality and speed. Proxies, two-pass encoding, per-track audio and embedded subtitles are disabled, as in Kdenlive's command-line mode.
+- **Packaging:** Flatpak and Snap installs need `KDENLIVE_MCP_KDENLIVE` pointing to a wrapper; untested.
+- **Blocking:** the call blocks for the whole render. For long renders, use the job tools from #7.
