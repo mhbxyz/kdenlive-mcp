@@ -1010,7 +1010,9 @@ def _plan_mix(tl: Timeline, t: Track, left: Item, frames: int) -> tuple[Item, in
             f"No clip starts where the clip on {t.label} ends (frame {left.end}).",
             "Move the next clip so it touches this one; a crossfade joins two adjacent clips.",
         )
-    if any(m.involves(right) for m in tl.mixes(t)):
+    # Kdenlive's layout alternates layers: a next clip already on the other layer can stay there
+    # even if it ends in another mix; one on the same layer would have to move across (refused).
+    if right.layer == left.layer and any(m.involves(right) for m in tl.mixes(t)):
         raise ProjectError(
             "unsupported_structure",
             f"The next clip on {t.label} (at {right.start}) is already in a mix.",
@@ -1029,6 +1031,16 @@ def _plan_mix(tl: Timeline, t: Track, left: Item, frames: int) -> tuple[Item, in
     before = min(frames // 2, head)
     after = min(frames - before, tail)
     before = min(frames - after, head)
+    if right.layer != left.layer and any(
+        c.layer == right.layer
+        and c.element is not right.element
+        and c.end > right.start - before
+        and c.start < right.start
+        for c in tl.clips(t)
+    ):
+        raise ProjectError(
+            "overlap", f"The clip before the next one on {t.label} leaves no room for the mix."
+        )
     if before + after < frames:
         raise ProjectError(
             "invalid_range",
@@ -1084,8 +1096,8 @@ def add_mix(
             [(s, e) for s, e in tl.placed(t, current.layer) if e is not right.element],
             current.layer,
         )
-        left = next(c for c in tl.clips(t) if c.element is left.element)
-        tl.set_bounds(t, left, left.start, left.end + after)
+        extended = next(c for c in tl.clips(t) if c.element is left.element)
+        tl.set_bounds(t, extended, extended.start, extended.end + after)
         source_in, _ = tl._entry_bounds(right.element)
         right.element.set("in", frames_to_clock(source_in - before, tl.doc.rate))
         tl._rebuild(t, [*tl.placed(t, new_layer), (cut - before, right.element)], new_layer)

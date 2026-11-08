@@ -289,3 +289,14 @@ def test_crossfades_do_not_move_the_clips_after_them_and_can_chain(s):
     v1 = next(t for t in s.timeline().tracks if t.label == "V1")
     assert [(c.start, c.end) for c in v1.clips] == [(0, 40), (40, 80), (80, 120)]
     assert v1.mixes == []
+
+
+def test_crossfade_into_a_clip_already_on_the_other_layer(s, tmp_path):
+    """Found by the rescue demo (#92): in Kdenlive's own layout the middle clip sits on layer 1
+    and ends in the next crossfade; a new crossfade before it must not need to move it."""
+    s.current = s.ws / "kd26-mixes.kdenlive"
+    s.apply(te.remove_mix, "V1@0", s.rev())
+    s.apply(te.add_mix, "V1@0", s.rev(), 12)
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(m.start, m.end) for m in v1.mixes] == [(34, 46), (70, 90)]  # cut back at 40
+    assert [(c.start, c.end, c.layer) for c in v1.clips] == [(0, 46, 0), (34, 90, 1), (70, 130, 0)]
