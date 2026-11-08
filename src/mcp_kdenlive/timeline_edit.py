@@ -276,21 +276,44 @@ class Timeline:
 
     # -- references --------------------------------------------------------------------
     def resolve_ref(self, ref: str) -> tuple[Track, Item]:
-        match = re.fullmatch(r"(\d+):(\d+):(\d+)", ref.strip())
+        """A clip from its ref: '<track>@<start>[#layer]' (get_timeline) or legacy
+        'index:layer:entry' (0.1)."""
+        text = ref.strip()
+        if match := re.fullmatch(r"([AV]\d+)@(\d+)(?:#([01]))?", text):
+            label, start, layer = match.group(1), int(match.group(2)), match.group(3)
+            track = self.tracks.get(label)
+            found = [
+                i
+                for i in (self.clips(track) if track else [])
+                if i.start == start and (layer is None or i.layer == int(layer))
+            ]
+            if len(found) > 1:
+                raise ProjectError(
+                    "invalid_argument",
+                    f"Two clips start at {start} on {label}; add '#0' or '#1' for the layer.",
+                )
+            if not found or track is None:
+                raise ProjectError(
+                    "clip_not_found",
+                    f"No clip {ref!r}.",
+                    "Read the refs from get_timeline (they name the track and start frame).",
+                )
+            return track, found[0]
+        match = re.fullmatch(r"(\d+):(\d+):(\d+)", text)
         if not match:
             raise ProjectError(
-                "invalid_argument", f"Invalid clip ref {ref!r} (expected track:layer:entry)."
+                "invalid_argument", f"Invalid clip ref {ref!r} (expected e.g. 'V1@90')."
             )
-        index, layer, entry_index = (int(g) for g in match.groups())
-        track = next((t for t in self.tracks.values() if t.index == index), None)
-        if track is None or layer >= len(track.layers):
+        index, layer_index, entry_index = (int(g) for g in match.groups())
+        legacy = next((t for t in self.tracks.values() if t.index == index), None)
+        if legacy is None or layer_index >= len(legacy.layers):
             raise ProjectError("clip_not_found", f"No clip {ref!r} on an editable track layer.")
-        elements = [el for el in track.layers[layer] if el.tag in ("entry", "blank")]
+        elements = [el for el in legacy.layers[layer_index] if el.tag in ("entry", "blank")]
         if entry_index >= len(elements) or elements[entry_index].tag != "entry":
             raise ProjectError("clip_not_found", f"No clip at {ref!r}.")
         target = elements[entry_index]
-        item = next(i for i in self.items(track, layer) if i.element is target)
-        return track, item
+        item = next(i for i in self.items(legacy, layer_index) if i.element is target)
+        return legacy, item
 
     # -- groups -------------------------------------------------------------------------
     def _groups(self) -> list[dict[str, Any]]:

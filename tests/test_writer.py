@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from mcp_kdenlive import kdenlive_doc, media, project, writer
+from mcp_kdenlive import edits, kdenlive_doc, media, project, writer
 from mcp_kdenlive.kdenlive_doc import ProjectError
 
 FIX = Path(__file__).parent / "fixtures"
@@ -106,10 +106,14 @@ def test_source_is_protected(workspace):
     with pytest.raises(ProjectError) as err:
         writer.save(edit, str(src), overwrite=True, expected_sha256="0" * 64)
     assert err.value.code == "conflict"
-    result = writer.save(
+    unchanged = writer.save(
         writer.open_for_edit(str(src)), str(src), overwrite=True, expected_sha256=edit.sha256
     )
-    assert result.backup and Path(result.backup).read_bytes() == edit.original
+    assert unchanged.written is False and unchanged.backup is None  # nothing to write (#63)
+    changed = writer.open_for_edit(str(src))
+    edits.add_track(changed, "video", "changed")
+    result = writer.save(changed, str(src), overwrite=True, expected_sha256=edit.sha256)
+    assert result.written and result.backup and Path(result.backup).read_bytes() == edit.original
 
 
 def test_conflict_when_source_changes(workspace):
