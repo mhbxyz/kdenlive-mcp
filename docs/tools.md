@@ -12,6 +12,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 | `probe_media` | yes | ffprobe metadata for one local file |
 | `list_profiles` | yes | MLT video profiles usable for new projects |
 | `create_project` | no (creates a file) | New Kdenlive project with one media clip on the timeline |
+| `save_project_copy` | no (writes a file) | Verified copy of a project; the base of every editing tool |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 | `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
@@ -202,3 +203,39 @@ For each: no dialog while loading, and an identical timeline after Kdenlive's sa
 - **Profiles:** custom Kdenlive profiles from `~/.local/share/kdenlive/profiles` are not offered, only MLT's standard profiles.
 - **Metadata refresh:** Kdenlive adds a few `meta.media.*` properties (decoded size, frame rate) when it opens the file. They are recomputed by Kdenlive and not required.
 - **Manual checks:** interactive GUI editing of a generated project still needs manual checks (see #8).
+
+## Safe saving: `save_project_copy(path, destination, overwrite=False, expected_sha256=None)`
+
+Every editing tool writes through the same safe path. `save_project_copy` exposes it directly:
+it writes a verified copy without changing anything.
+
+### Policy
+
+| Situation | Behaviour |
+|---|---|
+| New destination | Written atomically: temporary file, fsync, link. |
+| Destination exists | `[output_exists]`, unless `overwrite=true`. The old file is first copied to `<name>.backup-<UTC timestamp>.kdenlive`. |
+| Destination is the source | `[source_protected]`, unless `overwrite=true` **and** `expected_sha256` equals the sha256 of the version read (from `inspect_project`). A backup is kept. |
+| Source changed since it was read | `[conflict]`, nothing written. The source is re-hashed just before writing. |
+| Destination appears open in Kdenlive | `[open_in_kdenlive]`. Detection is best effort: a `kdenlive` process started with that file, or a Kdenlive autosave lock with unsaved changes. A project opened from Kdenlive's own *Open* dialog and not yet modified **cannot be detected**. |
+| Kdenlive 20.08–22.12 document (version 1.0x) | `[unsupported_structure]`. Save it once in a recent Kdenlive first. |
+
+### Why the open-project rule matters (observed, Kdenlive 26.08.2)
+
+With a project open in Kdenlive, the file was changed on disk by another program. Kdenlive
+showed no warning. After a change and a save in Kdenlive, the file contained Kdenlive's version
+only: **the external change was silently lost**. Close the project in Kdenlive, or use
+*File > Revert* after an external edit, before continuing to work in Kdenlive.
+
+### Fidelity
+
+- **Kept as read:** documents keep everything that was read: unknown elements and properties, attribute order, comments and whitespace.
+- **Unchanged copies:** a no-op copy is byte-identical to Kdenlive's file. The only difference can be `<a></a>` written as `<a/>`, which is the same XML.
+- **Verification:** before writing, the serialized bytes must parse back to the same canonical XML (C14N) as the edited document. After writing, the file must load as a Kdenlive project.
+- **Moving a copy:** when the destination folder differs, relative media, proxy, LUT and luma references are rewritten so they still resolve (`rebased_paths`), and `root` is set to the new folder. A copy written two or more levels away uses absolute paths. Verified: a copy moved to another folder opens in Kdenlive 26.08.2 without a missing-media dialog.
+
+### Filesystem scope
+
+Paths must be absolute. The server reads and writes only the paths given to it and the files
+those projects reference, with the permissions of the user running it. An allow-list of roots
+is tracked in #27.

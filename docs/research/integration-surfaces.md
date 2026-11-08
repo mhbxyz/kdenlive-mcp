@@ -135,7 +135,7 @@ Legend: ✅ verified here · 🟡 partially verified / with caveats · ❌ not v
 Projects open in Kdenlive while edited on disk (§2.1, §2.4):
 
 - **No disk-change warning:** Kdenlive keeps the document in memory and keeps a lock/autosave in its cache. No reload-on-change behaviour was observed or found in the code paths read.
-- **Clobbering:** saving in Kdenlive overwrites external changes. External writes to an open project are therefore unsafe by default. **Not directly demonstrated** with two writers in this lab; see the follow-up below.
+- **Clobbering:** saving in Kdenlive overwrites external changes, so external writes to an open project are unsafe by default. **Demonstrated on 2026-11-08 (#9):** the file was edited on disk while open in Kdenlive 26.08.2; Kdenlive gave no warning, and its next save silently discarded the external edit.
 
 ## 4. Recommendations
 
@@ -156,7 +156,7 @@ Projects open in Kdenlive while edited on disk (§2.1, §2.4):
 
 ## 5. Open questions and follow-ups
 
-- **Concurrent writers:** demonstrate Kdenlive overwriting an external edit to an open project (two-writer test) and check the lock-file semantics. → #9
+- ~~**Concurrent writers:** demonstrate Kdenlive overwriting an external edit to an open project (two-writer test) and check the lock-file semantics. → #9~~ Done in #9. Kdenlive overwrites the external edit without warning. Its only per-project lock is the autosave lock (`KAutoSaveFile`), which exists only once the document has unsaved changes; `kdenlivelock` in the temp dir is a global crash marker.
 - **Frame mapping:** confirm the clock-string rounding rule at 30000/1001 and 24000/1001 fps by round-tripping a project through Kdenlive. → #4, #19
 - **Relative paths on save:** determine when Kdenlive writes relative versus absolute `resource` paths. → #5, #10
 - **Title and subtitle formats:** check whether titles (`kdenlivetitle` producer) and subtitles (`avfilter.subtitles` + `<project>.kdenlive.srt`) round-trip when written externally. → #15, #16
