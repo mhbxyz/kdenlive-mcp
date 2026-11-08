@@ -170,7 +170,9 @@ def _bounded(text: str) -> str:
     return text if len(text) <= _MAX_DETAIL else text[:_MAX_DETAIL] + "…"
 
 
-def _resolve(spec: ToolSpec, env: Mapping[str, str]) -> tuple[str | None, str | None, ToolReport | None]:
+def _resolve(
+    spec: ToolSpec, env: Mapping[str, str]
+) -> tuple[str | None, str | None, ToolReport | None]:
     """Find the executable. Returns (path, source, early_report_if_unusable)."""
     override = env.get(spec.override_env, "").strip()
     if override:
@@ -178,42 +180,58 @@ def _resolve(spec: ToolSpec, env: Mapping[str, str]) -> tuple[str | None, str | 
         if not candidate.is_absolute():
             found = shutil.which(override, path=env.get("PATH"))
             if found is None:
-                return None, "override", _report(
-                    spec,
-                    ToolStatus.MISSING,
-                    source="override",
-                    detail=f"{spec.override_env}={override!r} was not found on PATH.",
-                    hint=f"Set {spec.override_env} to an absolute path of an executable file.",
+                return (
+                    None,
+                    "override",
+                    _report(
+                        spec,
+                        ToolStatus.MISSING,
+                        source="override",
+                        detail=f"{spec.override_env}={override!r} was not found on PATH.",
+                        hint=f"Set {spec.override_env} to an absolute path of an executable file.",
+                    ),
                 )
             candidate = Path(found)
         if not candidate.exists():
-            return None, "override", _report(
-                spec,
-                ToolStatus.MISSING,
-                source="override",
-                path=str(candidate),
-                detail=f"{spec.override_env} points to a path that does not exist.",
-                hint=f"Fix or unset {spec.override_env}.",
+            return (
+                None,
+                "override",
+                _report(
+                    spec,
+                    ToolStatus.MISSING,
+                    source="override",
+                    path=str(candidate),
+                    detail=f"{spec.override_env} points to a path that does not exist.",
+                    hint=f"Fix or unset {spec.override_env}.",
+                ),
             )
         if not candidate.is_file() or not os.access(candidate, os.X_OK):
-            return None, "override", _report(
-                spec,
-                ToolStatus.NOT_EXECUTABLE,
-                source="override",
-                path=str(candidate),
-                detail=f"{spec.override_env} points to something that is not an executable file.",
-                hint=f"Point {spec.override_env} to an executable file, or make it executable.",
+            return (
+                None,
+                "override",
+                _report(
+                    spec,
+                    ToolStatus.NOT_EXECUTABLE,
+                    source="override",
+                    path=str(candidate),
+                    detail=f"{spec.override_env} does not point to an executable file.",
+                    hint=f"Point {spec.override_env} to an executable file, or make it executable.",
+                ),
             )
         return str(candidate), "override", None
     for name in spec.candidates:
         found = shutil.which(name, path=env.get("PATH"))
         if found:
             return found, "path", None
-    return None, None, _report(
-        spec,
-        ToolStatus.MISSING,
-        detail=f"None of {list(spec.candidates)} was found on PATH.",
-        hint=spec.install_hint,
+    return (
+        None,
+        None,
+        _report(
+            spec,
+            ToolStatus.MISSING,
+            detail=f"None of {list(spec.candidates)} was found on PATH.",
+            hint=spec.install_hint,
+        ),
     )
 
 
@@ -233,7 +251,8 @@ def probe_tool(spec: ToolSpec, env: Mapping[str, str], timeout: float) -> ToolRe
     path, source, early = _resolve(spec, env)
     if early is not None:
         return early
-    assert path is not None
+    if path is None:  # pragma: no cover - _resolve always returns a path or a report
+        raise RuntimeError(f"no path resolved for {spec.name}")
     run_env = dict(env)
     run_env.update(spec.extra_env)
     try:

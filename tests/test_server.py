@@ -71,7 +71,11 @@ def test_stdout_is_protocol_clean_with_handshake_client(all_tools_stubbed):
     env = dict(os.environ, **all_tools_stubbed)
     proc = subprocess.Popen(
         [sys.executable, "-m", "mcp_kdenlive", "--log-level", "DEBUG"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
     )
     received: list[dict] = []
 
@@ -90,11 +94,15 @@ def test_stdout_is_protocol_clean_with_handshake_client(all_tools_stubbed):
                 return message
 
     try:
-        init = request(1, "initialize", {
-            "protocolVersion": "2025-06-18",
-            "capabilities": {},
-            "clientInfo": {"name": "raw-test", "version": "0"},
-        })
+        init = request(
+            1,
+            "initialize",
+            {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "raw-test", "version": "0"},
+            },
+        )
         assert init["result"]["serverInfo"]["name"] == "kdenlive-mcp"
         request(None, "notifications/initialized")
         listed = request(2, "tools/list", {})
@@ -113,7 +121,12 @@ def test_invalid_json_does_not_corrupt_stdout(all_tools_stubbed):
     env = dict(os.environ, **all_tools_stubbed)
     proc = subprocess.run(
         [sys.executable, "-m", "mcp_kdenlive"],
-        input="this is not json\n", capture_output=True, text=True, timeout=30, env=env, check=False,
+        input="this is not json\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+        check=False,
     )
     for line in proc.stdout.splitlines():
         if line.strip():

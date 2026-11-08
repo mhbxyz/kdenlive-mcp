@@ -42,16 +42,18 @@ def test_timeout_kills_whole_process_group(tmp_path):
 
 def test_arguments_are_not_shell_interpreted(tmp_path):
     target = tmp_path / "should-not-exist"
-    result = run([sys.executable, "-c", "import sys; print(sys.argv[1])", f"$(touch {target})"],
-                 timeout=10)
+    result = run(
+        [sys.executable, "-c", "import sys; print(sys.argv[1])", f"$(touch {target})"], timeout=10
+    )
     assert result.returncode == 0
     assert result.stdout.strip() == f"$(touch {target})"
     assert not target.exists()
 
 
 def test_nonzero_exit_and_stderr_are_captured():
-    result = run([sys.executable, "-c", "import sys; sys.stderr.write('bad'); sys.exit(3)"],
-                 timeout=10)
+    result = run(
+        [sys.executable, "-c", "import sys; sys.stderr.write('bad'); sys.exit(3)"], timeout=10
+    )
     assert (result.returncode, result.stderr) == (3, "bad")
 
 

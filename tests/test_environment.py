@@ -59,7 +59,11 @@ def test_override_takes_precedence_over_path(make_stub, stub_env, tmp_path):
     other.chmod(0o755)
     env = dict(stub_env, KDENLIVE_MCP_MELT=str(other))
     report = probe_tool(SPEC["melt"], env, timeout=5)
-    assert (report.status, report.source, report.version) == (ToolStatus.AVAILABLE, "override", "7.99.1")
+    assert (report.status, report.source, report.version) == (
+        ToolStatus.AVAILABLE,
+        "override",
+        "7.99.1",
+    )
     assert report.path == str(other)
 
 
@@ -122,7 +126,10 @@ def test_unstartable_file(stub_env, tmp_path):
 
 
 def test_detail_is_bounded(make_stub, stub_env):
-    make_stub("melt", f'{shutil.which("head")} -c 20000 /dev/zero | {shutil.which("tr")} "\\\\0" x; exit 3')
+    make_stub(
+        "melt",
+        f'{shutil.which("head")} -c 20000 /dev/zero | {shutil.which("tr")} "\\\\0" x; exit 3',
+    )
     report = probe_tool(SPEC["melt"], stub_env, timeout=5)
     assert report.status is ToolStatus.FAILED
     assert len(report.detail or "") <= 501

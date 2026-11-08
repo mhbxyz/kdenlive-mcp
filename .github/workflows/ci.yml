@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.9.26"
+  UV_FROZEN: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    name: Lint and type check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy
+
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ matrix.python }}
+          enable-cache: false
+      - run: uv sync
+      # Kdenlive/MLT/FFmpeg are not installed here: integration tests must report explicit skips.
+      - run: uv run pytest -ra -p no:cacheprovider
+
+  package:
+    name: Build and smoke-test artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv build --no-sources
+      - run: uv run --no-project python scripts/check_dist.py dist
+      - name: Install wheel and sdist into clean environments
+        run: |
+          set -euo pipefail
+          version=$(uv run --no-project python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          for kind in whl tar.gz; do
+            venv="$RUNNER_TEMP/venv-$kind"
+            uv venv --python 3.13 "$venv"
+            VIRTUAL_ENV="$venv" uv pip install dist/*."$kind"
+            (cd "$RUNNER_TEMP" && "$venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py" "$version")
+          done
+
+  integration:
+    name: Integration (distribution Kdenlive/MLT/FFmpeg)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Kdenlive, MLT and FFmpeg from Ubuntu
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends kdenlive melt ffmpeg
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync
+      - run: uv run kdenlive-mcp diagnose
+      - run: uv run pytest -ra -m integration -p no:cacheprovider

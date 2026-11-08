@@ -52,7 +52,11 @@ def main() -> None:
         names = whl.namelist()
         for bad in (n for n in names if FORBIDDEN.search(n)):
             fail(f"wheel contains unexpected file {bad}")
-        for required in ("mcp_kdenlive/__init__.py", "mcp_kdenlive/server.py", "mcp_kdenlive/py.typed"):
+        for required in (
+            "mcp_kdenlive/__init__.py",
+            "mcp_kdenlive/server.py",
+            "mcp_kdenlive/py.typed",
+        ):
             if required not in names:
                 fail(f"wheel lacks {required}")
         if any(n.startswith("tests/") for n in names):
@@ -72,12 +76,15 @@ def main() -> None:
         for required in ("pyproject.toml", "README.md", "LICENSE", "src/mcp_kdenlive/__init__.py"):
             if required not in members:
                 fail(f"sdist lacks {required}")
-        pkg_info = next(m for m in sd.getmembers() if m.name.count("/") == 1 and m.name.endswith("/PKG-INFO"))
+        pkg_info = next(
+            m for m in sd.getmembers() if m.name.count("/") == 1 and m.name.endswith("/PKG-INFO")
+        )
         sdist_version = check_metadata(sd.extractfile(pkg_info).read().decode(), "sdist")  # type: ignore[union-attr]
 
     if wheel_version != sdist_version:
         fail(f"wheel version {wheel_version} != sdist version {sdist_version}")
-    print(f"OK: {wheels[0].name} and {sdists[0].name} (version {wheel_version}, {len(names)} wheel files)")
+    print(f"OK: {wheels[0].name} and {sdists[0].name}")
+    print(f"    version {wheel_version}, {len(names)} files in the wheel")
 
 
 if __name__ == "__main__":
