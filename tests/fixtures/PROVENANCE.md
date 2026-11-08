@@ -24,7 +24,9 @@ and `addTimelineClip` methods and saved through the GUI file dialog.
 |---|---|
 | `kd26-ntsc.kdenlive` | 3 bin clips (`media/ntsc.mp4`, `media/pal clip é.mp4`, `media/tone.wav`), empty timeline (2 audio + 2 video tracks). |
 | `kd26-ntsc-timeline.kdenlive` | Same bin; `ntsc.mp4` placed at frame 0 (video on V1, audio on A2). |
-| `media/*` | Synthetic media generated with FFmpeg `lavfi` (`smptebars` 30000/1001 fps, `testsrc2` 25 fps, `sine`). |
+| `kd26-subtitle.kdenlive` + `.kdenlive.ass` | `kd26-ntsc-timeline` with one subtitle ("Bonjour é ✓", 00:00:02–00:00:07) added by Kdenlive 26.08.2 through D-Bus `slotAddSubtitle`, then saved with *Save As*. Kdenlive wrote the ASS file. |
+| `generated-montage.kdenlive` | **Not written by Kdenlive.** Built by `scripts/make_fixtures.py montage` with this package's editing functions, starting from `kd26-ntsc-timeline`. It contains 2 named tracks, gaps, a split, a grouped move, a trim, sub-ranges and a video-only clip. Verified to open and round-trip in Kdenlive 26.08.2. |
+| `media/*` | Synthetic media generated with FFmpeg `lavfi` (`smptebars` 30000/1001 fps, `testsrc2` 25 fps, `sine`). See `scripts/make_fixtures.py media`. |
 
 ## Sanitization applied to Kdenlive-saved files
 
@@ -33,6 +35,7 @@ after saving, and nothing else was changed:
 
 - **`root` attribute:** `<mlt root="…">` → `/nonexistent/kdenlive-mcp-fixture-root`. On load, Kdenlive treats a missing root as a moved project and resolves relative media against the project file's directory, which is exactly where the media is.
 - **`browserurl` property:** `kdenlive:docproperties.browserurl` (the last directory opened in a file dialog) → the same placeholder.
+- **`subtitlesList` property:** absolute paths in `kdenlive:sequenceproperties.subtitlesList` → the same placeholder. Kdenlive keeps the pre-*Save As* name there.
 
 Privacy note: real projects saved by Kdenlive contain absolute local paths, including the
 home directory. Do not commit real projects as fixtures.
