@@ -56,7 +56,8 @@ jobs:
       - run: uv sync --no-dev
       - name: Known vulnerabilities (runtime dependencies, locked versions)
         run: |
-          uv export --frozen --no-dev --no-emit-project --no-hashes > "$RUNNER_TEMP/runtime.txt"
+          uv export --frozen --no-dev --no-emit-project --no-hashes --no-header \
+            --output-file "$RUNNER_TEMP/runtime.txt"
           uvx --from "pip-audit==2.10.1" pip-audit --strict -r "$RUNNER_TEMP/runtime.txt"
       - name: Licenses of runtime dependencies
         run: uv run --no-dev python scripts/check_licenses.py

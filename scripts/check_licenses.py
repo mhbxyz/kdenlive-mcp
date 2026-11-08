@@ -6,24 +6,55 @@ Runtime dependencies are read from `uv export --no-dev`; licenses from installed
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from importlib import metadata
 
 # Permissive or weak (file-level) copyleft licenses compatible with distributing an MIT package
 # that depends on them without bundling them.
-ALLOWED = ("MIT", "BSD", "Apache", "ISC", "PSF", "Python Software Foundation", "MPL-2.0",
-           "Mozilla Public License 2.0", "Unlicense", "0BSD", "Zlib", "HPND", "CNRI-Python")
+ALLOWED = (
+    "MIT",
+    "BSD",
+    "Apache",
+    "ISC",
+    "PSF",
+    "Python Software Foundation",
+    "MPL-2.0",
+    "Mozilla Public License 2.0",
+    "Unlicense",
+    "0BSD",
+    "Zlib",
+    "HPND",
+    "CNRI-Python",
+)
 # Recorded exceptions: package -> reason (reviewed by the maintainer).
 EXCEPTIONS: dict[str, str] = {}
 
 
 def runtime_packages() -> list[tuple[str, bool]]:
     """(name, has_environment_marker) for every runtime dependency."""
-    out = subprocess.run(["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--no-hashes"],
-                         capture_output=True, text=True, check=True).stdout
-    return [(m.group(1), ";" in line) for line in out.splitlines()
-            if (m := re.match(r"^([A-Za-z0-9_.\-]+)==", line))]
+    command = [
+        "uv",
+        "export",
+        "--frozen",
+        "--no-dev",
+        "--no-emit-project",
+        "--no-hashes",
+        "--no-header",
+    ]
+    out = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "NO_COLOR": "1", "FORCE_COLOR": ""},
+    ).stdout
+    return [
+        (m.group(1), ";" in line)
+        for line in out.splitlines()
+        if (m := re.match(r"^([A-Za-z0-9_.\-]+)==", line))
+    ]
 
 
 def license_of(name: str) -> str:
@@ -31,8 +62,11 @@ def license_of(name: str) -> str:
     expression = meta.get("License-Expression")
     if expression:
         return expression
-    classifiers = [c.split("::")[-1].strip() for c in meta.get_all("Classifier") or []
-                   if c.startswith("License ::")]
+    classifiers = [
+        c.split("::")[-1].strip()
+        for c in meta.get_all("Classifier") or []
+        if c.startswith("License ::")
+    ]
     if classifiers:
         return " / ".join(classifiers)
     return (meta.get("License") or "UNKNOWN").splitlines()[0][:80]
@@ -49,7 +83,9 @@ def main() -> None:
             else:
                 problems.append(f"{name}: not installed in this environment")
             continue
-        ok = any(token.lower() in lic.lower() for token in ALLOWED) and "GPL" not in lic.replace("LGPL", "")
+        ok = any(token.lower() in lic.lower() for token in ALLOWED) and "GPL" not in lic.replace(
+            "LGPL", ""
+        )
         print(f"{'ok ' if ok or name in EXCEPTIONS else 'BAD'} {name}: {lic}")
         if not ok and name not in EXCEPTIONS:
             problems.append(f"{name}: {lic}")
