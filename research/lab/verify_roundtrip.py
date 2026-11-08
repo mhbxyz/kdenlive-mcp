@@ -19,9 +19,25 @@ LAB = Path(__file__).resolve().parent
 
 
 def clips(path: Path) -> list[tuple]:
-    tl = project.timeline(kdenlive_doc.load(str(path)))
-    return [(t.label, c.start, c.end, c.source_in, c.source_out, c.resource)
-            for t in tl.tracks for c in t.clips]
+    """Tracks (label, kind, name), clips, and bin media references: what must survive."""
+    doc = kdenlive_doc.load(str(path))
+    tl = project.timeline(doc)
+    tracks = [(t.label, t.kind, t.name) for t in tl.tracks]
+    timeline = [(t.label, c.start, c.end, c.source_in, c.source_out, c.resource)
+                for t in tl.tracks for c in t.clips]
+    from mcp_kdenlive import media
+
+    bin_media = sorted(i.resolved_path or "" for i in media.media_report(doc).items if i.kind == "file")
+    # internal per-track transitions, by track label: wrong renumbering would show up here
+    seq = next(t for t in doc.sequence_tractors()
+               if kdenlive_doc.props(t).get("kdenlive:uuid") == tl.sequence_uuid)
+    label_of = {t.index: t.label for t in tl.tracks}
+    internal = sorted(
+        (label_of.get(int(p.get("b_track", "-1"))), p.get("mlt_service"))
+        for p in (kdenlive_doc.props(x) for x in seq.findall("transition"))
+        if p.get("internal_added")
+    )
+    return [tracks, timeline, bin_media, internal]
 
 
 def verify(path: Path) -> bool:
