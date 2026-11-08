@@ -97,6 +97,6 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
 
 ## Known limitations
 
-- **Inside the allowed roots,** every project and media file is in reach of a manipulated model (with the safeguards above: copies by default, backups, conflict checks). Keep the roots narrow, and avoid `unrestricted`.
+- **Inside the allowed roots,** every project and media file is in reach of a manipulated model (with the safeguards above: copies by default, backups, conflict checks). Backup rotation keeps the first backup of a project (its state before the server's first edit) and the 4 most recent, so a series of writes cannot flush the original; it only ever removes backups the server wrote since 0.2. Keep the roots narrow, and avoid `unrestricted`.
 - **Open-project detection** relies on the window title for projects opened from Kdenlive's dialogs: it needs `busctl` and the session bus, and it matches by file name only (see *Open projects*).
 - **Decoders:** media decoding vulnerabilities in FFmpeg or MLT are inherited; keep them updated.

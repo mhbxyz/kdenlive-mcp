@@ -12,8 +12,8 @@ migration notes in the same entry.
 - **Breaking — clip references (#63):** `get_timeline` refs are now `<track>@<start>` (e.g. `V1@90`), stable while a clip does not move. Edit tools still accept the 0.1 form `index:layer:entry`. **Migration:** read refs from `get_timeline` instead of building them.
 - **Breaking — `create_project` parameter (#63):** `output` is now `destination`, like every other tool that writes a project. **Migration:** rename the argument.
 - **Breaking — `list_profiles` result (#63):** an object `{profiles: [...]}` instead of a bare list. **Migration:** read `profiles`.
-- **Backups (#63):** the 5 most recent `.backup-*.kdenlive` files of a project are kept; older ones are removed. Their names now include microseconds.
-
+- **Backups (#63):** backups are rotated: the first one (the project before the server's first edit) and the 4 most recent are kept. Only backups written since 0.2 are rotated; their names now include microseconds, and 0.1 backups or other files are never removed.
+- **Groups (#63):** a clip inside a user group (Ctrl+G), even one containing an audio/video pair, is now refused by edit tools instead of being moved without its group.
 - **Trims and splits with effects (#13):** edge fades (audio fades, fades from/to black) now stay at the clip's edges when it is trimmed or split, and shrink to fit a shorter clip; a split gives the fade-in to the left half and the fade-out to the right half, with new filter ids. A constant (single-keyframe) effect value no longer blocks trimming the start or splitting; animated effects still do.
 - **Breaking — filesystem scope by default (#60):** without `KDENLIVE_MCP_ALLOWED_ROOTS`, the tools now only read and write inside the user's videos directory (`XDG_VIDEOS_DIR`, usually `~/Videos`) and refuse other paths with `[path_not_allowed]`. Before, the unset variable meant no restriction.
   - **Migration:** if your projects or media are elsewhere, add `"env": {"KDENLIVE_MCP_ALLOWED_ROOTS": "/path/one:/path/two"}` to the server entry of your MCP client. `KDENLIVE_MCP_ALLOWED_ROOTS=unrestricted` restores the 0.1 behaviour (not recommended).
@@ -21,12 +21,10 @@ migration notes in the same entry.
 
 ### Added
 
-- **Interface review (#63):** `get_timeline` clips list their `group`; `saved.written` tells whether anything was written (an unchanged project is not rewritten and gets no backup); tools with `revision` use it as `expected_sha256` for in-place edits; the interface snapshot covers outputs; every error code is tested; MCP protocol revisions and SDK range documented in `docs/compatibility.md`. New error code `marker_not_found` (markers are new in 0.2).
-
+- **Interface review (#63):** `get_timeline` clips list their `group`; edit results give each changed clip's new `ref`; `saved.written` tells whether anything was written (an unchanged project is not rewritten and gets no backup); tools with `revision` use it as `expected_sha256` for in-place edits; the interface snapshot covers outputs; every error code is tested; MCP protocol revisions and SDK range documented in `docs/compatibility.md`. New error code `marker_not_found` (markers are new in 0.2).
 - **Guides and clip markers (#12):** `list_markers`, `add_marker`, `update_marker` and `remove_marker` for timeline guides (chapters) and clip markers, with comments, categories and durations, in Kdenlive 26.08's format.
 - **Relink media (#17):** `relink_media` points bin clips at moved or replacement files, on the bin clip and every timeline instance, after checking with MLT that the new file covers what the timeline uses. New error code `media_mismatch`.
 - **Audio level and fades (#13):** `set_clip_volume` (constant dB level, Kdenlive's *Volume* effect) and `set_clip_fades` (fade-in/fade-out in frames, Kdenlive's *Fade in*/*Fade out*) on a clip's audio. `get_timeline` reports each clip's `audio` settings.
-
 - **Editing tracks with crossfades (#61):** `insert_clip`, `move_clip`, `trim_clip`, `split_clip` and `remove_clip` now work on tracks that contain Kdenlive same-track mixes. Mixed clips keep their mix: they cannot be moved, their mixed side cannot be trimmed, and they cannot be split inside the mix. Removing a mixed clip removes its mixes and trims the partner back to the original cut. Verified with mixes made by Kdenlive 26.08.2.
 - **`get_timeline` mixes:** a `cut` field, the frame where the clips met before the mix (#61).
 - **`remove_clip` result:** `clips` now lists the neighbours trimmed back to a cut when a crossfade was removed with the clip; it is empty otherwise, as before (#61).

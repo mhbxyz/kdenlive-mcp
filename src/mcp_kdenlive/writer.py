@@ -256,10 +256,15 @@ KEEP_BACKUPS = 5
 
 
 def _rotate_backups(dest: Path) -> None:
-    """Keep the KEEP_BACKUPS most recent backups of `dest` written by this server."""
-    pattern = re.compile(re.escape(dest.stem) + r"\.backup-\d{8}T\d{6}(\.\d{6})?Z\.kdenlive")
+    """Keep the first and the KEEP_BACKUPS - 1 most recent backups of `dest` made by 0.2+.
+
+    Only names this server writes since 0.2 (with microseconds) are considered: 0.1 backups
+    and files made by hand are never removed. The first one is the project as it was before
+    the server's first edit, so a run of writes can never flush it.
+    """
+    pattern = re.compile(re.escape(dest.stem) + r"\.backup-\d{8}T\d{6}\.\d{6}Z\.kdenlive")
     backups = sorted(p for p in dest.parent.iterdir() if pattern.fullmatch(p.name) and p.is_file())
-    for old in backups[:-KEEP_BACKUPS]:
+    for old in backups[1 : -(KEEP_BACKUPS - 1)]:
         with contextlib.suppress(OSError):
             old.unlink()
 

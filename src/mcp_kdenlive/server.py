@@ -130,12 +130,15 @@ def _project_edit(
         | MarkerEditResult
         | relink_mod.RelinkResult,
     ],
+    revision: str | None = None,
 ) -> EditResult:
     """Open, apply one operation, save; the result goes in its EditResult field."""
     try:
         edit = writer.open_for_edit(path)
         result = operation(edit)
-        saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected_sha256)
+        # In place, the revision the refs were read from is the expected source version.
+        expected = expected_sha256 or revision
+        saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected)
         if isinstance(result, audio_mod.AudioEditResult):
             return EditResult(saved=saved, audio=result)
         if isinstance(result, MarkerEditResult):
@@ -776,8 +779,9 @@ def _register_editing(server: MCPServer) -> None:
             path,
             destination,
             overwrite,
-            expected_sha256 or revision,  # in place: the revision read is the expected one
+            expected_sha256,
             lambda e: timeline_edit.move_clip(e, clip, revision, start, track, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -805,8 +809,9 @@ def _register_editing(server: MCPServer) -> None:
             path,
             destination,
             overwrite,
-            expected_sha256 or revision,  # in place: the revision read is the expected one
+            expected_sha256,
             lambda e: timeline_edit.trim_clip(e, clip, revision, start, end, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -831,8 +836,9 @@ def _register_editing(server: MCPServer) -> None:
             path,
             destination,
             overwrite,
-            expected_sha256 or revision,  # in place: the revision read is the expected one
+            expected_sha256,
             lambda e: timeline_edit.split_clip(e, clip, revision, at, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -857,8 +863,9 @@ def _register_editing(server: MCPServer) -> None:
             path,
             destination,
             overwrite,
-            expected_sha256 or revision,  # in place: the revision read is the expected one
+            expected_sha256,
             lambda e: timeline_edit.remove_clip(e, clip, revision, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -886,8 +893,9 @@ def _register_editing(server: MCPServer) -> None:
             path,
             destination,
             overwrite,
-            expected_sha256 or revision,  # in place: the revision read is the expected one
+            expected_sha256,
             lambda e: audio_mod.set_clip_volume(e, clip, revision, level_db, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -917,6 +925,7 @@ def _register_editing(server: MCPServer) -> None:
             path,
             destination,
             overwrite,
-            expected_sha256 or revision,  # in place: the revision read is the expected one
+            expected_sha256,
             lambda e: audio_mod.set_clip_fades(e, clip, revision, fade_in, fade_out, sequence),
+            revision=revision,
         )

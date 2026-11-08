@@ -51,7 +51,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 - **Ordering:** tracks are listed in MLT order. `index` is the MLT track index (0 is the background and is omitted).
 - **Labels:** `label` follows Kdenlive's convention, derived from the order. `V1` is the lowest video track and `A1` is the audio track directly below the video tracks.
 - **Layers:** each Kdenlive track has two playlists. `layer` 1 holds the second clip of a same-track mix, and `mixes` lists those transitions: `start` is where the right clip starts, `end` (exclusive) where the left clip ends, and `cut` the frame where the clips met before the mix (`end - cut_offset`).
-- **Clip references:** `ref` is `<track>@<start>`, e.g. `V1@90` (with `#1` appended for the secondary layer when two clips start on the same frame). It stays the same as long as the clip does not move. `group` lists the refs of the clips edited together with it (Kdenlive audio/video pair).
+- **Clip references:** `ref` is `<track>@<start>`, e.g. `V1@90`. When two clips start on the same frame of a track (one per layer), both get a layer suffix, `V1@90#0` and `V1@90#1`, and the bare form is refused. A ref stays the same as long as the clip does not move; edit results give the new refs (`timeline.clips[].ref`), and `saved.sha256` is the `revision` for the next edit. Labels are stable when tracks are added (new video tracks go on top, new audio tracks at the bottom). Refs do not name the sequence: pass `sequence` for a non-active one. `group` lists the refs of the clip's audio/video partner, edited together with it; a clip inside a user group (Ctrl+G in Kdenlive) is refused by edit tools (`[unsupported_structure]`).
 
 ### Limits
 
@@ -222,7 +222,7 @@ it writes a verified copy without changing anything.
 | Situation | Behaviour |
 |---|---|
 | New destination | Written atomically: temporary file, fsync, link. |
-| Destination exists | `[output_exists]`, unless `overwrite=true`. The old file is first copied to `<name>.backup-<UTC timestamp>.kdenlive`; the 5 most recent backups of a file are kept. If nothing changed (same content), nothing is written and no backup is made (`saved.written: false`). |
+| Destination exists | `[output_exists]`, unless `overwrite=true`. The old file is first copied to `<name>.backup-<UTC timestamp>.kdenlive`; the first backup of a file (its state before the server's first edit) and the 4 most recent are kept; 0.1 backups and other files are never removed. If nothing changed (same content), nothing is written and no backup is made (`saved.written: false`). |
 | Destination is the source | `[source_protected]`, unless `overwrite=true` **and** `expected_sha256` equals the sha256 of the version read (from `inspect_project`). A backup is kept. |
 | Source changed since it was read | `[conflict]`, nothing written. The source is re-hashed just before writing. |
 | Destination appears open in Kdenlive | `[open_in_kdenlive]`, with the evidence (#62): a `kdenlive` process started with that file; a Kdenlive autosave lock of unsaved changes; or a running Kdenlive whose **window title** names a project with the same file name (read-only, over the session D-Bus, see [security.md](security.md), *Open projects*). This last signal also catches a project opened from Kdenlive's *Open* dialog without changes. |

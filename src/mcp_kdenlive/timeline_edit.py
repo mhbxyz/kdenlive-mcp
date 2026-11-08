@@ -51,6 +51,7 @@ KEYFRAMES = re.compile(r"(^|;)\s*-?[\d:.]+\s*[~|!]?=")
 
 
 class ClipPlacement(BaseModel):
+    ref: str = Field(description="Ref of the clip after the edit, e.g. 'V1@90'.")
     track: str
     start: int
     end: int = Field(description="Exclusive end frame.")
@@ -334,15 +335,32 @@ class Timeline:
         )
 
     def partners(self, track: Track, item: Item) -> list[tuple[Track, Item]]:
-        """The clip and, if it is in an AVSplit group, its counterpart."""
-        key = f"{track.index - 1}:{item.start}"
+        """The clip and, if it is in an AVSplit group, its counterpart.
+
+        A clip inside any other group (a user group made with Ctrl+G, possibly containing an
+        audio/video pair) is refused: Kdenlive would move the whole group.
+        """
+        key = f"{track.index - 1}:{item.start}:"
+
+        def path_to(node: dict[str, Any], trail: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            for child in node.get("children", []):
+                if not isinstance(child, dict):
+                    continue
+                if str(child.get("data", "")).startswith(key):
+                    return [*trail, node]
+                found = path_to(child, [*trail, node])
+                if found:
+                    return found
+            return []
+
         for group in self._groups():
-            leaves = group.get("children", [])
-            datas = [leaf.get("data", "") for leaf in leaves if isinstance(leaf, dict)]
-            if not any(isinstance(d, str) and d.startswith(key + ":") for d in datas):
+            trail = path_to(group, []) if isinstance(group, dict) else []
+            if not trail:
                 continue
-            if group.get("type") != "AVSplit" or any(
-                isinstance(leaf, dict) and leaf.get("type") != "Leaf" for leaf in leaves
+            innermost = trail[-1]
+            if any(g.get("type") != "AVSplit" for g in trail) or any(
+                isinstance(leaf, dict) and leaf.get("type") != "Leaf"
+                for leaf in innermost.get("children", [])
             ):
                 raise ProjectError(
                     "unsupported_structure",
@@ -350,8 +368,8 @@ class Timeline:
                     "Ungroup it in Kdenlive first.",
                 )
             result = []
-            for data in datas:
-                t_index, pos = (int(x) for x in str(data).split(":")[:2])
+            for leaf in innermost.get("children", []):
+                t_index, pos = (int(x) for x in str(leaf.get("data", "")).split(":")[:2])
                 other_track = next(t for t in self.tracks.values() if t.index == t_index + 1)
                 found = [i for i in self.clips(other_track) if i.start == pos]
                 if other_track is track and item in found:
@@ -469,6 +487,7 @@ def _open(
 def _placement(tl: Timeline, track: Track, start: int, entry: ET.Element) -> ClipPlacement:
     source_in, source_out = tl._entry_bounds(entry)
     return ClipPlacement(
+        ref=f"{track.label}@{start}",
         track=track.label,
         start=start,
         end=start + source_out - source_in + 1,

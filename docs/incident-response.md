@@ -65,8 +65,8 @@ If a bug makes the server corrupt or overwrite a project:
 
 1. **Fix it** with the highest priority and add a regression test that reproduces the corruption.
 2. **Tell users how to recover:**
-   - the server never edits in place without `overwrite` and `expected_sha256`;
-   - replaced files are kept as `<name>.backup-<UTC>.kdenlive`;
+   - the server never edits in place without `overwrite` and the sha256 of the version read (`expected_sha256`, or `revision` for timeline and audio tools);
+   - replaced files are kept as `<name>.backup-<UTC>.kdenlive`: the **first** backup (the project before the server's first edit) and the 4 most recent are kept, 0.1 backups and other files are never removed;
    - Kdenlive keeps its own `<name>_backup*` files and autosaves.
 3. **Publish an advisory** if user data could be lost without the user asking for an overwrite.
 
