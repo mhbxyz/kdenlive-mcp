@@ -16,6 +16,7 @@ Script commands, one per line:
   dclick NAME                  activate a button named NAME inside a dialog only
   dsettext COMBO TEXT          set the text field inside the dialog combo box named COMBO
   dbus PATH METHOD [ARGS...]   call qdbus6 against the running Kdenlive service
+  run PROGRAM [ARGS...]        run a program with the lab environment (private session bus)
 
 Never point it at real user projects: HOME is still the real home directory and Kdenlive's
 file dialogs default to it, so always type absolute paths inside a disposable lab directory.
@@ -146,6 +147,9 @@ try:
             else: print("CLICK", target, "-> NOT FOUND", flush=True)
         elif cmd == "dbus":
             print("DBUS", line, "=>", qd(svc(), *p[1:])[:40000], flush=True)
+        elif cmd == "run":
+            r = subprocess.run(p[1:], capture_output=True, text=True, timeout=120, env=kenv)
+            print("RUN", " ".join(p[1:]), "=>", r.returncode, r.stdout[-6000:], r.stderr[-2000:], flush=True)
         elif cmd == "key":
             for ch in p[1]:
                 Atspi.generate_keyboard_event(0, ch, Atspi.KeySynthType.STRING)

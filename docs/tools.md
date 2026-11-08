@@ -221,7 +221,8 @@ it writes a verified copy without changing anything.
 | Destination exists | `[output_exists]`, unless `overwrite=true`. The old file is first copied to `<name>.backup-<UTC timestamp>.kdenlive`. |
 | Destination is the source | `[source_protected]`, unless `overwrite=true` **and** `expected_sha256` equals the sha256 of the version read (from `inspect_project`). A backup is kept. |
 | Source changed since it was read | `[conflict]`, nothing written. The source is re-hashed just before writing. |
-| Destination appears open in Kdenlive | `[open_in_kdenlive]`. Detection is best effort: a `kdenlive` process started with that file, or a Kdenlive autosave lock with unsaved changes. A project opened from Kdenlive's own *Open* dialog and not yet modified **cannot be detected**. |
+| Destination appears open in Kdenlive | `[open_in_kdenlive]`, with the evidence (#62): a `kdenlive` process started with that file; a Kdenlive autosave lock of unsaved changes; or a running Kdenlive whose **window title** names a project with the same file name (read-only, over the session D-Bus, see [security.md](security.md), *Open projects*). This last signal also catches a project opened from Kdenlive's *Open* dialog without changes. |
+| Kdenlive runs but could not be checked | Written, with a warning in `saved.warnings` telling the user to close or reload the project in Kdenlive. This happens without `busctl` (systemd) or a session bus, or with a Kdenlive that is not on the session bus. |
 | Kdenlive 20.08–22.12 document (version 1.0x) | `[unsupported_structure]`. Save it once in a recent Kdenlive first. |
 
 ### Why the open-project rule matters (observed, Kdenlive 26.08.2)

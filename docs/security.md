@@ -49,7 +49,17 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
   - Render outputs must have a media extension, so a render can never replace a script or a dotfile.
   - Existing files are replaced only with `overwrite=true` and are backed up first. The source project is replaced only with `overwrite=true` plus its `expected_sha256`.
 - **Atomic writes and conflicts.** Writes go to a temporary file in the destination directory, are fsynced, then linked or renamed into place. The source is re-hashed just before writing. Failed writes leave no partial file, and inputs are never opened for writing.
-- **Open projects.** Kdenlive overwrites a project file when it saves and does not notice external changes (demonstrated, see `docs/tools.md`). Writing over a project that appears open in Kdenlive is refused, but detection is best effort.
+- **Open projects.** Kdenlive overwrites a project file when it saves and does not notice external changes (demonstrated, see `docs/tools.md`). Writing over a project that appears open in Kdenlive is refused (`[open_in_kdenlive]`). Detection (#62, `presence.py`, evidence in [research/open-projects.md](research/open-projects.md)):
+
+  | Signal | Catches | Misses |
+  |---|---|---|
+  | `/proc/*/cmdline` of processes named `kdenlive` | `kdenlive project.kdenlive` | projects opened from the *Open* dialog or the recent-files list |
+  | Kdenlive autosave lock (`stalefiles/kdenlive/*.lock`, live pid) | projects with unsaved changes | unmodified projects |
+  | Main window title over the session D-Bus (`busctl --user get-property org.kde.kdenlive-* /kdenlive/MainWindow_1 org.qtproject.Qt.QWidget windowTitle`) | any project currently shown, even unmodified (verified in Kdenlive 26.08.2) | the folder: the title has only the file name, so a project with the same name elsewhere is also refused |
+
+  The D-Bus query is **read-only** (`org.freedesktop.DBus.Properties.Get` on two properties; no Kdenlive method is ever called) and runs with a 2 s timeout. It is the only child process given `DBUS_SESSION_BUS_ADDRESS`. Renders are explicitly cut off from the bus; melt and ffprobe receive `XDG_RUNTIME_DIR`, through which a D-Bus client could find the default session bus, but they are not D-Bus clients. Every running Kdenlive process must be matched, by pid, to a window with a readable title; when one cannot be checked (no `busctl`, no session bus, a busy or unknown window), the write goes through with a warning asking the user to close or reload the project. `create_project` with `overwrite` follows the same rule.
+
+  Signals investigated and rejected: Kdenlive's recent-files and recent-folders entries are only written when Kdenlive exits; the per-project cache folder (`~/.cache/kdenlive/<documentid>`) is created when the project is closed and not touched when it is reopened; Kdenlive keeps no file descriptor on the project; `windowFilePath` is empty.
 
 ### TOCTOU limits
 
@@ -73,7 +83,8 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
   - basics: `HOME`, `PATH`, `USER`, `LANG`/`LC_*`, `TZ`, `TMPDIR`;
   - XDG directories;
   - plugin paths and library settings: `MLT_*`, `QT_*`, `KDE_*`, `FREI0R_PATH`, `LADSPA_PATH`, `LV2_PATH`, `LD_LIBRARY_PATH`, `LIBVA_*`, `VDPAU_*`, `MESA_*`, fontconfig;
-  - `KDENLIVE_MCP_*`.
+  - `KDENLIVE_MCP_*`;
+  - only for the read-only Kdenlive window check (#62): `DBUS_SESSION_BUS_ADDRESS`.
 
   Tokens and credentials of other tools in the server's environment are not inherited.
 - **Executable trust.** The programs found on `PATH` (or set via `KDENLIVE_MCP_*`) are trusted. Do not point these variables at untrusted files.
@@ -87,5 +98,5 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
 ## Known limitations
 
 - **Inside the allowed roots,** every project and media file is in reach of a manipulated model (with the safeguards above: copies by default, backups, conflict checks). Keep the roots narrow, and avoid `unrestricted`.
-- **Open-project detection** misses a project opened from Kdenlive's *Open* dialog that has no unsaved changes yet.
+- **Open-project detection** relies on the window title for projects opened from Kdenlive's dialogs: it needs `busctl` and the session bus, and it matches by file name only (see *Open projects*).
 - **Decoders:** media decoding vulnerabilities in FFmpeg or MLT are inherited; keep them updated.

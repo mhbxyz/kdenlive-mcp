@@ -29,7 +29,6 @@ import os
 import re
 import secrets
 import shutil
-import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -37,7 +36,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, policy, safexml
+from mcp_kdenlive import kdenlive_doc, policy, presence, safexml
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import KdenliveDocument, props
 from mcp_kdenlive.media import ASSET_FILE_PROPERTIES, URL_RE, _Resolver
@@ -63,14 +62,6 @@ class EditableProject:
     @property
     def root(self) -> ET.Element:
         return self.doc.root
-
-
-class KdenliveUsage(BaseModel):
-    open: bool | None = Field(
-        description="True if Kdenlive appears to have the file open; "
-        "None when it cannot be determined."
-    )
-    evidence: list[str]
 
 
 class SaveResult(BaseModel):
@@ -128,41 +119,9 @@ def verify_serialization(project: EditableProject, data: bytes) -> None:
 
 
 # ---------------------------------------------------------------- open detection -----
-def kdenlive_usage(path: Path) -> KdenliveUsage:
-    """Best-effort detection of a Kdenlive instance holding `path`."""
-    evidence: list[str] = []
-    target = str(path.resolve())
-    proc = Path("/proc")
-    if proc.is_dir():
-        for entry in proc.iterdir():
-            if not entry.name.isdigit():
-                continue
-            try:
-                args = (entry / "cmdline").read_bytes().split(b"\0")
-            except OSError:
-                continue
-            if not args or b"kdenlive" not in Path(args[0].decode(errors="replace")).name.encode():
-                continue
-            for arg in args[1:]:
-                with contextlib.suppress(OSError, ValueError):
-                    if arg and str(Path(arg.decode()).resolve()) == target:
-                        evidence.append(
-                            f"Kdenlive process {entry.name} was started with this file."
-                        )
-    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    stale = data_home / "stalefiles" / "kdenlive"
-    encoded = urllib.parse.quote(target, safe="")
-    if stale.is_dir():
-        for lock in stale.glob("*.lock"):
-            if encoded not in lock.name and encoded.replace("%2F", "%2f") not in lock.name:
-                continue
-            try:
-                pid = int(lock.read_text(errors="replace").split()[0])
-                os.kill(pid, 0)
-                evidence.append(f"Kdenlive (pid {pid}) holds an autosave of unsaved changes.")
-            except (OSError, ValueError, IndexError):
-                continue
-    return KdenliveUsage(open=True if evidence else None, evidence=evidence)
+# Detection lives in presence.py; re-exported for callers and tests.
+KdenliveUsage = presence.KdenliveUsage
+kdenlive_usage = presence.kdenlive_usage
 
 
 # ---------------------------------------------------------------- path rebasing ------
@@ -285,14 +244,6 @@ def _check_destination(
             f"{dest} already exists.",
             "Choose a new destination, or pass overwrite=true.",
         )
-    if dest.exists():
-        usage = kdenlive_usage(dest)
-        if usage.open:
-            raise ProjectError(
-                "open_in_kdenlive",
-                f"{dest} appears to be open in Kdenlive: " + "; ".join(usage.evidence),
-                "Close it in Kdenlive (or save to another file) and retry.",
-            )
     return dest
 
 
@@ -304,7 +255,7 @@ def save(
     expected_sha256: str | None = None,
 ) -> SaveResult:
     dest = _check_destination(project, destination, overwrite, expected_sha256)
-    warnings: list[str] = []
+    warnings = presence.check_not_open(dest)
     source_usage = kdenlive_usage(project.path)
     if source_usage.open:
         warnings.append(

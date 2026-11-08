@@ -18,6 +18,7 @@ migration notes in the same entry.
 - **Editing tracks with crossfades (#61):** `insert_clip`, `move_clip`, `trim_clip`, `split_clip` and `remove_clip` now work on tracks that contain Kdenlive same-track mixes. Mixed clips keep their mix: they cannot be moved, their mixed side cannot be trimmed, and they cannot be split inside the mix. Removing a mixed clip removes its mixes and trims the partner back to the original cut. Verified with mixes made by Kdenlive 26.08.2.
 - **`get_timeline` mixes:** a `cut` field, the frame where the clips met before the mix (#61).
 - **`remove_clip` result:** `clips` now lists the neighbours trimmed back to a cut when a crossfade was removed with the clip; it is empty otherwise, as before (#61).
+- **Open-project detection (#62):** writing over a project shown by a running Kdenlive is refused even when it was opened from Kdenlive's *Open* dialog without changes: the server reads Kdenlive's window title over the session D-Bus (read-only). When a running Kdenlive cannot be checked, the write carries a warning to close or reload the project.
 - **`diagnose_environment`:** a `filesystem` field with the effective roots, their source (`default`, `environment`, `unrestricted`) and the ones that do not exist (#60).
 
 ### Fixed
