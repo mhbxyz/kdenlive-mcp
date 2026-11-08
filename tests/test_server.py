@@ -176,3 +176,24 @@ async def test_media_tools():
     assert data["root"]["moved"] is True
     assert data["counts"]["ok"] == 3 and data["missing"] == []
     assert url.is_error and "[invalid_path]" in url.content[0].text
+
+
+async def test_text_fallback_for_clients_without_structured_output():
+    """Clients that ignore structuredContent still get the same data as JSON text."""
+    async with Client(build_server()) as client:
+        for name, args in [
+            ("diagnose_environment", {}),
+            ("inspect_project", {"path": str(FIXTURE)}),
+            ("get_timeline", {"path": str(FIXTURE)}),
+            ("list_project_media", {"path": str(FIXTURE)}),
+        ]:
+            result = await client.call_tool(name, args)
+            assert result.content and result.content[0].type == "text"
+            assert json.loads(result.content[0].text) == result.structured_content, name
+
+
+async def test_server_declares_only_standard_capabilities():
+    async with Client(build_server()) as client:
+        caps = client.server_capabilities.model_dump(exclude_none=True)
+    assert "tools" in caps
+    assert not caps.get("experimental")
