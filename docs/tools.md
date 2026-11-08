@@ -8,6 +8,8 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 | `diagnose_environment` | yes | Kdenlive, melt, ffprobe and ffmpeg availability, versions, override variables |
 | `inspect_project` | yes | Project summary: versions, profile, bin size, sequences |
 | `get_timeline` | yes | Tracks, clips, mixes, compositions and guides of one sequence |
+| `list_project_media` | yes | Bin media with resolved paths and status, effect/transition asset files, optional ffprobe data |
+| `probe_media` | yes | ffprobe metadata for one local file |
 
 ## `inspect_project(path)`
 
@@ -43,3 +45,49 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 - **Truncation:** large timelines are cut after `max_clips` clips; `truncated`, `returned_clips` and `total_clips` say so.
 - **Tested versions:** files written by Kdenlive 22.07 to 26.08.2 (document versions 1.04 and 1.1). Older documents are read best effort, with a warning.
 - **Stored durations:** Kdenlive 26.08.2 sometimes stores a sequence duration (`kdenlive:duration` and the project tractor `out`) one frame longer than the end of the last clip. This server computes durations from the clips.
+
+## `list_project_media(path, probe=False, max_items=200)`
+
+### Status values
+
+| `status` | Meaning |
+|---|---|
+| `ok` | A readable regular file exists at the resolved path. |
+| `missing` | Nothing exists there, or the path is a broken symlink. |
+| `inaccessible` | The path exists but cannot be read: permissions, a directory, or a name that is too long. |
+| `remote` | A URL. It is reported and **never fetched**. |
+| `generated` | No file is needed: color, title, generator, sequence. |
+| `pattern` | An image-sequence pattern. Only its directory is checked. |
+| `unknown` | No resource, or an unrecognised producer. |
+
+### What each item reports
+
+- **Paths:** `reference` is the value stored in the project; `resolved_path` is the absolute path actually checked.
+- **Proxies:** when a proxy is in use, the item's status is the status of the *original* media, and `proxy_status` is reported separately (Kdenlive rebuilds missing proxies).
+- **Effect and transition files:** `asset_files` lists files used by effects and transitions, the same ones Kdenlive checks when loading. Those are LUTs (`avfilter.lut3d` `av.file`), shapes, luma and wipe images, and subtitles.
+- **Missing list:** `missing` gathers every missing clip or asset path in one place.
+- **Probing:** with `probe=true`, up to 50 available files are probed with ffprobe.
+
+### Path resolution (same rules as Kdenlive 26.08.2)
+
+1. Relative references resolve against the `<mlt root="â€¦">` directory. Without `root`, the project file's directory is used. The server's working directory is never used.
+2. If `root` no longer exists, the project was **moved**. The project file's directory is used instead, and absolute references starting with the old root are rewritten (`rewritten_from_moved_root`).
+3. `$CURRENTPATH` (archived projects) means the project file's directory. `file://` URLs are treated as local paths.
+
+### Filesystem scope
+
+The server runs locally with the permissions of the user who started it. It reads only the
+paths it is given and the media those projects reference, and never writes them. A
+configurable allow-list of roots is tracked in #27. ffprobe is only called on local
+regular files, with `-protocol_whitelist file` and a `file:` prefix, so names containing `:`
+are not interpreted as protocols.
+
+### Not checked
+
+Fonts and images inside titles, installed effect plugins, and full media decodability.
+
+## `probe_media(path)`
+
+Absolute local path only; URLs and relative paths are refused. Returns the file status and
+ffprobe data: container, duration, size, and per stream the codec, dimensions, rational
+`frame_rate`, `rotation`, sample rate and channels. Missing metadata is `null`.

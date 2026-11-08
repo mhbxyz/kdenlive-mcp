@@ -402,6 +402,11 @@ def _sequences(doc: KdenliveDocument) -> list[_SequenceView]:
 
 
 # ---------------------------------------------------------------- public API ---------
+def used_bin_ids(doc: KdenliveDocument) -> set[str]:
+    """Bin clip ids placed on any timeline sequence."""
+    return {c.bin_id for s in _sequences(doc) for t in s.tracks for c in t.clips if c.bin_id}
+
+
 def summarize(doc: KdenliveDocument) -> ProjectSummary:
     profile = doc.root.find("profile")
     assert profile is not None  # noqa: S101 - validated by kdenlive_doc.load
