@@ -298,6 +298,15 @@ def probe_tool(spec: ToolSpec, env: Mapping[str, str], timeout: float) -> ToolRe
     return _report(spec, ToolStatus.AVAILABLE, path=path, source=source, version=match.group(1))
 
 
+def locate(name: str, env: Mapping[str, str] | None = None) -> str | None:
+    """Path of a usable executable for tool `name` (override or PATH), without running it."""
+    spec = next((s for s in TOOL_SPECS if s.name == name), None)
+    if spec is None:
+        raise KeyError(name)
+    path, _source, problem = _resolve(spec, dict(os.environ if env is None else env))
+    return None if problem is not None else path
+
+
 def diagnose(env: Mapping[str, str] | None = None) -> EnvironmentReport:
     """Probe every known program and return a read-only report."""
     environ = dict(os.environ if env is None else env)

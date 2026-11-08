@@ -165,3 +165,14 @@ async def test_project_errors_are_actionable():
     assert relative.is_error and "[invalid_path]" in relative.content[0].text
     assert "absolute path" in relative.content[0].text
     assert missing.is_error and "[not_found]" in missing.content[0].text
+
+
+async def test_media_tools():
+    async with Client(build_server()) as client:
+        listed = await client.call_tool("list_project_media", {"path": str(FIXTURE)})
+        url = await client.call_tool("probe_media", {"path": "https://example.com/a.mp4"})
+    assert listed.is_error is False
+    data = listed.structured_content
+    assert data["root"]["moved"] is True
+    assert data["counts"]["ok"] == 3 and data["missing"] == []
+    assert url.is_error and "[invalid_path]" in url.content[0].text

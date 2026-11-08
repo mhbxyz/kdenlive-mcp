@@ -13,7 +13,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import Field
 
-from mcp_kdenlive import __version__, kdenlive_doc, project
+from mcp_kdenlive import __version__, kdenlive_doc, media, project
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.kdenlive_doc import ProjectError
 
@@ -106,6 +106,50 @@ def build_server() -> MCPServer:
     ) -> project.Timeline:
         try:
             return project.timeline(kdenlive_doc.load(path), sequence, max_clips)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="list_project_media",
+        title="List project media",
+        description=(
+            "List the media referenced by a Kdenlive project's bin and diagnose missing or "
+            "unreadable files, plus files used by effects and transitions (LUTs, luma "
+            "wipes, subtitles). References are resolved exactly like Kdenlive does (project "
+            "root, moved projects, proxies). Read-only; URLs are reported but never fetched. "
+            "With probe=true, ffprobe metadata (streams, codecs, sizes, frame rates, rotation) "
+            "is added for up to 50 available files."
+        ),
+        annotations=READ_ONLY,
+    )
+    def list_project_media(
+        path: ProjectPath,
+        probe: Annotated[bool, Field(description="Run ffprobe on available files.")] = False,
+        max_items: Annotated[
+            int, Field(ge=1, le=media.MAX_ITEMS_LIMIT, description="Maximum bin items returned.")
+        ] = media.DEFAULT_MAX_ITEMS,
+    ) -> media.MediaReport:
+        try:
+            return media.media_report(kdenlive_doc.load(path), probe=probe, max_items=max_items)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="probe_media",
+        title="Probe media file",
+        description=(
+            "Check one local media file (absolute path) and return ffprobe metadata: "
+            "duration, streams, codecs, dimensions, rational frame rate, sample rate, "
+            "channels, rotation. Read-only; URLs are refused. Probing reads headers and does "
+            "not prove that every frame decodes."
+        ),
+        annotations=READ_ONLY,
+    )
+    def probe_media(
+        path: Annotated[str, Field(description="Absolute path of a local media file.")],
+    ) -> media.MediaFileReport:
+        try:
+            return media.inspect_file(path)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
