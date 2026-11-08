@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -132,3 +133,43 @@ def test_kdenlive_renders_kd26_fixtures(entry, tmp_path, request):
         timeout=300,
     )
     assert result.state is render.RenderState.SUCCEEDED, (result.error, result.log_tail)
+
+
+# ------------------------------------------------------------------ other releases ----
+OTHER_KDENLIVE = [
+    p for p in os.environ.get("KDENLIVE_MCP_TEST_KDENLIVE", "").split(os.pathsep) if p
+]
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not OTHER_KDENLIVE, reason="set KDENLIVE_MCP_TEST_KDENLIVE to Kdenlive binaries"
+)
+@pytest.mark.parametrize("kdenlive", OTHER_KDENLIVE or ["none"])
+@pytest.mark.parametrize(
+    "fixture", ["generated-montage.kdenlive", "kd26-mixes.kdenlive", "kd26-ntsc-timeline.kdenlive"]
+)
+def test_other_kdenlive_releases_render_fixtures(kdenlive, fixture, tmp_path, monkeypatch):
+    """#66: e.g. the official 24.12.3 and 25.04.3 AppImages, through KDENLIVE_MCP_KDENLIVE.
+    Projects written by this server and by Kdenlive 26.08.2 must render with picture and sound."""
+    monkeypatch.setenv("KDENLIVE_MCP_KDENLIVE", kdenlive)
+    if not render.supports_cli_render(kdenlive):
+        pytest.skip(f"{kdenlive} has no --render (before 24.02)")
+    shutil.copytree(FIX / "kd26", tmp_path / "p")
+    out = tmp_path / "o.mp4"
+    result = render.render(
+        render.prepare(str(tmp_path / "p" / fixture), str(out), engine="kdenlive"), timeout=600
+    )
+    assert result.state is render.RenderState.SUCCEEDED, result.log_tail
+    frame = subprocess.run(
+        [shutil.which("ffmpeg") or "ffmpeg", "-v", "error", "-ss", "0.5", "-i", str(out),
+         "-frames:v", "1", "-vf", "scale=1:1:flags=area,format=rgb24", "-f", "rawvideo", "-"],
+        capture_output=True, check=True, timeout=60,
+    ).stdout[:3]  # fmt: skip
+    assert max(frame) > 40 and min(frame) < 230  # a picture, not black or white
+    level = subprocess.run(
+        [shutil.which("ffmpeg") or "ffmpeg", "-hide_banner", "-i", str(out), "-af", "volumedetect",
+         "-f", "null", "-"],
+        capture_output=True, text=True, check=True, timeout=60,
+    ).stderr  # fmt: skip
+    assert "mean_volume: -inf" not in level and "mean_volume: -91" not in level

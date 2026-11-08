@@ -61,7 +61,7 @@ def app():
     d = Atspi.get_desktop(0)
     for i in range(d.get_child_count()):
         a = d.get_child_at_index(i)
-        if a and "kdenlive" in (a.get_name() or "").lower(): return a
+        if a and any(n in (a.get_name() or "").lower() for n in ("kdenlive", os.environ.get("KD_APPNAME", "kdenlive").lower())): return a
 def walk(node, depth, maxd, out):
     try:
         role, name = node.get_role_name(), node.get_name()
@@ -151,6 +151,9 @@ try:
             else: print("CLICK", target, "-> NOT FOUND", flush=True)
         elif cmd == "dbus":
             print("DBUS", line, "=>", qd(svc(), *p[1:])[:40000], flush=True)
+        elif cmd == "apps":
+            d = Atspi.get_desktop(0)
+            print("APPS", [d.get_child_at_index(i).get_name() for i in range(d.get_child_count())], flush=True)
         elif cmd == "run":
             r = subprocess.run(p[1:], capture_output=True, text=True, timeout=120, env=kenv)
             print("RUN", " ".join(p[1:]), "=>", r.returncode, r.stdout[-6000:], r.stderr[-2000:], flush=True)
