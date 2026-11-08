@@ -13,7 +13,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import Field
 
-from mcp_kdenlive import __version__, kdenlive_doc, media, project
+from mcp_kdenlive import __version__, kdenlive_doc, media, project, render
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.kdenlive_doc import ProjectError
 
@@ -150,6 +150,59 @@ def build_server() -> MCPServer:
     ) -> media.MediaFileReport:
         try:
             return media.inspect_file(path)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="list_render_presets",
+        title="List render presets",
+        description=(
+            "List the render presets of the installed Kdenlive (system and user custom "
+            "presets), with group and file extension. Use a returned name with render_project."
+        ),
+        annotations=READ_ONLY,
+    )
+    def list_render_presets() -> render.PresetList:
+        return render.list_presets()
+
+    @server.tool(
+        name="render_project",
+        title="Render project",
+        description=(
+            "Render a Kdenlive project to a new local file with an installed Kdenlive preset "
+            "(kdenlive --render), then validate the output with ffprobe. Blocks until the "
+            "render ends or `timeout_seconds` elapses. Never modifies the project or its media. "
+            "Refuses an existing output unless overwrite=true (the old file is replaced only "
+            "after a successful, validated render), unknown presets, and projects with missing "
+            "media unless allow_missing_media=true. Renders the file on disk, not unsaved "
+            "changes in a running Kdenlive."
+        ),
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=True,
+            idempotent_hint=False,
+            open_world_hint=False,
+        ),
+    )
+    def render_project(
+        path: ProjectPath,
+        output: Annotated[str, Field(description="Absolute path of the file to create.")],
+        preset: Annotated[
+            str, Field(description="Kdenlive preset name (see list_render_presets).")
+        ] = render.DEFAULT_PRESET,
+        overwrite: Annotated[bool, Field(description="Replace an existing output file.")] = False,
+        allow_missing_media: Annotated[
+            bool, Field(description="Render even if media files are missing.")
+        ] = False,
+        timeout_seconds: Annotated[
+            float, Field(gt=0, le=render.MAX_TIMEOUT, description="Stop the render after this.")
+        ] = render.DEFAULT_TIMEOUT,
+    ) -> render.RenderResult:
+        try:
+            plan = render.prepare(
+                path, output, preset, overwrite=overwrite, allow_missing_media=allow_missing_media
+            )
+            return render.render(plan, timeout=timeout_seconds)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 

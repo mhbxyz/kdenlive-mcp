@@ -71,3 +71,69 @@ def run(
     # A finished leader may leave helpers behind in its group; do not let them linger.
     _kill_group(proc)
     return Completed(proc.returncode, stdout or "", stderr or "")
+
+
+class Running:
+    """A started program whose output goes to files; poll it or cancel its process group."""
+
+    def __init__(self, proc: subprocess.Popen[bytes], log_path: str) -> None:
+        self.proc = proc
+        self.log_path = log_path
+
+    @property
+    def pid(self) -> int:
+        return self.proc.pid
+
+    def poll(self) -> int | None:
+        return self.proc.poll()
+
+    def wait(self, timeout: float) -> int:
+        try:
+            return self.proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.kill()
+            raise ProcessTimeout(
+                self.proc.args if isinstance(self.proc.args, list) else [str(self.proc.args)],
+                timeout,
+                "",
+            ) from None
+
+    def terminate(self, grace: float = 5.0) -> int:
+        """SIGTERM the whole group, then SIGKILL after `grace` seconds. Returns the exit code."""
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(self.proc.pid, signal.SIGTERM)
+        try:
+            return self.proc.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            return self.kill()
+
+    def kill(self) -> int:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(self.proc.pid, signal.SIGKILL)
+        return self.proc.wait()
+
+    def reap_group(self) -> None:
+        """After the leader exited, make sure no helper of its group survives."""
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(self.proc.pid, signal.SIGKILL)
+
+
+def start(
+    args: Sequence[str],
+    *,
+    log_path: str,
+    env: Mapping[str, str] | None = None,
+    cwd: str | None = None,
+) -> Running:
+    """Start `args` in its own process group, stdout+stderr appended to `log_path`."""
+    with open(log_path, "ab") as log:  # noqa: PTH123 - the child keeps its own descriptor
+        proc = subprocess.Popen(  # noqa: S603 - argument list, no shell
+            list(args),
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            env=dict(env) if env is not None else None,
+            cwd=cwd,
+            start_new_session=True,
+        )
+    return Running(proc, log_path)

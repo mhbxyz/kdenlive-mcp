@@ -79,6 +79,7 @@ select = ["E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF", "PTH", "PL"]
 ignore = [
     "PLR2004",  # magic values in comparisons are fine in tests and status tables
     "PLR0913",  # too many arguments
+    "PLR0917",  # MCP tool signatures mirror their JSON schema
     "RUF001",   # ambiguous unicode in strings (ellipsis is intentional)
 ]
 
