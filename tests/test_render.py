@@ -299,7 +299,8 @@ def test_real_render_end_to_end(tmp_path):
     assert result.validation and result.validation.video_streams == 1
     assert result.validation.duration_seconds == pytest.approx(2.002, abs=0.25)
     assert project.read_bytes() == before
-    left = sorted(p.name for p in tmp_path.iterdir() if p.name != ".cache")  # test cache (conftest)
+    # .cache and no-runtime are the test's XDG folders (conftest); Qt creates the runtime one
+    left = sorted(p.name for p in tmp_path.iterdir() if p.name not in (".cache", "no-runtime"))
     assert left == ["media", "out é.mp4", "p.kdenlive"]
     assert list((tmp_path / ".cache" / "kdenlive-mcp" / "tmp").iterdir()) == []  # work dir removed
 
