@@ -104,4 +104,13 @@ uv run pytest            # unit + protocol tests; integration tests skip when to
 Architecture: domain modules (`environment.py`, `process.py`) do not depend on MCP.
 `server.py` is the only MCP transport layer.
 
-Research notes: [docs/research/integration-surfaces.md](docs/research/integration-surfaces.md).
+Documentation:
+
+- [Tools](docs/tools.md)
+- [Clients](docs/clients.md)
+- [Compatibility](docs/compatibility.md)
+- [Versioning](docs/versioning.md)
+- [Security](docs/security.md)
+- [Packaging](docs/packaging.md)
+- [Changelog](CHANGELOG.md)
+- [Research](docs/research/integration-surfaces.md)

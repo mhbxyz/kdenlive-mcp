@@ -1,5 +1,19 @@
 # Compatibility
 
+## Support status (v0.1)
+
+Statuses are defined in [docs/versioning.md](versioning.md#external-software-support).
+
+| Component | tested | supported | untested | unsupported |
+|---|---|---|---|---|
+| Kdenlive | 26.08.2 (everything); 23.08.5 (reading, editing, melt rendering) | 23.04 – 26.08 for reading and editing (document version 1.1) | other versions | `kdenlive --render` on 23.08 (refused with `[unsupported_kdenlive]`); editing documents older than 1.1 |
+| MLT | 7.42.0, 7.22.0 | 7.x | — | — |
+| FFmpeg / ffprobe | n9.0.2, 6.1.1 | ≥ 6 | older | — |
+| Python | 3.11, 3.12, 3.13, 3.14 | — | 3.15+ | ≤ 3.10 |
+| Linux | CachyOS (rolling), Ubuntu 24.04 (CI) | other distributions | Flatpak/Snap Kdenlive through wrappers | — |
+| macOS, Windows | — | — | — | not supported |
+| MCP clients | see [docs/clients.md](clients.md) | standard stdio MCP clients | desktop/IDE variants | cloud-only clients without a local bridge |
+
 ## Tested versions
 
 | Environment | Kdenlive | MLT | FFmpeg | Python | What is exercised |
