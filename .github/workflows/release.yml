@@ -2,7 +2,7 @@ name: Release
 
 # Publishes only for maintainer-created tags vX.Y.Z (final) or vX.Y.ZaN/bN/rcN (pre-release).
 #   pre-release tags: build → TestPyPI → verify install from TestPyPI → GitHub pre-release
-#   final tags:       build → TestPyPI → verify install → PyPI → GitHub release
+#   final tags:       build → TestPyPI → verify install → PyPI → MCP Registry → GitHub release
 # The exact files built in `build` are the ones published everywhere. No long-lived tokens:
 # PyPI Trusted Publishing (OIDC) through the `testpypi` / `pypi` environments (tags v* only).
 on:
@@ -13,6 +13,7 @@ permissions: {}
 
 env:
   UV_VERSION: "0.9.26"
+  MCP_PUBLISHER_VERSION: "v1.8.4"
 
 jobs:
   build:
@@ -144,10 +145,54 @@ jobs:
         with:
           packages-dir: dist/
 
+  mcp-registry:
+    name: Publish to the MCP Registry
+    needs: [build, pypi]
+    if: needs.build.outputs.prerelease == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write      # mcp-publisher login github-oidc (namespace io.github.mhbxyz/*)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Download and verify mcp-publisher (Sigstore)
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error -o "$archive" "$base/$archive"
+          curl --fail --location --silent --show-error -o "$archive.sigstore.json" "$base/$archive.sigstore.json"
+          cosign verify-blob --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" "$archive"
+          tar xzf "$archive" mcp-publisher
+      - name: Validate, then publish server.json
+        run: |
+          ./mcp-publisher validate server.json
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish server.json
+      - name: Check the public registry entry
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 10); do
+            if curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.mhbxyz/kdenlive-mcp" \
+                | python3 -c "import json,sys,os; d=json.load(sys.stdin); v=os.environ['VERSION']; assert any((s.get('server') or s).get('version')==v for s in d.get('servers',[])), d"; then
+              echo "registry lists io.github.mhbxyz/kdenlive-mcp $VERSION"; exit 0
+            fi
+            sleep 15
+          done
+          echo "registry entry not visible"; exit 1
+
   github-release:
     name: GitHub release
-    needs: [build, verify-testpypi, pypi]
-    if: always() && needs.verify-testpypi.result == 'success' && (needs.pypi.result == 'success' || needs.pypi.result == 'skipped')
+    needs: [build, verify-testpypi, pypi, mcp-registry]
+    if: always() && needs.verify-testpypi.result == 'success' && (needs.pypi.result == 'success' || needs.pypi.result == 'skipped') && (needs.mcp-registry.result == 'success' || needs.mcp-registry.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -176,6 +221,7 @@ jobs:
               echo "- Published to TestPyPI only: https://test.pypi.org/project/mcp-kdenlive/$VERSION/"
             else
               echo "- PyPI: https://pypi.org/project/mcp-kdenlive/$VERSION/ (with PEP 740 attestations)"
+              echo "- MCP Registry: \`io.github.mhbxyz/kdenlive-mcp\` (https://registry.modelcontextprotocol.io/v0/servers?search=io.github.mhbxyz/kdenlive-mcp)"
             fi
             echo "- Build provenance: https://github.com/$GITHUB_REPOSITORY/attestations"
             echo '```'; cat dist.sha256; echo '```'

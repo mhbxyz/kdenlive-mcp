@@ -26,6 +26,8 @@ tag vX.Y.Z[rcN] ─► build (once)
                  ─► verify-testpypi download from TestPyPI, check it's byte-identical to the build,
                                     install with --no-deps, dependencies from PyPI only, smoke test
                  ─► pypi            final tags only: publish the same files (OIDC + PEP 740 attestations)
+                 ─► mcp-registry    final tags only: Sigstore-verified mcp-publisher, validate, OIDC login,
+                                    publish server.json, check the public entry (docs/registry.md)
                  ─► github-release  notes from CHANGELOG + verification statement + sha256 + links
 ```
 
@@ -35,7 +37,7 @@ tag vX.Y.Z[rcN] ─► build (once)
 ## Maintainer checklist
 
 1. **Changelog:** move the `[Unreleased]` entries to `## [X.Y.Z] - YYYY-MM-DD`. Mark breaking changes and deprecations (`docs/versioning.md`).
-2. **Version:** set `version` in `pyproject.toml` (and `server.json`, #33) to `X.Y.Z` in the same PR. CI runs `check_version.py`.
+2. **Version:** set `version` in `pyproject.toml` **and** `server.json` (`version` and `packages[].version`) to `X.Y.Z` in the same PR. CI runs `check_version.py`.
 3. **Merge** the PR with green CI.
 4. **Rehearse (optional):** tag and push a pre-release: `git tag -a vX.Y.ZrcN -m "…" && git push origin vX.Y.ZrcN`. That pre-release needs the version `X.Y.ZrcN` in a commit on `main`.
 5. **Tag the release:** `git tag -a vX.Y.Z -m "mcp-kdenlive X.Y.Z"` on the merged commit, then `git push origin vX.Y.Z`.

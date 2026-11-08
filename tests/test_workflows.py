@@ -37,6 +37,11 @@ def test_release_workflow_matches_trusted_publishers():
     assert "name: testpypi" in text and "name: pypi" in text
     assert re.search(r"^permissions: \{\}$", text, re.M)
     assert "check_version.py" in text and "check_dist.py" in text and "smoke_installed.py" in text
+    # MCP Registry: final tags only, after PyPI, publisher verified with Sigstore before use.
+    registry = text.split("  mcp-registry:", 1)[1].split("\n  github-release:", 1)[0]
+    assert "needs: [build, pypi]" in registry and "prerelease == 'false'" in registry
+    assert registry.index("cosign verify-blob") < registry.index("mcp-publisher publish")
+    assert "login github-oidc" in registry and "releases/latest" not in registry
     code = "\n".join(line.split("#", 1)[0] for line in text.splitlines())
     assert "--extra-index-url" not in code  # never resolve dependencies from the test index
 

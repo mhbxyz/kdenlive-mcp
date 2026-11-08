@@ -114,5 +114,6 @@ Documentation:
 - [Security policy (reporting vulnerabilities)](SECURITY.md)
 - [Incident response](docs/incident-response.md)
 - [Packaging](docs/packaging.md)
+- [MCP Registry](docs/registry.md)
 - [Changelog](CHANGELOG.md)
 - [Research](docs/research/integration-surfaces.md)
