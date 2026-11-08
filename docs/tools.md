@@ -17,6 +17,9 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 | `add_track` | no (writes a file) | Add a named audio or video track |
 | `insert_clip` / `move_clip` / `trim_clip` / `split_clip` / `remove_clip` | no (writes a file) | Frame-accurate timeline edits |
 | `set_clip_volume` / `set_clip_fades` | no (writes a file) | Constant audio level (dB) and audio fade-in/fade-out of a clip |
+| `list_effects` | yes | Verified effects with parameters, units, ranges and availability in the installed MLT |
+| `add_effect` / `update_effect` / `remove_effect` | no (writes a file) | Video effects on a clip: crop, brightness, greyscale, sepia, gamma, fades from/to black |
+| `add_mix` / `remove_mix` | no (writes a file) | Crossfade between two touching clips of a track (Kdenlive's *Mix Clips*) |
 | `list_markers` | yes | Timeline guides, clip markers and marker categories |
 | `add_marker` / `update_marker` / `remove_marker` | no (writes a file) | Timeline guides (chapters) and clip markers |
 | `relink_media` | no (writes a file) | Point bin clips at moved or replacement media files |
@@ -412,6 +415,84 @@ audio clip is changed (the video is not), and a video-only clip is refused
 - **Other effects** on the clip are kept, in order.
 - **Verified:** level and fades on an AV pair, a WAV clip, a clip in a crossfade, and after a trim and a split, reopened in Kdenlive 26.08.2 without dialogs; Kdenlive's own save kept the effects, levels and fade lengths. E2E: a −12 dB level measures 12 dB lower in the render (±1.5 dB), and the first and last quarter seconds are more than 6 dB quieter with 30-frame fades.
 
+
+## Effects: `list_effects`, `add_effect`, `update_effect`, `remove_effect`
+
+Only effects whose format was checked against Kdenlive 26.08.2 are offered; `list_effects` gives
+each one's `id`, `target`, `mlt_service`, parameters (`type`, `unit`, `minimum`, `maximum`,
+`default`), `available` (the installed MLT has the service, `null` if `melt` was not found),
+`verified_with`, plus catalog-wide `notes` and the `transitions`.
+
+| `id` | Parameters | Stored as (Kdenlive 26.08.2) |
+|---|---|---|
+| `crop` | `top`, `left`, `bottom`, `right` (pixels, 0–10000), `center` (bool) | `crop` with `center_bias=0`, `use_profile=1` |
+| `brightness` | `level` (factor 0–4, 1 = unchanged) | `brightness`, `start=1`, `level="0=<v>"` |
+| `greyscale` | — | `greyscale` |
+| `sepia` | `u` (0–255, default 75), `v` (0–255, default 150) | `sepia`, `u="0=<v>"`, `v="0=<v>"` |
+| `gamma` | `gamma` (0.01–3, 1 = unchanged) | `gamma`, `gamma="0=<v>"` |
+| `fade_from_black` / `fade_to_black` | `duration` (frames, default 30) | `brightness` with `level="0=0;-1=1"` / `"0=1;-1=0"` and `alpha=1` (Kdenlive's *Fade from/to Black* box checked), filter `in`/`out` at the clip's first/last frames (source frames) |
+
+- **Target:** every effect above is a video effect; on an audio/video pair it goes on the video
+  clip, and an audio-only clip is refused (`[incompatible_track]`). Audio level and fades are
+  `set_clip_volume` / `set_clip_fades`.
+- **Order:** `add_effect` appends; `index` in `update_effect` / `remove_effect` is the position in
+  the `effects` of the clip named by `clip`, as `get_timeline` lists them (all effects, including
+  ones this server does not write). On an audio/video pair, use the video clip's ref for video
+  effects: the audio clip's list holds its own (volume, audio fades). `remove_effect` removes any
+  effect; `update_effect` only verified ones, and needs at least one parameter.
+- **Values:** omitted parameters take their defaults; unknown names, out-of-range or wrongly typed
+  values are refused (`[invalid_argument]`). `update_effect` changes only the given parameters and
+  refuses an animated one (several keyframes, `[unsupported_structure]`), so keyframes made in
+  Kdenlive are never flattened.
+- **Fades:** a fade from black and a fade to black must fit in the clip together, like
+  `set_clip_fades` (`[invalid_range]`); a second fade of the same kind is refused (use
+  `update_effect` to change its `duration`).
+- **Unavailable plugin:** when MLT lacks the service, `add_effect` is refused
+  (`[dependency_missing]`).
+- **Edits afterwards:** fades from/to black stay at the clip's edges and shrink to fit after trims,
+  splits, `add_mix` and `remove_mix`, like audio fades; constant effects do not block them.
+- **Verified:** every effect above, with non-default values, and updates of crop parameters,
+  reopen in Kdenlive 26.08.2 without dialogs; Kdenlive's own save keeps the ids, order and values
+  (it rewrites keyframe positions as timecodes, `0=1.5` → `00:00:00.000=1.5`, which the server
+  reads and edits). E2E: greyscale (R≈G≈B), crop (black side), fade to black, rendered.
+  Renders of the same project by the official 24.12.3 and 25.04.3 AppImages match.
+- **Fades from/to black, two forms:** Kdenlive's default (box unchecked) fades the *alpha*, which
+  shows what is below and renders as no fade at all with Kdenlive 24.12.3 and MLT 7.22 on a
+  single track; the server writes the checked form, which fades the brightness and goes black
+  with every release tested. Fades of either form made in Kdenlive are read, kept and re-anchored.
+
+## Crossfades: `add_mix(clip, revision, duration=None)`, `remove_mix(clip, revision)`
+
+`add_mix` does what Kdenlive's *Mix Clips* does between `clip` and the clip that starts where it
+ends on the same track (they must touch, `[invalid_argument]` otherwise):
+
+```text
+before   V1  [ A ........ ][ B ........ ]               cut at frame c
+after    V1  [ A ............ ]                          layer 0, extended by `after`
+                      [ ......... B ........ ]          layer 1, starts `before` earlier
+                      |<- duration ->|                  luma mix (video) / mix (audio)
+```
+
+- **Duration:** frames (at least 2, default 1 second), centred on the cut when both clips have
+  enough source **handles** (frames beyond their current in/out); otherwise it shifts to the side
+  that has them. Too few handles in total, or a mix longer than a clip, is `[invalid_range]`.
+- **Pairs:** grouped audio/video clips get the matching mix on the partner track (`mix`, with
+  `luma` on video), and groups are kept.
+- **Format:** Kdenlive 26.08.2's own: the second clip moves to the track's other layer, and a
+  transition inside the track tractor with `kdenlive:mixcut` records where the original cut is.
+  `get_timeline` reports it in the track's `mixes`.
+- **Refused:** a clip that already ends in a mix (use `remove_mix` first), a next clip that is
+  already in another mix (chains are not supported yet), or that has animated effects (their
+  keyframes would shift), and grouped clips whose next clips are not grouped together
+  (`[unsupported_structure]`). Nothing is written when a check fails.
+- **Edge fades** (audio and black fades) stay at both clips' edges.
+- `remove_mix` removes the mix at the end of `clip` and puts both clips back to the cut; a track of
+  the group without a mix (e.g. a video-only mix made in Kdenlive) is left as it is.
+- `list_effects` → `transitions` describes the crossfade: tools, targets, MLT services, minimum
+  and default duration, constraints.
+- **Verified:** mixes added and removed by the server, with effects around them, reopen in Kdenlive
+  26.08.2 and survive its save unchanged; renders by Kdenlive 24.12.3, 25.04.3 and 26.08.2 show the
+  blend. E2E: the frame in the middle of a 30-frame mix is a blend of both clips, with no audio gap.
 
 ## Guides and clip markers: `list_markers`, `add_marker`, `update_marker`, `remove_marker`
 

@@ -8,6 +8,7 @@ positions, source in/out, resources, groups, same-track mixes and clip layers). 
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -61,7 +62,27 @@ def clips(path: Path) -> list[tuple]:
         (m.target, m.position, m.duration, m.comment, m.category)
         for m in found.guides + found.clip_markers
     )
-    return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects, marks]
+    # effect parameters (#14): the stored value of every parameter the server writes
+    from mcp_kdenlive.effects import SPECS
+
+    def written(spec_id: str) -> list[str]:
+        spec = SPECS[spec_id]
+        return [*(p.name for p in spec.params if spec.edge is None), *(k for k, _ in spec.fixed)]
+
+    def values(raw: str | None) -> tuple[str, ...] | None:
+        # Kdenlive rewrites keyframe positions as timecodes ("0=1.5" -> "00:00:00.000=1.5",
+        # "-1=1" -> "<end>=1"): compare the values, positions are checked by the bounds below
+        return None if raw is None else tuple(k.rpartition("=")[2] for k in raw.split(";"))
+
+    params = sorted(
+        (e.get("producer", ""), e.get("in", ""), e.get("out", ""), pid,
+         tuple((n, values(kdenlive_doc.props(f).get(n))) for n in written(pid)),
+         (f.get("in") or e.get("in"), f.get("out")))
+        for e in doc.root.iter("entry")
+        for f in e.findall("filter")
+        if (pid := kdenlive_doc.props(f).get("kdenlive_id", "")) in SPECS
+    )
+    return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects, marks, params]
 
 
 def verify(path: Path) -> bool:
@@ -79,8 +100,6 @@ def verify(path: Path) -> bool:
         )
         out = lab / "out.txt"
         env = {"KD_ARGS": str(path), "KD_THEME": "kde"}
-        import os
-
         subprocess.run([str(LAB / "kdgui.sh"), str(lab), str(script), str(out)],
                        env=dict(os.environ, **env), timeout=240, check=False)
         log = out.read_text(encoding="utf-8", errors="replace")
@@ -96,10 +115,15 @@ def verify(path: Path) -> bool:
                                        if ln.startswith(("WINDOW", "DSETTEXT", "DCLICK", "CLICK", "DBUS", "app"))))
             return False
         try:
-            same = clips(path) == clips(copy)
+            before, after = clips(path), clips(copy)
+            same = before == after
+            for b, a in zip(before, after, strict=True):
+                for item in sorted(set(map(repr, b)) ^ set(map(repr, a))):
+                    print(f"    {'-' if item in map(repr, b) else '+'} {item}")
         finally:
             saved_version = kdenlive_doc.load(str(copy)).doc_property("kdenliveversion")
-            copy.unlink()
+            if not os.environ.get("KD_KEEP"):
+                copy.unlink()
         print(f"  {'✓' if same else '✗'} timeline identical after Kdenlive {saved_version} save")
         return ok and same
 

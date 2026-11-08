@@ -39,6 +39,11 @@ pointed to by `KDENLIVE_MCP_KDENLIVE`:
 | 24.12.3 (AppImage) | ✅ version, `--render` detected | ✅ montage, crossfades, AV pair: picture and sound | pending (#86) |
 | 25.04.3 (AppImage) | ✅ version, `--render` detected | ✅ same | pending (#86) |
 
+Effects and crossfades written by the server (#14) render the same with both releases. Finding:
+Kdenlive's *default* fade from/to black (an alpha fade) renders as no fade with 24.12.3 (and with
+MLT 7.22's melt), even in a file saved by Kdenlive 26.08.2; the server therefore writes the
+brightness form (*Fade to Black* checked), which renders with 24.12.3, 25.04.3, 26.08.2 and melt.
+
 `tests/test_compat.py::test_other_kdenlive_releases_render_fixtures` repeats the rendering checks with any
 binaries listed in `KDENLIVE_MCP_TEST_KDENLIVE` (`:`-separated; skipped when unset). AppImages are
 supported through `KDENLIVE_MCP_KDENLIVE`; they bundle their own MLT, used by `kdenlive --render`.
@@ -71,6 +76,7 @@ Kdenlive's own *Save As*, tracks, clips, bin media, internal transitions and gro
 | Media and named tracks added (`add_media_to_bin`, `add_track`) | ✅ | — | ✅ |
 | Montage: insert, split, grouped move, trim, remove | ✅ | ✅ | ✅ |
 | Kdenlive-made crossfades, then trims, splits, removals and moves around them (#61) | ✅ | ✅ (e2e) | ✅ (e2e) |
+| Effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) and crossfades added, updated and removed by the server (#14) | ✅ (values compared; Kdenlive rewrites keyframe positions as timecodes) | ✅ (e2e) | ✅ |
 | Kdenlive-made project with subtitles | ✅ | ❌ Kdenlive crashes (SIGSEGV), reproduced without this server (#16) | ✅ |
 
 ## Fixture corpus

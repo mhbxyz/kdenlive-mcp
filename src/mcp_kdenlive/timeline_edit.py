@@ -497,10 +497,12 @@ def _placement(tl: Timeline, track: Track, start: int, entry: ET.Element) -> Cli
 
 
 def _has_keyframes(entry: ET.Element) -> bool:
-    """True when an effect parameter is animated (two keyframes or more)."""
+    """True when an effect parameter is animated (two keyframes or more). Edge fades are not:
+    their keyframes are relative to the clip's edges and follow trims and splits."""
     return any(
         KEYFRAMES.search(p.text or "") and len([k for k in (p.text or "").split(";") if k]) > 1
         for f in entry.findall("filter")
+        if props(f).get("kdenlive_id") not in START_FADES + END_FADES
         for p in f.findall("property")
         if p.get("name") not in ("mlt_service", "kdenlive_id", "kdenlive:collapsed")
     )
@@ -822,7 +824,7 @@ def trim_clip(
                     "unsupported_structure",
                     f"The {'end' if at_end else 'start'} of the clip on {t.label} is in a "
                     f"{mix.describe(t.label)}; trimming that side would break the mix.",
-                    "Trim the other side, or remove the mix in Kdenlive first.",
+                    "Trim the other side, or remove the mix first (remove_mix).",
                 )
             # Keep at least one frame outside the mix so partners never share an edge.
             if (p_start >= mix.start) if at_end else (p_end <= mix.end):
@@ -912,4 +914,217 @@ def split_clip(
     edit.changes.append(f"timeline: split {ref} at frame {at}")
     return TimelineEditResult(
         operation="split", clips=placements, sequence_duration_frames=duration
+    )
+
+
+# ---------------------------------------------------------------- crossfades (#14) ----
+LUMA_PROPS = (("factory", "loader"), ("resource", None), ("mlt_service", "luma"),
+              ("kdenlive_id", "luma"))  # fmt: skip
+LUMA_TAIL = (("softness", "0"), ("alpha_over", "0"), ("fix_background_alpha", "1"),
+             ("invert", "0"))  # fmt: skip
+MIX_PROPS = (("duck_threshold", "0"), ("duck_attenuation", "-12"), ("duck_level", "0"),
+             ("duck_fade_in", "1500"), ("duck_fade_out", "250"), ("prefix", None),
+             ("mlt_service", "mix"), ("kdenlive_id", "mix"))  # fmt: skip
+
+
+def _next_clip(tl: Timeline, track: Track, item: Item) -> Item | None:
+    return next((c for c in tl.clips(track) if c.start == item.end and c is not item), None)
+
+
+def _handles(tl: Timeline, item: Item) -> tuple[int, int]:
+    """(frames available before the clip's source in, after its source out)."""
+    source_in, source_out = tl._entry_bounds(item.element)
+    producer = tl.doc.by_id.get(item.element.get("producer") or "")
+    length = int(props(producer).get("length", "0") or 0) if producer is not None else 0
+    return source_in, max(length - 1 - source_out, 0) if length else 0
+
+
+def _mix_transition(
+    tl: Timeline, track: Track, left_layer: int, start: int, end: int, after: int
+) -> ET.Element:
+    rate = tl.doc.rate
+    element = ET.Element(
+        "transition",
+        {"id": _next_id(tl.edit.root, "transition"), "in": frames_to_clock(start, rate),
+         "out": frames_to_clock(end, rate)},
+    )  # fmt: skip
+    if track.kind == "video":
+        a, b = ("1", "0") if left_layer else ("0", "1")
+        values = [("a_track", a), ("b_track", b), *LUMA_PROPS, ("kdenlive:mixcut", str(after)),
+                  *LUMA_TAIL, ("reverse", "0")]  # fmt: skip
+    else:
+        values = [
+            ("a_track", "0"), ("b_track", "1"), *MIX_PROPS, ("kdenlive:mixcut", str(after)),
+            ("start", "-1"), ("accepts_blanks", "1"), ("reverse", str(left_layer)),
+        ]  # fmt: skip
+    for name, value in values:
+        prop = ET.SubElement(element, "property", {"name": name})
+        prop.text = value
+    element.tail = "\n "
+    existing = track.tractor.findall("transition")
+    anchor = next(
+        (t for t in existing if tl.doc.time(t.get("in"), default=0, what="transition in") > start),
+        None,
+    )
+    if anchor is not None:
+        track.tractor.insert(list(track.tractor).index(anchor), element)
+    else:
+        track.tractor.append(element)
+    return element
+
+
+def _plan_mix(tl: Timeline, t: Track, left: Item, frames: int) -> tuple[Item, int, int]:
+    """Check one track's side of a crossfade: (next clip, frames before, frames after the cut)."""
+    tl.check_editable(t)
+    existing = next((m for m in tl.mixes(t) if m.at_end_of(left)), None)
+    if existing is not None:
+        raise ProjectError(
+            "invalid_argument",
+            f"The clip on {t.label} already ends in a mix (frames "
+            f"{existing.start}-{existing.end}).",
+            "Use remove_mix first to change it.",
+        )
+    right = _next_clip(tl, t, left)
+    if right is None:
+        raise ProjectError(
+            "invalid_argument",
+            f"No clip starts where the clip on {t.label} ends (frame {left.end}).",
+            "Move the next clip so it touches this one; a crossfade joins two adjacent clips.",
+        )
+    if any(m.involves(right) for m in tl.mixes(t)):
+        raise ProjectError(
+            "unsupported_structure",
+            f"The next clip on {t.label} (at {right.start}) is already in a mix.",
+            "Remove that mix first (remove_mix), or crossfade other clips.",
+        )
+    if _has_keyframes(right.element):
+        raise ProjectError(
+            "unsupported_structure",
+            f"The next clip on {t.label} has animated effects; the crossfade would shift "
+            "their keyframes. Not supported yet.",
+        )
+    if 1 - left.layer >= len(t.layers):
+        raise ProjectError("unsupported_structure", f"Track {t.label} has no second layer.")
+    head = _handles(tl, right)[0]
+    tail = _handles(tl, left)[1]
+    before = min(frames // 2, head)
+    after = min(frames - before, tail)
+    before = min(frames - after, head)
+    if before + after < frames:
+        raise ProjectError(
+            "invalid_range",
+            f"The clips on {t.label} have only {before + after} frames of handles for the "
+            f"crossfade (need {frames}).",
+            "Use a shorter crossfade, or trim the clips so their sources extend past the cut.",
+        )
+    if left.end - before <= left.start or right.start + after >= right.end:
+        raise ProjectError(
+            "invalid_range", f"A {frames}-frame crossfade is longer than a clip on {t.label}."
+        )
+    return right, before, after
+
+
+def add_mix(
+    edit: EditableProject,
+    ref: str,
+    revision: str,
+    duration: int | None = None,
+    sequence: str | None = None,
+) -> TimelineEditResult:
+    """Crossfade the clip into the next one on its track (Kdenlive's *Mix Clips*).
+
+    Like Kdenlive, the mix is centred on the cut when the handles allow, both clips are extended
+    into their handles, and the right clip goes to the other layer. Grouped audio/video clips
+    get the matching audio crossfade.
+    """
+    tl = _open(edit, revision, sequence, needs_revision=True)
+    track, item = tl.resolve_ref(ref)
+    frames = round(tl.doc.rate.num / tl.doc.rate.den) if duration is None else duration
+    if frames < 2:
+        raise ProjectError("invalid_argument", "A crossfade lasts at least 2 frames.")
+    plan = [(t, left, *_plan_mix(tl, t, left, frames)) for t, left in tl.partners(track, item)]
+    if len(plan) > 1:  # grouped clips: the next clips must be grouped together too
+        t0, right0 = plan[0][0], plan[0][2]
+        group = {id(i.element) for _t, i in tl.partners(t0, right0)}
+        if any(id(right.element) not in group for _t, _l, right, _b, _a in plan):
+            raise ProjectError(
+                "unsupported_structure",
+                "The next clips on the grouped tracks are not grouped together.",
+                "Crossfade each track's clips in Kdenlive, or regroup them first.",
+            )
+    moved: dict[tuple[int, int], int] = {}
+    placements = []
+    for t, left, right, before, after in plan:
+        cut = left.end
+        tl.set_bounds(t, left, left.start, left.end + after)
+        current = next(c for c in tl.clips(t) if c.element is right.element)
+        new_layer = 1 - left.layer
+        tl._rebuild(
+            t,
+            [(s, e) for s, e in tl.placed(t, current.layer) if e is not right.element],
+            current.layer,
+        )
+        source_in, _ = tl._entry_bounds(right.element)
+        right.element.set("in", frames_to_clock(source_in - before, tl.doc.rate))
+        tl._rebuild(t, [*tl.placed(t, new_layer), (cut - before, right.element)], new_layer)
+        _mix_transition(tl, t, left.layer, cut - before, cut + after, after)
+        anchor_fades(tl, left.element)
+        anchor_fades(tl, right.element)
+        moved[(t.index, right.start)] = cut - before
+        placements += [
+            _placement(tl, t, left.start, left.element),
+            _placement(tl, t, cut - before, right.element),
+        ]
+    tl.rekey(moved)
+    duration_frames = tl.refresh_durations()
+    edit.changes.append(f"timeline: crossfade of {frames} frames after {ref}")
+    return TimelineEditResult(
+        operation="mix", clips=placements, sequence_duration_frames=duration_frames
+    )
+
+
+def remove_mix(
+    edit: EditableProject, ref: str, revision: str, sequence: str | None = None
+) -> TimelineEditResult:
+    """Remove the crossfade at the end of the clip; both clips go back to the original cut."""
+    tl = _open(edit, revision, sequence, needs_revision=True)
+    track, item = tl.resolve_ref(ref)
+    moved: dict[tuple[int, int], int] = {}
+    placements = []
+    found = []
+    for t, left in tl.partners(track, item):
+        tl.check_editable(t)
+        mix = next((m for m in tl.mixes(t) if m.at_end_of(left)), None)
+        if mix is None:
+            continue  # e.g. a video-only mix made in Kdenlive: the audio is already cut
+        if _has_keyframes(mix.right.element):
+            raise ProjectError(
+                "unsupported_structure",
+                f"The next clip on {t.label} has animated effects; removing the crossfade would "
+                "shift their keyframes. Not supported yet.",
+            )
+        found.append((t, left, mix))
+    if not found:
+        raise ProjectError(
+            "invalid_argument",
+            f"No crossfade at the end of the clip on {track.label} at {item.start}.",
+        )
+    for t, left, mix in found:
+        t.tractor.remove(mix.element)
+        tl.set_bounds(t, left, left.start, mix.cut)
+        right = next(c for c in tl.clips(t) if c.element is mix.right.element)
+        tl.set_bounds(t, right, mix.cut, right.end)
+        moved[(t.index, right.start)] = mix.cut
+        tl.settle(t)
+        anchor_fades(tl, left.element)
+        anchor_fades(tl, right.element)
+        placements += [
+            _placement(tl, t, left.start, left.element),
+            _placement(tl, t, mix.cut, right.element),
+        ]
+    tl.rekey(moved)
+    duration_frames = tl.refresh_durations()
+    edit.changes.append(f"timeline: removed the crossfade after {ref}")
+    return TimelineEditResult(
+        operation="unmix", clips=placements, sequence_duration_frames=duration_frames
     )
