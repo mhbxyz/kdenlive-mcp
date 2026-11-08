@@ -26,9 +26,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, media, project, safexml
+from mcp_kdenlive import kdenlive_doc, media, policy, project, safexml
 from mcp_kdenlive.environment import locate
-from mcp_kdenlive.kdenlive_doc import ProjectError
+from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, Running, run, start
 
 DEFAULT_PRESET = "MP4-H264/AAC"
@@ -205,7 +205,7 @@ def supports_cli_render(kdenlive: str, env: Mapping[str, str] | None = None) -> 
     except OSError:
         return False
     if key not in _CLI_SUPPORT:
-        environ = dict(os.environ if env is None else env, QT_QPA_PLATFORM="offscreen")
+        environ = policy.child_env(env, QT_QPA_PLATFORM="offscreen")
         try:
             done = run([kdenlive, "--help"], timeout=30, env=environ)
             text = done.stdout + done.stderr
@@ -235,10 +235,52 @@ def _bounded_tail(text: str) -> list[str]:
     return [ln[:300] for ln in lines[-LOG_TAIL_LINES:]]
 
 
+# Render outputs must look like media files: a render can never replace a script or a dotfile.
+OUTPUT_EXTENSIONS = {
+    "mp4",
+    "m4v",
+    "mkv",
+    "webm",
+    "mov",
+    "avi",
+    "mpg",
+    "mpeg",
+    "ts",
+    "m2ts",
+    "mxf",
+    "ogv",
+    "ogg",
+    "oga",
+    "opus",
+    "mp3",
+    "wav",
+    "flac",
+    "aac",
+    "ac3",
+    "m4a",
+    "alac",
+    "gif",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "dv",
+    "vob",
+    "3gp",
+}
+
+
 def _check_output(output: str, project_path: Path, *, overwrite: bool) -> Path:
     out = Path(output).expanduser()
     if not output or not out.is_absolute():
         raise ProjectError("invalid_output", f"{output!r} is not an absolute output path.")
+    if out.suffix.lower().lstrip(".") not in OUTPUT_EXTENSIONS:
+        raise ProjectError(
+            "invalid_output",
+            f"{out.name}: render outputs need a media file "
+            f"extension ({', '.join(sorted(OUTPUT_EXTENSIONS))}).",
+        )
+    policy.check_write_target(out, "Rendering")
     if out.resolve() == project_path.resolve():
         raise ProjectError("invalid_output", "The output path is the project file itself.")
     if out.exists() and out.is_dir():
@@ -296,6 +338,17 @@ def prepare(
     media_paths = {i.resolved_path for i in report.items if i.resolved_path}
     if str(out) in media_paths or str(out.resolve()) in media_paths:
         raise ProjectError("invalid_output", "The output path is a media file used by the project.")
+    remote = [i.reference for i in report.items if i.status is media.MediaStatus.REMOTE]
+    if remote:
+        raise ProjectError(
+            "remote_media",
+            f"The project references remote media: {remote[:5]}.",
+            "Rendering would make Kdenlive/MLT fetch them over the network; "
+            "download them and relink the project first.",
+        )
+    for item in report.items:
+        if item.resolved_path and item.status is media.MediaStatus.OK:
+            policy.check_allowed(Path(item.resolved_path), "Rendering reads media")
     warnings: list[str] = []
     if report.missing:
         message = f"{len(report.missing)} media or asset file(s) are missing: {report.missing[:10]}"
@@ -336,7 +389,7 @@ class RenderRun:
     def __init__(self, plan: RenderPlan, env: Mapping[str, str] | None = None) -> None:
         self.plan = plan
         self.workdir = Path(tempfile.mkdtemp(prefix="kdenlive-mcp-render-"))
-        environ = dict(os.environ if env is None else env)
+        environ = policy.child_env(env)
         environ.update(
             {
                 "QT_QPA_PLATFORM": "offscreen",

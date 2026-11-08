@@ -57,6 +57,8 @@ Programs are looked up on `PATH`. Override their location with these environment
 | `KDENLIVE_MCP_FFPROBE` | `ffprobe` |
 | `KDENLIVE_MCP_FFMPEG` | `ffmpeg` (optional) |
 | `KDENLIVE_MCP_PROBE_TIMEOUT` | Seconds allowed for each version probe (default 10) |
+| `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated absolute directories; every read and write must stay inside them (**recommended**, see [docs/security.md](docs/security.md)) |
+| `KDENLIVE_MCP_MAX_RENDERS` | Concurrent background renders (default 1, max 4) |
 
 Flatpak and Snap builds of Kdenlive do not expose `kdenlive`, `melt` or `ffprobe` on `PATH`.
 Point the variables above to executables or wrapper scripts.

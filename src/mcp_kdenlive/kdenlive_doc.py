@@ -13,24 +13,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from mcp_kdenlive import safexml
+from mcp_kdenlive import policy, safexml
+from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.timecode import FrameRate, TimeFormatError, parse_time
 
 PRODUCER_TAGS = ("producer", "chain", "playlist", "tractor")
-
-
-class ProjectError(Exception):
-    """A project cannot be read. `code` is stable and machine-readable."""
-
-    def __init__(self, code: str, message: str, hint: str | None = None) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.hint = hint
-
-    def __str__(self) -> str:
-        text = f"[{self.code}] {self.message}"
-        return f"{text} Hint: {self.hint}" if self.hint else text
 
 
 def props(element: ET.Element) -> dict[str, str]:
@@ -147,7 +134,7 @@ def resolve_input_path(raw: str) -> Path:
             raise ProjectError("not_a_file", f"{path} is not a regular file.")
     except PermissionError as exc:
         raise ProjectError("permission_denied", f"Cannot access {path}: {exc.strerror}.") from exc
-    return path
+    return policy.check_allowed(path, "Reading a project")
 
 
 def load(raw_path: str, *, max_bytes: int = safexml.DEFAULT_MAX_BYTES) -> KdenliveDocument:

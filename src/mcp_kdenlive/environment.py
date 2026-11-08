@@ -19,6 +19,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from mcp_kdenlive import __version__
+from mcp_kdenlive.policy import child_env
 from mcp_kdenlive.process import ProcessTimeout, run
 
 DEFAULT_PROBE_TIMEOUT = 10.0
@@ -253,8 +254,7 @@ def probe_tool(spec: ToolSpec, env: Mapping[str, str], timeout: float) -> ToolRe
         return early
     if path is None:  # pragma: no cover - _resolve always returns a path or a report
         raise RuntimeError(f"no path resolved for {spec.name}")
-    run_env = dict(env)
-    run_env.update(spec.extra_env)
+    run_env = child_env(env, **dict(spec.extra_env))
     try:
         completed = run([path, *spec.version_args], timeout=timeout, env=run_env)
     except ProcessTimeout:

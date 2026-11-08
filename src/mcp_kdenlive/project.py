@@ -20,7 +20,8 @@ from pathlib import PurePosixPath
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive.kdenlive_doc import KdenliveDocument, ProjectError, props
+from mcp_kdenlive.errors import ProjectError
+from mcp_kdenlive.kdenlive_doc import KdenliveDocument, props
 from mcp_kdenlive.timecode import FrameRate, frames_to_seconds, frames_to_timecode
 
 FRESHNESS_NOTE = (

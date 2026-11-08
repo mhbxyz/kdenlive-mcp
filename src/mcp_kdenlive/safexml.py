@@ -14,6 +14,8 @@ from typing import Never
 from xml.parsers import expat
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
+MAX_DEPTH = 256  # real projects nest < 10 levels
+MAX_ELEMENTS = 2_000_000  # a 64 MiB project has far fewer
 
 ParseError = ET.ParseError
 
@@ -41,8 +43,26 @@ def parse_bytes(data: bytes) -> ET.Element:
     parser.ExternalEntityRefHandler = _forbid
     parser.NotationDeclHandler = _forbid
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
-    parser.StartElementHandler = builder.start
-    parser.EndElementHandler = builder.end
+    depth = 0
+    count = 0
+
+    def start(tag: str, attrs: dict[str, str]) -> None:
+        nonlocal depth, count
+        depth += 1
+        count += 1
+        if depth > MAX_DEPTH:
+            raise XMLTooLargeError(f"XML nesting deeper than {MAX_DEPTH} levels")
+        if count > MAX_ELEMENTS:
+            raise XMLTooLargeError(f"more than {MAX_ELEMENTS} XML elements")
+        builder.start(tag, attrs)
+
+    def end(tag: str) -> None:
+        nonlocal depth
+        depth -= 1
+        builder.end(tag)
+
+    parser.StartElementHandler = start
+    parser.EndElementHandler = end
     parser.CharacterDataHandler = builder.data
     parser.CommentHandler = builder.comment
     parser.ProcessingInstructionHandler = builder.pi
