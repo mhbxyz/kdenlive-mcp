@@ -137,3 +137,29 @@ def test_private_work_dirs_live_in_the_cache(tmp_path, monkeypatch):
 def test_detection_can_be_disabled(fp):
     env, _ = fp
     assert flatpak.installation(dict(env, KDENLIVE_MCP_FLATPAK="off")) is None
+
+
+def test_system_installation_and_app_files(tmp_path, monkeypatch):
+    system = tmp_path / "var-lib-flatpak"
+    (system / "exports" / "bin").mkdir(parents=True)
+    (system / "exports" / "bin" / flatpak.APP).write_text("#!/bin/sh\n")
+    monkeypatch.setattr(flatpak, "SYSTEM", system)
+    env = {"HOME": str(tmp_path / "home")}
+    assert flatpak.installation(env) == "system"
+    assert flatpak.files_dir(env) is None  # app folder not there
+    files = system / "app" / flatpak.APP / "current" / "active" / "files"
+    files.mkdir(parents=True)
+    assert flatpak.files_dir(env) == files
+    launcher = Path(flatpak.wrapper("melt", dict(env, XDG_CACHE_HOME=str(tmp_path / "c"))) or "")
+    assert "run --system --command=melt" in launcher.read_text()
+
+
+def test_user_app_files_and_unknown_tools(fp, tmp_path):
+    env, _ = fp
+    files = tmp_path / "home" / ".local" / "share" / "flatpak" / "app" / flatpak.APP
+    (files / "current" / "active" / "files").mkdir(parents=True)
+    assert flatpak.files_dir(env) == files / "current" / "active" / "files"
+    assert flatpak.wrapper("bash", env) is None
+    assert (
+        flatpak.files_dir({"HOME": str(tmp_path / "none"), "KDENLIVE_MCP_FLATPAK": "off"}) is None
+    )

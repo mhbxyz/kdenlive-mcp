@@ -31,6 +31,7 @@ HIDDEN = (
     "/usr", "/lib", "/lib32", "/lib64", "/bin", "/sbin", "/etc", "/proc", "/sys", "/dev", "/run",
     "/app", "/boot",
 )  # fmt: skip
+SYSTEM = Path("/var/lib/flatpak")
 DISABLE_ENV = "KDENLIVE_MCP_FLATPAK"  # "off" disables Flatpak detection
 
 WRAPPER = """#!/bin/sh
@@ -65,7 +66,7 @@ def installation(env: Mapping[str, str] | None = None) -> str | None:
     data_home = Path(source.get("XDG_DATA_HOME") or _home(source) / ".local" / "share")
     if (data_home / "flatpak" / "exports" / "bin" / APP).exists():
         return "user"
-    if (Path("/var/lib/flatpak/exports/bin") / APP).exists():
+    if (SYSTEM / "exports" / "bin" / APP).exists():
         return "system"
     return None
 
@@ -78,7 +79,7 @@ def files_dir(env: Mapping[str, str] | None = None) -> Path | None:
         data_home = Path(source.get("XDG_DATA_HOME") or _home(source) / ".local" / "share")
         base = data_home / "flatpak"
     elif where == "system":
-        base = Path("/var/lib/flatpak")
+        base = SYSTEM
     else:
         return None
     path = base / "app" / APP / "current" / "active" / "files"
