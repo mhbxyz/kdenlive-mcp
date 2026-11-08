@@ -41,15 +41,15 @@ async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str], dic
         q = (await ed.clips("V1"))[0]["end"]
         await ed.edit("insert_clip", bin_id=ids["answer.mp4"], track="V1", start=q)
         a = (await ed.clips("V1"))[1]["duration"]
-        # Cutaways over the answer, on a track above it, without their (silent) audio.
-        await ed.edit("add_track", kind="video", name="Cutaways")
-        hull, tools = q + 2 * FPS, q + a - 3 * FPS
+        # Cutaways over the answer, on V2 (create_project makes two video tracks), without
+        # their (silent) audio.
+        hull, tools = q + FPS, q + 4 * FPS
         await ed.edit("insert_clip", bin_id=ids["cutaway_hull.mp4"], track="V2", start=hull,
                       source_out=2 * FPS - 1, audio_track=None)  # fmt: skip
         await ed.edit("insert_clip", bin_id=ids["cutaway_tools.mp4"], track="V2", start=tools,
                       source_out=2 * FPS - 1, audio_track=None)  # fmt: skip
-        # Lower thirds on their own track, bottom left, while each person is on screen.
-        await ed.edit("add_track", kind="video", name="Lower thirds")
+        # Name titles on a new top track (V3), top left: the bottom is for the subtitles.
+        await ed.edit("add_track", kind="video", name="Names")
         await ed.edit("add_title", text="Sam Lee\nInterviewer", track="V3", start=0,
                       duration=min(q, 3 * FPS), align="left", vertical="top", font_size=60,
                       outline=2)  # fmt: skip
@@ -95,11 +95,11 @@ def check(out: Path, at: dict) -> list[str]:
     expected = at["timeline"]["duration_frames"] / FPS
     if abs(dl.duration(out) - expected) > 0.2:
         failures.append(f"duration {dl.duration(out):.2f}s, expected {expected:.2f}s")
-    centre = (0.4, 0.4, 0.2, 0.15)
+    side = (0.75, 0.1, 0.2, 0.15)  # away from the labels and the name titles
     for frame, colour, what in ((q // 2, "mixed", "question (grey)"),
                                 (hull + FPS, "green", "hull cutaway"),
                                 (tools + FPS, "blue", "tools cutaway")):  # fmt: skip
-        got = dl.dominant(dl.region_rgb(out, frame / FPS, centre))
+        got = dl.dominant(dl.region_rgb(out, frame / FPS, side))
         if got != colour:
             failures.append(f"{what} at {frame / FPS:.1f}s: {got}")
     top_left = (0.0, 0.0, 0.45, 0.3)

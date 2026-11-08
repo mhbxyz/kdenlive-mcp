@@ -48,10 +48,10 @@ def make(work: Path) -> dict[str, Path]:
                                 label="SAM", gain_db=-14),
         "answer.mp4": talking(media / "answer.mp4", ANSWER, color="saddlebrown",
                               label="ANA", gain_db=0),
-        "cutaway_hull.mp4": dl.make_clip(media / "cutaway_hull.mp4", 4, color="seagreen",
+        "cutaway_hull.mp4": dl.make_clip(media / "cutaway_hull.mp4", 4, color="darkgreen",
                                          label="HULL", size="1920x1080", fps=str(FPS),
                                          tone_hz=None),
-        "cutaway_tools.mp4": dl.make_clip(media / "cutaway_tools.mp4", 4, color="steelblue",
+        "cutaway_tools.mp4": dl.make_clip(media / "cutaway_tools.mp4", 4, color="navy",
                                           label="TOOLS", size="1920x1080", fps=str(FPS),
                                           tone_hz=None),
     }  # fmt: skip

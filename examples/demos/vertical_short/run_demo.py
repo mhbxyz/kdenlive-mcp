@@ -49,7 +49,7 @@ async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str]]:
         await ed.on_clip("add_mix", "V1", 1, duration=MIX)
         await ed.edit("add_track", kind="video", name="Titles")
         await ed.edit(
-            "add_title", text="Summer\nin 3 shots", track="V2", start=0, duration=2 * FPS,
+            "add_title", text="Summer\nin 3 shots", track="V3", start=0, duration=2 * FPS,
             vertical="top", font_size=120, outline=3,
         )  # fmt: skip
         await ed.edit("insert_clip", bin_id=ids["music.wav"], track="A2", start=0)
