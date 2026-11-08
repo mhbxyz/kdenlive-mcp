@@ -55,3 +55,16 @@ CI cannot open the Kdenlive GUI. Every feature that writes a project also needs 
 checklist** in its issue (open, edit, save, reopen, render in the target Kdenlive version).
 Until someone has performed it, the item is listed as a known limitation. The research lab
 in `research/lab/` can automate parts of this locally; it is not part of CI.
+
+## Releases
+
+Maintainers follow [docs/releasing.md](docs/releasing.md):
+
+- update the changelog;
+- set the version in `pyproject.toml` and `server.json`;
+- merge;
+- tag `vX.Y.Z`.
+
+The release workflow publishes to TestPyPI, verifies the result, publishes to PyPI and the MCP
+Registry, then creates the GitHub release. Release authority and protections:
+[docs/governance.md](docs/governance.md).

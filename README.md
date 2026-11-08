@@ -5,12 +5,17 @@
 Local-first, client-agnostic [MCP](https://modelcontextprotocol.io) server for
 [Kdenlive](https://kdenlive.org) on Linux.
 
-> **Status: early development.** Available tools: environment diagnostics, read-only
-> project/timeline/media inspection and local rendering ([docs/tools.md](docs/tools.md)).
-> Editing is tracked in the [roadmap](https://github.com/mhbxyz/kdenlive-mcp/issues/1).
+Inspect, edit and render Kdenlive projects from an AI assistant, locally on Linux: timelines,
+media diagnostics, safe project copies, clip edits and rendering with Kdenlive presets.
 
-The server talks MCP over **stdio** only. It never opens a network listener. Protocol
-messages go to stdout and diagnostics go to stderr.
+```sh
+pipx install mcp-kdenlive      # NOT "kdenlive-mcp": that PyPI name is an unrelated project
+kdenlive-mcp diagnose
+```
+
+**Start here: [docs/user-guide.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/user-guide.md)** (install, client setup, safety, upgrade,
+troubleshooting). The available tools are listed in [docs/tools.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/tools.md), and the
+planned work in the [roadmap](https://github.com/mhbxyz/kdenlive-mcp/issues/1).
 
 ## Requirements
 
@@ -21,14 +26,13 @@ messages go to stdout and diagnostics go to stderr.
 
 ## Install
 
-The PyPI distribution is **`mcp-kdenlive`** (not yet published). The PyPI name `kdenlive-mcp` belongs
-to an unrelated project, so `pipx install kdenlive-mcp` installs something else. Once released:
-
 ```sh
 pipx install mcp-kdenlive
 ```
 
-See [docs/packaging.md](docs/packaging.md) for virtual environments, upgrades and artifact checks.
+The PyPI distribution is **`mcp-kdenlive`**. The PyPI name `kdenlive-mcp` belongs to an
+unrelated project, so `pipx install kdenlive-mcp` installs something else. See
+[docs/packaging.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/packaging.md) for virtual environments, upgrades and artifact checks.
 
 ### From source
 
@@ -57,7 +61,7 @@ Programs are looked up on `PATH`. Override their location with these environment
 | `KDENLIVE_MCP_FFPROBE` | `ffprobe` |
 | `KDENLIVE_MCP_FFMPEG` | `ffmpeg` (optional) |
 | `KDENLIVE_MCP_PROBE_TIMEOUT` | Seconds allowed for each version probe (default 10) |
-| `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated absolute directories; every read and write must stay inside them (**recommended**, see [docs/security.md](docs/security.md)) |
+| `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated absolute directories; every read and write must stay inside them (**recommended**, see [docs/security.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/security.md)) |
 | `KDENLIVE_MCP_MAX_RENDERS` | Concurrent background renders (default 1, max 4) |
 
 Flatpak and Snap builds of Kdenlive do not expose `kdenlive`, `melt` or `ffprobe` on `PATH`.
@@ -70,7 +74,7 @@ uv run --directory /path/to/kdenlive-mcp kdenlive-mcp     # same as: kdenlive-mc
 ```
 
 Tested clients (Claude Code, Codex CLI, OpenCode, Grok Build CLI) and copyable
-configurations are listed in [docs/clients.md](docs/clients.md). A typical configuration:
+configurations are listed in [docs/clients.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/clients.md). A typical configuration:
 
 ```json
 {
@@ -106,14 +110,17 @@ Architecture: domain modules (`environment.py`, `process.py`) do not depend on M
 
 Documentation:
 
-- [Tools](docs/tools.md)
-- [Clients](docs/clients.md)
-- [Compatibility](docs/compatibility.md)
-- [Versioning](docs/versioning.md)
-- [Security model](docs/security.md)
-- [Security policy (reporting vulnerabilities)](SECURITY.md)
-- [Incident response](docs/incident-response.md)
-- [Packaging](docs/packaging.md)
-- [MCP Registry](docs/registry.md)
-- [Changelog](CHANGELOG.md)
-- [Research](docs/research/integration-surfaces.md)
+- [User guide](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/user-guide.md)
+- [Releasing (maintainers)](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/releasing.md)
+- [Contributing](https://github.com/mhbxyz/kdenlive-mcp/blob/main/CONTRIBUTING.md)
+- [Tools](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/tools.md)
+- [Clients](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/clients.md)
+- [Compatibility](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/compatibility.md)
+- [Versioning](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/versioning.md)
+- [Security model](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/security.md)
+- [Security policy (reporting vulnerabilities)](https://github.com/mhbxyz/kdenlive-mcp/blob/main/SECURITY.md)
+- [Incident response](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/incident-response.md)
+- [Packaging](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/packaging.md)
+- [MCP Registry](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/registry.md)
+- [Changelog](https://github.com/mhbxyz/kdenlive-mcp/blob/main/CHANGELOG.md)
+- [Research](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/research/integration-surfaces.md)

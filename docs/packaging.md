@@ -32,7 +32,7 @@ not reserve it.
 
 ## Installing
 
-Once a release is published (not yet available):
+From PyPI (first release: 0.1.0):
 
 ```sh
 pipx install mcp-kdenlive           # recommended: isolated environment, kdenlive-mcp on PATH
