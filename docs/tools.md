@@ -19,6 +19,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 | `set_clip_volume` / `set_clip_fades` | no (writes a file) | Constant audio level (dB) and audio fade-in/fade-out of a clip |
 | `list_markers` | yes | Timeline guides, clip markers and marker categories |
 | `add_marker` / `update_marker` / `remove_marker` | no (writes a file) | Timeline guides (chapters) and clip markers |
+| `relink_media` | no (writes a file) | Point bin clips at moved or replacement media files |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 | `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
@@ -395,3 +396,24 @@ audio clip is changed (the video is not), and a video-only clip is refused
 - **Sequences:** guides belong to one sequence (`sequence`, default: the active one, like `get_timeline`). Markers stored on a sequence's own bin clip are not listed or edited.
 - **Damaged data:** entries without an integer position are skipped when listing and kept untouched when writing; several markers at one position are refused (`[unsupported_structure]`). A category that is not in the project is kept unless you change it.
 - **Verified:** guides with Unicode comments, categories and durations, clip markers at the first and last frame, then moved, renamed, recategorised and removed, reopen in Kdenlive 26.08.2 and survive its own save unchanged.
+
+## `relink_media(path, mapping, destination, …)`
+
+Points bin clips at new files, for example after a media folder was moved or renamed:
+
+1. `list_project_media` shows the clips with `status: missing`, with their `bin_id`, stored `reference` and `resolved_path`.
+2. `mapping` maps any of those three to the new absolute path. A path used by several bin clips must be relinked by `bin_id` (`[invalid_argument]`).
+
+| Check | Result |
+|---|---|
+| New path relative, a URL, unreadable, outside the allowed roots | `[invalid_path]`, `[media_unreadable]`, `[path_not_allowed]` |
+| Fewer frames (at the project rate) than the timeline uses, or no video/audio where timeline clips use it | `[media_mismatch]` |
+| Longer or shorter (but still covering the used frames), another frame size or rate, other streams, different bytes (Kdenlive hash) | written, with a `warnings` entry per clip |
+| Clip using a proxy (by its path or its original's), with speed-changed instances (`timewarp`) | `[unsupported_structure]` |
+| Not an audio/video file: image, image sequence, color or generated clip, sequence | `[invalid_argument]` |
+| The new file orders its streams differently | `video_index`/`audio_index` updated on every copy, with a warning |
+| The new file is already another bin clip's | written, with a warning (the bin then has two clips for one file) |
+
+What changes: `resource`, `kdenlive:file_hash`, `kdenlive:file_size` (and the stream indexes when they differ) on the bin clip **and every timeline instance** (`instances` in the result). The reference is relative to the project's effective root (its `root`, or its folder when `root` does not exist) when the file is inside it, absolute otherwise. Clip ids, timing, effects and the other media are untouched. Keys may be the `resolved_path` from `list_project_media` even through symlinked folders or with `..`. The frames the timelines use are counted from every timeline entry, so large projects are checked completely.
+
+Verified: a project whose `media/` folder was moved to `footage/rushes été/` (three files, one used twice, one in crossfades) relinked with real MLT, reopened in Kdenlive 26.08.2 **without a missing-media dialog**, and survived Kdenlive's own save unchanged.

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from mlt_stubs import AUDIO_PRODUCER, AV_PRODUCER
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CAT = shutil.which("cat")  # resolved before fixtures replace PATH
@@ -61,17 +62,6 @@ def all_tools_stubbed(make_stub, stub_env) -> dict[str, str]:  # type: ignore[no
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
-
-
-AV_PRODUCER = """<?xml version="1.0"?><mlt><producer id="producer0" in="0" out="59">
- <property name="length">60</property><property name="eof">pause</property>
- <property name="resource">x</property><property name="audio_index">1</property>
- <property name="video_index">0</property><property name="seekable">1</property>
- <property name="meta.media.nb_streams">2</property><property name="mlt_service">avformat</property>
-</producer></mlt>"""
-AUDIO_PRODUCER = AV_PRODUCER.replace(
-    '<property name="video_index">0</property>', '<property name="video_index">-1</property>'
-).replace('<property name="audio_index">1</property>', '<property name="audio_index">0</property>')
 
 
 @pytest.fixture
