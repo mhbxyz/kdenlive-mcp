@@ -30,6 +30,7 @@ import re
 import secrets
 import shutil
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,6 +48,16 @@ GENERATED_RESOURCES = re.compile(r"^(black|0x[0-9a-fA-F]{6,8}|#.*|<producer>|-|)
 
 
 @dataclass
+class PendingFile:
+    """A file written next to the saved project (e.g. subtitles), named after the destination:
+    ``<destination file name><suffix>``, like Kdenlive's own Save As."""
+
+    suffix: str
+    data: bytes
+    point: Callable[[Path], None]  # update the project's references to the final path
+
+
+@dataclass
 class EditableProject:
     """A project loaded for modification. `root` is edited in place by the editing tools."""
 
@@ -54,6 +65,7 @@ class EditableProject:
     original: bytes
     sha256: str
     changes: list[str] = field(default_factory=list)
+    pending_files: list[PendingFile] = field(default_factory=list)
 
     @property
     def path(self) -> Path:
@@ -72,6 +84,10 @@ class SaveResult(BaseModel):
     source_sha256: str = Field(description="Revision of the source that was edited.")
     changes: list[str] = Field(description="Human-readable list of modifications applied.")
     rebased_paths: list[str] = Field(description="References rewritten for the new location.")
+    side_files: list[str] = Field(
+        default_factory=list,
+        description="Other files written next to the project (e.g. subtitles), with it.",
+    )
     backup: str | None = Field(description="Copy of the replaced file, when one was replaced.")
     written: bool = Field(
         default=True,
@@ -252,6 +268,41 @@ def _check_destination(
     return dest
 
 
+def _prepare_side_files(
+    project: EditableProject, dest: Path, overwrite: bool
+) -> list[tuple[Path, bytes]]:
+    """Name each pending file after the destination and point the project at it."""
+    side = []
+    for pending in project.pending_files:
+        target = dest.with_name(dest.name + pending.suffix)
+        policy.check_write_target(target, "Writing a file next to the project")
+        if target.exists() and not overwrite:
+            raise ProjectError(
+                "output_exists",
+                f"{target} already exists; nothing written.",
+                "Choose another destination, or pass overwrite=true (the old file is backed up).",
+            )
+        pending.point(target)
+        side.append((target, pending.data))
+    return side
+
+
+def _write_side_files(side: list[tuple[Path, bytes]]) -> list[Path]:
+    """Write the files; an existing one is backed up first. Returns the files created."""
+    created = []
+    for target, data in side:
+        if target.exists():
+            if target.read_bytes() == data:
+                continue
+            stamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+            shutil.copy2(target, target.with_name(f"{target.name}.backup-{stamp}"))
+            _write_atomically(target, data, replace=True)
+        else:
+            _write_atomically(target, data, replace=False)
+            created.append(target)
+    return created
+
+
 KEEP_BACKUPS = 5
 
 
@@ -286,6 +337,7 @@ def save(
         )
 
     rebased = rebase_paths(project, dest.parent)
+    side = _prepare_side_files(project, dest, overwrite)
     data = serialize(project)
     verify_serialization(project, data)
     # Conflict check as late as possible: the source must still be the revision we edited.
@@ -310,8 +362,15 @@ def save(
         shutil.copy2(dest, backup_path)
         backup = str(backup_path)
         _rotate_backups(dest)
+    created = _write_side_files(side)
     if not unchanged:
-        _write_atomically(dest, data, replace=dest.exists())
+        try:
+            _write_atomically(dest, data, replace=dest.exists())
+        except BaseException:
+            for path in created:  # the project was not written: do not leave its files behind
+                with contextlib.suppress(OSError):
+                    path.unlink()
+            raise
     reloaded = kdenlive_doc.load(str(dest))  # must still be a readable Kdenlive project
     return SaveResult(
         destination=str(dest),
@@ -321,6 +380,7 @@ def save(
         source_sha256=project.sha256,
         changes=list(project.changes),
         rebased_paths=rebased,
+        side_files=[str(target) for target, _ in side],
         backup=backup,
         written=not unchanged,
         warnings=warnings,
