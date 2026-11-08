@@ -92,11 +92,11 @@ def test_host_tools_are_preferred(fp, make_stub):
 
 @pytest.mark.parametrize("hidden", ["/tmp/x/p.kdenlive", "/usr/share/a.mp4", "/var/tmp/b.mp4"])
 def test_paths_the_sandbox_cannot_see(hidden):
-    assert flatpak.hidden(Path(hidden))
+    assert flatpak.hidden(Path(hidden), permissions="host")
 
 
 def test_home_paths_are_visible(tmp_path):
-    assert not flatpak.hidden(Path.home() / "Videos" / "p.kdenlive")
+    assert not flatpak.hidden(Path.home() / "Videos" / "p.kdenlive", permissions="host")
 
 
 def test_render_refuses_a_project_the_sandbox_cannot_see(fp, tmp_path, monkeypatch):
@@ -121,8 +121,10 @@ def test_render_refuses_a_project_the_sandbox_cannot_see(fp, tmp_path, monkeypat
     assert "Flatpak" in err.value.message
 
 
-def test_no_flatpak_means_nothing_changes(stub_env, tmp_path):
+def test_no_flatpak_means_nothing_changes(stub_env, tmp_path, monkeypatch):
+    monkeypatch.setattr(flatpak, "SYSTEM", tmp_path / "no-system")
     env = dict(stub_env, HOME=str(tmp_path / "nohome"))
+    env.pop("KDENLIVE_MCP_FLATPAK")
     assert flatpak.installation(env) is None
     assert environment.locate("melt", env) is None
 
@@ -163,3 +165,92 @@ def test_user_app_files_and_unknown_tools(fp, tmp_path):
     assert (
         flatpak.files_dir({"HOME": str(tmp_path / "none"), "KDENLIVE_MCP_FLATPAK": "off"}) is None
     )
+
+
+# ------------------------------------------------------------------ review cases ------
+@pytest.mark.parametrize(
+    ("path", "hidden"),
+    [
+        ("/run/media/me/usb/clip.mp4", False),  # removable drives are visible
+        ("/run/user/1000/x", True),
+        ("/var/lib/x", True),
+        ("/var/home/me/Videos/p.kdenlive", False),  # Silverblue-style homes
+        ("/mnt/data/p.kdenlive", False),
+    ],
+)
+def test_hidden_rules(path, hidden):
+    assert flatpak.hidden(Path(path), permissions="host") is hidden
+
+
+def test_restricted_filesystem_permissions(tmp_path):
+    home = Path.home()
+    assert flatpak.hidden(home / "Videos" / "a.mp4", permissions="home") is False
+    assert flatpak.hidden(Path("/mnt/data/a.mp4"), permissions="home") is True
+    assert flatpak.hidden(home / "Videos" / "a.mp4", permissions="xdg-videos") is False
+    assert flatpak.hidden(home / "Music" / "a.mp4", permissions="xdg-videos") is True
+    assert flatpak.hidden(Path("/srv/clips/a.mp4"), permissions="/srv/clips") is False
+    assert flatpak.hidden(Path("/mnt/data/a.mp4"), permissions="") is True
+
+
+def test_launcher_survives_odd_paths_and_concurrent_writers(fp, tmp_path, monkeypatch):
+    env, _ = fp
+    odd = tmp_path / "odd $dir `x`" / "flatpak"
+    odd.parent.mkdir()
+    odd.write_text('#!/bin/sh\necho odd-flatpak "$@"\n')
+    odd.chmod(0o755)
+    monkeypatch.setattr(flatpak, "FLATPAK", str(odd))
+    import subprocess
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(8) as pool:
+        paths = list(pool.map(lambda _: flatpak.wrapper("melt", env), range(32)))
+    assert len(set(paths)) == 1
+    out = subprocess.run(  # noqa: S603
+        [paths[0], "a b"], env=dict(env), capture_output=True, text=True, check=True
+    ).stdout
+    assert out.startswith("odd-flatpak run --user --command=melt")
+    assert not list((tmp_path / "cache" / "kdenlive-mcp" / "flatpak-bin").glob("*.tmp*"))
+    assert oct((tmp_path / "cache" / "kdenlive-mcp").stat().st_mode & 0o777) == "0o700"
+
+
+def test_host_mlt_variables_do_not_enter_the_sandbox(fp, tmp_path):
+    env, record = fp
+    import subprocess
+
+    melt = environment.locate("melt", env) or ""
+    subprocess.run([melt, "x"], env=dict(env, MLT_PROFILES_PATH="/host/profiles"), check=True)  # noqa: S603
+    text = (tmp_path / "flatpak.args").read_text()
+    assert "MLT_PROFILES_PATH" not in text  # the stub records TMPDIR only; see wrapper below
+    assert "unset" in Path(melt).read_text() and "MLT_" in Path(melt).read_text()
+
+
+def test_only_launchers_from_our_cache_count(tmp_path):
+    other = tmp_path / "flatpak-bin" / "melt"
+    assert not flatpak.is_wrapper(str(other))
+
+
+def test_app_profiles_and_presets_are_used(fp, tmp_path, monkeypatch):
+    env, _ = fp
+    files = tmp_path / "home" / ".local" / "share" / "flatpak" / "app" / flatpak.APP
+    app = files / "current" / "active" / "files" / "share"
+    (app / "mlt-7" / "profiles").mkdir(parents=True)
+    shutil.copy(FIX / "profiles" / "atsc_720p_2997", app / "mlt-7" / "profiles")
+    (app / "kdenlive" / "export").mkdir(parents=True)
+    shutil.copy(FIX / "render" / "profiles.xml", app / "kdenlive" / "export" / "profiles.xml")
+    user = tmp_path / "home" / ".var" / "app" / flatpak.APP / "data" / "kdenlive" / "export"
+    user.mkdir(parents=True)
+    (user / "customprofiles.xml").write_text(
+        '<profiles><profile name="Mine" extension="mp4" args="f=mp4"/></profiles>'
+    )
+    from mcp_kdenlive import create, render
+
+    assert create.profiles_dir(env) == app / "mlt-7" / "profiles"
+    files_read = [p for p, _ in render.preset_files(env)]
+    assert files_read[0] == app / "kdenlive" / "export" / "profiles.xml"
+    assert user / "customprofiles.xml" in files_read
+    assert "Mine" in {p.name for p in render.list_presets(env).presets}
+
+
+def test_profile_names_are_not_checked_as_paths(fp, tmp_path, monkeypatch):
+    monkeypatch.chdir("/")
+    environment.check_visible(Path("atsc_1080p_25"), environment.locate("melt", fp[0]), "x")
