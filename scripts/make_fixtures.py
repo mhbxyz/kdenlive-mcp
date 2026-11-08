@@ -2,6 +2,7 @@
 
   uv run python scripts/make_fixtures.py media DIR     # synthetic media, FFmpeg lavfi only
   uv run python scripts/make_fixtures.py montage   # tests/fixtures/kd26/generated-montage.kdenlive
+  uv run python scripts/make_fixtures.py mixes     # tests/fixtures/kd26/kd26-mixes.kdenlive (#61)
 
 Media: bit-exact FFmpeg flags, no metadata; identical bytes are not guaranteed across FFmpeg
 versions, so committed media are the reference and this command documents how they were made.
@@ -117,11 +118,75 @@ def make_montage() -> None:
             path.unlink(missing_ok=True)
 
 
+def make_mixes() -> None:
+    """Three adjacent AV clips with handles (built by this package), then real Kdenlive 26.08.2
+    adds the crossfades: Select All, Mix Clips (headless GUI lab, research/lab), Save As."""
+    import os
+    import tempfile
+
+    sys.path.insert(0, str(ROOT / "src"))
+    from mcp_kdenlive import timeline_edit as te
+    from mcp_kdenlive import writer
+
+    base = KD26 / ".mixes-base.kdenlive"
+    saved = KD26 / ".mixes-kdenlive.kdenlive"
+    edit = writer.open_for_edit(str(KD26 / "kd26-ntsc.kdenlive"))
+    # ntsc.mp4 has 60 frames: leave handles so Kdenlive can overlap the clips.
+    te.insert_clip(edit, "4", "V1", 0, 0, 39)
+    te.insert_clip(edit, "4", "V1", 40, 10, 49)
+    te.insert_clip(edit, "4", "V1", 80, 10, 59)
+    writer.save(edit, str(base))
+    action = "dbus /kdenlive/MainWindow_1 org.kde.KMainWindow.activateAction"
+    try:
+        with tempfile.TemporaryDirectory(prefix="kdenlive-mixes-") as tmp:
+            lab = Path(tmp)
+            for sub in ("xdg/config", "xdg/data", "xdg/cache"):
+                (lab / sub).mkdir(parents=True)
+            script = lab / "script.txt"
+            script.write_text(
+                f'click "Start Normally"\nsleep 5\ndialogs\n{action} select_all_tracks\nsleep 1\n'
+                f"{action} mix_clip\nsleep 2\n{action} unselect_all_tracks\nsleep 1\n"
+                f"{action} file_save_as\nsleep 4\ndsettext {base.name} {saved}\ndclick Save\n"
+                "sleep 5\ndialogs\n",
+                encoding="utf-8",
+            )
+            env = dict(os.environ, KD_ARGS=str(base), KD_THEME="kde")
+            subprocess.run(
+                [str(ROOT / "research" / "lab" / "kdgui.sh"), str(lab), str(script), str(lab / "o")],
+                env=env,
+                timeout=240,
+                check=False,
+            )
+        if not saved.exists():
+            raise SystemExit("Kdenlive did not save the mixed project (see research/lab).")
+        import re
+
+        text = saved.read_text(encoding="utf-8").replace(
+            f'root="{KD26}"', 'root="/nonexistent/kdenlive-mcp-fixture-root"'
+        )
+        # No machine path in the fixture (PROVENANCE.md): the file dialog's last folder.
+        text = re.sub(
+            r'(<property name="kdenlive:docproperties.browserurl">)[^<]*(</property>)',
+            r"\1/nonexistent/kdenlive-mcp-fixture-root\2",
+            text,
+        )
+        out = KD26 / "kd26-mixes.kdenlive"
+        out.write_text(text, encoding="utf-8")
+        print(f"wrote {out}")
+    finally:
+        base.unlink(missing_ok=True)
+        saved.unlink(missing_ok=True)
+        for backup in KD26.glob(".mixes-*"):
+            backup.unlink()
+
+
 if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "media" and len(sys.argv) == 3:
         make_media(Path(sys.argv[2]))
     elif command == "montage":
         make_montage()
+    elif command == "mixes":
+        make_mixes()
     else:
         raise SystemExit(__doc__)

@@ -416,6 +416,33 @@
     "nested_sequence",
     "effects"
    ]
+  },
+  {
+   "file": "kd26/kd26-mixes.kdenlive",
+   "written_by": "Kdenlive 26.08.2 (crossfades added by its Mix Clips action on clips placed by kdenlive-mcp)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 130,
+   "active_clips": 6,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "same_track_mix",
+    "secondary_layer"
+   ]
   }
  ]
 }
