@@ -148,8 +148,8 @@ def test_add_and_remove_a_crossfade(s):
     s.apply(te.trim_clip, "V1@0", s.rev(), end=40)  # [0,40) src 0..39
     s.apply(te.insert_clip, "4", "V1", 40, 10, 49)  # [40,80) src 10..49
     r = s.apply(effects.add_mix, "V1@0", s.rev(), 20)
-    assert [(c.ref, c.start, c.end) for c in r.clips] == [("V1@0", 0, 50), ("V1@30", 30, 80),
-                                                          ("A1@0", 0, 50), ("A1@30", 30, 80)]  # fmt: skip
+    expected = [("V1@0", 0, 50), ("V1@30", 30, 80), ("A1@0", 0, 50), ("A1@30", 30, 80)]
+    assert [(c.ref, c.start, c.end) for c in r.clips] == expected
     for label, service in (("V1", "luma"), ("A1", "mix")):
         track = next(t for t in s.timeline().tracks if t.label == label)
         assert [(m.service, m.start, m.end, m.cut) for m in track.mixes] == [(service, 30, 50, 40)]

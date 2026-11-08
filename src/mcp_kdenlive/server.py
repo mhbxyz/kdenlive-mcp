@@ -28,6 +28,7 @@ from mcp_kdenlive import (
     writer,
 )
 from mcp_kdenlive import audio as audio_mod
+from mcp_kdenlive import effects as effects_mod
 from mcp_kdenlive import relink as relink_mod
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.errors import ProjectError
@@ -82,6 +83,7 @@ class EditResult(BaseModel):
     timeline: timeline_edit.TimelineEditResult | None = None
     audio: audio_mod.AudioEditResult | None = None
     relink: relink_mod.RelinkResult | None = None
+    effects: effects_mod.EffectEditResult | None = None
 
 
 Revision = Annotated[
@@ -137,7 +139,8 @@ def _project_edit(
         timeline_edit.TimelineEditResult
         | audio_mod.AudioEditResult
         | MarkerEditResult
-        | relink_mod.RelinkResult,
+        | relink_mod.RelinkResult
+        | effects_mod.EffectEditResult,
     ],
     revision: str | None = None,
 ) -> EditResult:
@@ -154,6 +157,8 @@ def _project_edit(
             return EditResult(saved=saved, markers=result)
         if isinstance(result, relink_mod.RelinkResult):
             return EditResult(saved=saved, relink=result)
+        if isinstance(result, effects_mod.EffectEditResult):
+            return EditResult(saved=saved, effects=result)
         return EditResult(saved=saved, timeline=result)
     except ProjectError as exc:
         raise _tool_error(exc) from exc
@@ -279,6 +284,170 @@ def _register_markers(server: MCPServer) -> None:
         )
 
 
+EffectIndex = Annotated[
+    int, Field(ge=0, description="Position of the effect in the clip's `effects` (get_timeline).")
+]
+EffectParams = Annotated[
+    dict[str, float | int | bool],
+    Field(description="Parameter values by name (see list_effects for names, units, ranges)."),
+]
+
+
+def _register_effects(server: MCPServer) -> None:
+    rules = (
+        " Video effects go on the video part of an audio/video pair. The result is written to "
+        "`destination` with the save_project_copy rules."
+    )
+
+    @server.tool(
+        name="list_effects",
+        title="List effects",
+        annotations=READ_ONLY,
+        description=(
+            "List the effects this server can apply (a subset verified against Kdenlive's own "
+            "format): identifier, target (video/audio), parameters with units, ranges and "
+            "defaults, and whether the installed MLT provides them. Crossfades between adjacent "
+            "clips use add_mix / remove_mix. Read-only."
+        ),
+    )
+    def list_effects() -> effects_mod.EffectCatalog:
+        return effects_mod.catalog()
+
+    @server.tool(
+        name="add_effect",
+        title="Add effect",
+        annotations=EDIT,
+        description="Append a verified effect (list_effects) to a clip, with optional "
+        "parameters; omitted ones take their defaults." + rules,
+    )
+    def add_effect(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        effect: Annotated[str, Field(description="Effect id from list_effects, e.g. 'crop'.")],
+        destination: Destination,
+        params: EffectParams | None = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: effects_mod.add_effect(e, clip, revision, effect, params, sequence),
+            revision=revision,
+        )
+
+    @server.tool(
+        name="update_effect",
+        title="Update effect",
+        annotations=EDIT,
+        description="Change parameters of the clip's effect at `index`; animated parameters "
+        "(several keyframes) are refused." + rules,
+    )
+    def update_effect(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        index: EffectIndex,
+        params: EffectParams,
+        destination: Destination,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: effects_mod.update_effect(e, clip, revision, index, params, sequence),
+            revision=revision,
+        )
+
+    @server.tool(
+        name="remove_effect",
+        title="Remove effect",
+        annotations=EDIT,
+        description="Remove the clip's effect at `index` (any effect)." + rules,
+    )
+    def remove_effect(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        index: EffectIndex,
+        destination: Destination,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: effects_mod.remove_effect(e, clip, revision, index, sequence),
+            revision=revision,
+        )
+
+    @server.tool(
+        name="add_mix",
+        title="Add crossfade",
+        annotations=EDIT,
+        description=(
+            "Crossfade a clip into the next clip on its track (they must touch), like Kdenlive's "
+            "Mix Clips: both clips extend into their source handles around the cut, and grouped "
+            "audio gets the matching audio crossfade. `duration` in frames (default 1 second). "
+            "The result is written to `destination` with the save_project_copy rules."
+        ),
+    )
+    def add_mix(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        destination: Destination,
+        duration: Annotated[int, Field(ge=2)] | None = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: effects_mod.add_mix(e, clip, revision, duration, sequence),
+            revision=revision,
+        )
+
+    @server.tool(
+        name="remove_mix",
+        title="Remove crossfade",
+        annotations=EDIT,
+        description="Remove the crossfade at the end of a clip; both clips go back to the "
+        "original cut. The result is written to `destination` with the save_project_copy rules.",
+    )
+    def remove_mix(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        destination: Destination,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: effects_mod.remove_mix(e, clip, revision, sequence),
+            revision=revision,
+        )
+
+
 def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     """Create the MCP server with every tool registered."""
     manager_holder: list[jobs.JobManager] = [job_manager] if job_manager else []
@@ -301,6 +470,7 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     _register_rendering(server, manager)
     _register_editing(server)
     _register_markers(server)
+    _register_effects(server)
     return server
 
 
