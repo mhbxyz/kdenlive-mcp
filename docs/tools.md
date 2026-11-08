@@ -1,7 +1,9 @@
 # MCP tools
 
 Every tool runs locally and declares MCP annotations. Errors are returned as tool errors
-whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: …`.
+whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: …`. Arguments a
+tool does not declare are refused with `[invalid_argument]` (input schemas say
+`additionalProperties: false`); they are never silently ignored.
 
 | Tool | Read-only | Purpose |
 |---|---|---|
@@ -532,14 +534,23 @@ editor (manual check on #15); nothing is turned into an image.
 - **Afterwards:** a title is an ordinary video clip for `move_clip`, `trim_clip` (within its
   duration), `split_clip`, `remove_clip` and effects.
 - **Missing fonts:** an unknown family is refused (`[dependency_missing]`) with close matches;
-  without `fc-list` the font is not checked and a warning says so (MLT then substitutes a font).
+  when `fc-list` cannot be run the font is not checked and a warning says so (MLT then
+  substitutes a font). Fonts are looked up on every call, so a newly installed font is found.
   A Flatpak Kdenlive sees the fonts of its runtime and of the host (`/run/host/fonts`).
 - **Vertical position is estimated:** the box height is `lines × font_size × 1.3625` (measured
   on Kdenlive's own titles with Noto Sans); other fonts may sit a few pixels higher or lower.
 - **Not supported:** bold, underline, shadows, gradients, images, scrolling, typewriter and
-  several text items per title; edit them in Kdenlive's title editor.
-- **Emoji** (U+1F000 and above) are not drawn by MLT's title renderer (seen with MLT 7.42): the
-  result carries a warning. CJK text renders through font fallback.
+  several text items per title; edit them in Kdenlive's title editor. Passing such an option is
+  refused (`[invalid_argument]`, like any unknown argument of any tool).
+- **Sizes and timing:** text taller than the frame inside the margins, or an `x` that leaves the
+  box narrower than the font size, is `[invalid_range]`; the width of the text itself is not
+  measured. A title lasts `duration` frames: `trim_clip` can shorten it but not extend it past
+  that (Kdenlive's editor can); make a longer one with `add_title` instead.
+- **Emoji** (U+1F000–U+1FAFF) are not drawn by MLT's title renderer (seen with MLT 7.42): the
+  result carries a warning. CJK text renders through font fallback; symbols such as ☀ ✂ ★ render
+  when a font has them.
+- **Characters:** control characters (except `\n`, `\t`), surrogates and U+FFFE/U+FFFF, which
+  XML cannot hold, are refused.
 - **Verified:** titles centred, lower-third (left, bottom, italic, coloured, outlined) and placed
   with `x`/`y`, then trimmed, split and moved, reopen in Kdenlive 26.08.2 without dialogs and
   survive its save (text, font, size, colours, alignment, position and duration compared);

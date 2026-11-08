@@ -549,11 +549,11 @@ def _drop_fades(entry: ET.Element, kdenlive_ids: tuple[str, ...]) -> None:
             entry.remove(flt)
 
 
-GENERATED_VIDEO = ("kdenlivetitle", "color")
+GENERATED_VIDEO = ("kdenlivetitle",)  # verified for titles (#15); colors are not offered yet
 
 
 def _generated(producer: ET.Element) -> bool:
-    """Titles and colors: Kdenlive plays them from the bin producer itself, never a copy."""
+    """Titles: Kdenlive plays them from the bin producer itself, never a per-track copy."""
     return props(producer).get("mlt_service") in GENERATED_VIDEO
 
 
@@ -908,7 +908,7 @@ def split_clip(
         chain = tl.doc.by_id.get(i.element.get("producer") or "")
         if chain is not None and not _generated(chain):
             new_chain = copy.deepcopy(chain)
-            new_chain.set("id", _next_id(edit.root, "chain"))
+            new_chain.set("id", _next_id(edit.root, new_chain.tag))
             edit.root.insert(list(edit.root).index(chain) + 1, new_chain)
             tl.doc.by_id[new_chain.get("id", "")] = new_chain
             right.set("producer", new_chain.get("id", ""))

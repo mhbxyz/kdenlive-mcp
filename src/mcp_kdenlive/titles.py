@@ -15,7 +15,6 @@ import shutil
 import unicodedata
 import uuid
 import xml.etree.ElementTree as ET
-from functools import lru_cache
 
 from pydantic import BaseModel, Field
 
@@ -32,7 +31,7 @@ __all__ = ["TitleBox", "TitleResult", "add_title", "installed_fonts"]
 MAX_TEXT = 5000
 DEFAULT_FONTS = ("Noto Sans", "DejaVu Sans", "Liberation Sans", "Cantarell", "Arial")
 LINE_HEIGHT = 1.3625  # line height / pixel size measured on Kdenlive 26.08.2's own titles
-EMOJI_START = 0x1F000  # emoji planes: not drawn by MLT's kdenlivetitle producer
+EMOJI = range(0x1F000, 0x1FB00)  # pictographs and emoji: not drawn by MLT's title producer
 MARGIN = 0.05  # presets keep 5 % of the frame free on every side
 ALIGN = {"left": 1, "right": 2, "center": 4}  # Qt::AlignLeft, AlignRight, AlignHCenter
 # Attributes Kdenlive 26.08.2 writes on a text item and that this server does not expose.
@@ -63,30 +62,29 @@ class TitleResult(BaseModel):
     warnings: list[str]
 
 
-@lru_cache(maxsize=1)
-def _fc_list(fc_list: str) -> frozenset[str] | None:
+def installed_fonts() -> set[str] | None:
+    """Font families known to fontconfig, or None when fc-list cannot be run.
+
+    Not cached: a font installed while the server runs is found by the next call.
+    """
+    fc_list = shutil.which("fc-list", path=child_env().get("PATH", os.defpath))
+    if fc_list is None:
+        return None
     try:
         done = run([fc_list, "--format", "%{family}\n"], timeout=30, env=child_env())
     except (OSError, ProcessTimeout):
         return None
-    families = {
-        name.strip() for line in done.stdout.splitlines() for name in line.split(",") if name
-    }
-    return frozenset(f for f in families if f) or None
-
-
-def installed_fonts() -> set[str] | None:
-    """Font families known to fontconfig, or None when fc-list is unavailable."""
-    fc_list = shutil.which("fc-list", path=child_env().get("PATH", os.defpath))
-    found = _fc_list(fc_list) if fc_list else None
-    return set(found) if found is not None else None
+    if done.returncode != 0:
+        return None
+    return {name.strip() for line in done.stdout.splitlines() for name in line.split(",")} - {""}
 
 
 def _font(requested: str | None, warnings: list[str]) -> tuple[str, bool]:
     fonts = installed_fonts()
     if fonts is None:
         warnings.append(
-            "Fonts were not checked (fc-list not found); a missing font is replaced at render."
+            "Fonts were not checked (fc-list could not be run); a missing font is replaced "
+            "at render."
         )
         return requested or DEFAULT_FONTS[0], False
     if requested is None:
@@ -115,7 +113,12 @@ def _text(raw: str) -> str:
         raise ProjectError("invalid_argument", "The title text is empty.")
     if len(text) > MAX_TEXT:
         raise ProjectError("invalid_argument", f"Title text is limited to {MAX_TEXT} characters.")
-    bad = [c for c in text if c not in "\n\t" and unicodedata.category(c) in ("Cc", "Cs")]
+    # XML 1.0 cannot hold control characters, surrogates, U+FFFE and U+FFFF
+    bad = [
+        c
+        for c in text
+        if (c not in "\n\t" and unicodedata.category(c) in ("Cc", "Cs")) or c in "\ufffe\uffff"
+    ]
     if bad:
         raise ProjectError(
             "invalid_argument", f"Control character {bad[0]!r} in the title text (use \\n)."
@@ -151,8 +154,21 @@ def _box(
             raise ProjectError(
                 "invalid_argument", f"x and y must be inside the {width}x{height} frame."
             )
+        if width - x < font_size:
+            raise ProjectError(
+                "invalid_range",
+                f"At x={x} the text box is only {width - x} px wide for {font_size} px text.",
+                "Use a smaller x, or align='right' with x near the left.",
+            )
         return TitleBox(x=x, y=y, width=width - x, height=box_height)
     mx, my = round(width * MARGIN), round(height * MARGIN)
+    if box_height > height - 2 * my:
+        raise ProjectError(
+            "invalid_range",
+            f"{lines} line(s) of {font_size} px text (about {box_height} px) do not fit in the "
+            f"{height} px frame.",
+            "Use a smaller font_size or fewer lines.",
+        )
     top = {
         "top": my,
         "center": (height - box_height) // 2,
@@ -254,13 +270,13 @@ def add_title(
     box = _box(*size, text.count("\n") + 1, font_size, vertical, x, y)
     warnings: list[str] = []
     family, checked = _font(font, warnings)
-    emoji = sorted({c for c in text if ord(c) >= EMOJI_START})
+    emoji = sorted({c for c in text if ord(c) in EMOJI})
     if emoji:
         warnings.append(
             f"The text has emoji ({''.join(emoji[:10])}): MLT's title renderer draws nothing for "
             "them (seen with Kdenlive 26.08.2 and MLT 7.42)."
         )
-    name = text.split("\n", 1)[0].strip()[:80]
+    name = next(line.strip() for line in text.split("\n") if line.strip())[:80]
     xmldata = _document(text, frames, size, box, family, font_size, style)
 
     bin_id = str(_next_bin_id(edit.root))

@@ -89,6 +89,11 @@ def _next_bin_id(root: ET.Element) -> int:
         value = props(el).get("kdenlive:id") if el.tag in ("producer", "chain", "tractor") else None
         if value and value.isdigit():
             ids.append(int(value))
+        if el.tag == "playlist":  # bin folders share the id space: kdenlive:folder.<parent>.<id>
+            for name in props(el):
+                folder = re.fullmatch(r"kdenlive:folder\.-?\d+\.(\d+)", name)
+                if folder:
+                    ids.append(int(folder.group(1)))
     return max(ids, default=3) + 1
 
 

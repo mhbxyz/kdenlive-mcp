@@ -251,3 +251,69 @@ def test_installed_fonts_reads_fontconfig(monkeypatch):
     monkeypatch.undo()  # the real fc-list, not the fixture's list
     fonts = titles.installed_fonts()
     assert fonts and all(isinstance(f, str) and f.strip() == f and f for f in fonts)
+
+
+# ------------------------------------------------------------------ review fixes ------
+def test_xml_special_characters_round_trip(s):
+    text = "a < b & \"c\" 'd' ]]> e\tf"
+    r = s.apply(titles.add_title, text, "V2", 0)
+    content = document(s, r.bin_id).find("item/content")
+    assert content is not None and content.text == text
+
+
+@pytest.mark.parametrize("char", ["￾", "￿"])
+def test_characters_xml_cannot_hold_are_refused(s, char):
+    assert code(s, f"a{char}b", "V2", 0) == "invalid_argument"
+
+
+def test_rare_cjk_is_not_mistaken_for_emoji(s):
+    assert s.apply(titles.add_title, "𠀋 ☀ ✂", "V2", 0).warnings == []  # U+2000B, U+2600 block
+
+
+def test_name_is_the_first_non_empty_line(s):
+    r = s.apply(titles.add_title, "  \n  Hello  \nworld", "V2", 0)
+    assert r.name == "Hello"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        ({"font_size": 600}, "invalid_range"),  # 817 px of text in a 720 px frame
+        ({"x": 1270, "y": 10, "font_size": 40}, "invalid_range"),  # a 10 px wide box
+        ({"duration": 200, "start": 0, "track": "V1"}, "overlap"),
+    ],
+)
+def test_boxes_and_timing_that_do_not_fit(s, kwargs, expected):
+    args = {"text": "Hi", "track": "V2", "start": 0, **kwargs}
+    assert code(s, args.pop("text"), args.pop("track"), args.pop("start"), **args) == expected
+
+
+def test_title_runs_into_the_next_clip(s):
+    s.apply(titles.add_title, "A", "V2", 100, duration=30)
+    assert code(s, "B", "V2", 50, duration=60) == "overlap"  # 50..110 hits 100
+    s.apply(titles.add_title, "B", "V2", 50, duration=50)  # 50..100 touches it: fine
+
+
+def test_trimming_past_the_title_duration_is_refused(s):
+    s.apply(titles.add_title, "Hi", "V2", 0, duration=30)
+    with pytest.raises(ProjectError) as err:
+        s.apply(te.trim_clip, "V2@0", s.rev(), end=40)
+    assert err.value.code == "invalid_range"
+
+
+def test_no_default_font_installed(s, monkeypatch):
+    monkeypatch.setattr(titles, "installed_fonts", lambda: {"Some Script Font"})
+    assert code(s, "Hi", "V2", 0) == "dependency_missing"
+    monkeypatch.setattr(titles, "installed_fonts", set)
+    assert code(s, "Hi", "V2", 0) == "dependency_missing"
+
+
+def test_bin_ids_do_not_reuse_folder_ids(s, tmp_path):
+    text = s.current.read_text(encoding="utf-8").replace(
+        '<property name="kdenlive:folder.-1.2">Sequences</property>',
+        '<property name="kdenlive:folder.-1.2">Sequences</property>'
+        '<property name="kdenlive:folder.-1.40">Titles</property>',
+    )
+    s.current = tmp_path / "folders.kdenlive"
+    s.current.write_text(text, encoding="utf-8")
+    assert int(s.apply(titles.add_title, "Hi", "V2", 0).bin_id) > 40

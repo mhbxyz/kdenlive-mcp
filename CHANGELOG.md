@@ -13,7 +13,7 @@ migration notes in the same entry.
 
 ### Added
 
-- **Titles (#15):** `add_title` creates an editable Kdenlive title clip (text with Unicode and several lines, font checked with fontconfig, size, colour, outline, italic, preset or pixel position, duration) and places it on a video track. `EditResult` gains `title`. `insert_clip` accepts title and colour clips from the bin, which the timeline plays from the bin producer like Kdenlive.
+- **Titles (#15):** `add_title` creates an editable Kdenlive title clip (text with Unicode and several lines, font checked with fontconfig, size, colour, outline, italic, preset or pixel position, duration) and places it on a video track. `EditResult` gains `title`. `insert_clip` accepts title clips from the bin, which the timeline plays from the bin producer like Kdenlive.
 
 - **Effects and crossfades (#14):** `list_effects` lists a verified set of video effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) with parameters, units, ranges, availability in the installed MLT and the tested versions; fades from/to black use the brightness form so they render with Kdenlive 24.12–26.08 and MLT 7.22. `add_effect`, `update_effect` and `remove_effect` edit them on a clip, keeping other effects, their order and keyframes (animated values are not overwritten). `add_mix` and `remove_mix` add or remove a crossfade between two touching clips, in Kdenlive's own format, with the matching audio mix for grouped clips. `EditResult` gains `effects`.
 
@@ -26,6 +26,8 @@ migration notes in the same entry.
 - **melt engine without a display (#90):** with MLT 7.22 (Ubuntu 24.04), titles rendered as MLT's *INVALID* placeholder and video tracks were not composited, yet the render succeeded: MLT's Qt module needs an X display there. The melt engine now passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` (Qt still draws offscreen) and fails with an explanation (display, `xvfb-run`, newer MLT) when the module cannot load.
 
 ### Changed
+
+- **Unknown arguments are refused (#15):** every tool now answers `[invalid_argument]` naming the unknown arguments and listing the accepted ones, instead of silently ignoring them (e.g. `bold` on `add_title`). Input schemas declare `additionalProperties: false`. **Migration:** drop arguments a tool does not list.
 
 - **Work folders (#65):** temporary folders for renders and MLT probes are created in `$XDG_CACHE_HOME/kdenlive-mcp/tmp` instead of the system temp folder.
 

@@ -7,7 +7,7 @@ protocol itself; logs go to stderr.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -334,8 +334,10 @@ def _register_titles(server: MCPServer) -> None:
         outline_color: Color = "#000000",
         align: Literal["left", "center", "right"] = "center",
         vertical: Literal["top", "center", "bottom"] = "center",
-        x: Annotated[int, Field(ge=0)] | None = None,
-        y: Annotated[int, Field(ge=0)] | None = None,
+        x: Annotated[int, Field(ge=0, description="Left of the text box, pixels; with y.")]
+        | None = None,
+        y: Annotated[int, Field(ge=0, description="Top of the text box, pixels; with x.")]
+        | None = None,
         italic: bool = False,
         sequence: Sequence = None,
         overwrite: Overwrite = False,
@@ -509,6 +511,25 @@ def _register_effects(server: MCPServer) -> None:
         )
 
 
+class KdenliveServer(MCPServer):
+    """MCPServer that refuses unknown arguments: the SDK would silently drop them (#15)."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> Any:
+        tool = self._tool_manager.get_tool(name)
+        if tool is not None:
+            known = set(tool.parameters.get("properties", {}))
+            unknown = sorted(set(arguments or {}) - known)
+            if unknown:
+                raise _tool_error(
+                    ProjectError(
+                        "invalid_argument",
+                        f"{name} has no argument(s) {unknown}; nothing was done.",
+                        f"Accepted: {sorted(known)}.",
+                    )
+                )
+        return await super().call_tool(name, arguments, context)
+
+
 def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     """Create the MCP server with every tool registered."""
     manager_holder: list[jobs.JobManager] = [job_manager] if job_manager else []
@@ -518,7 +539,7 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
             manager_holder.append(jobs.JobManager())
         return manager_holder[0]
 
-    server = MCPServer(
+    server = KdenliveServer(
         name=SERVER_NAME,
         title="Kdenlive MCP",
         description="Inspect, edit and render Kdenlive projects locally.",
@@ -533,6 +554,8 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     _register_markers(server)
     _register_effects(server)
     _register_titles(server)
+    for tool in server._tool_manager.list_tools():
+        tool.parameters["additionalProperties"] = False  # unknown arguments are refused
     return server
 
 
