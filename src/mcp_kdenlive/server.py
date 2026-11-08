@@ -6,6 +6,7 @@ protocol itself; logs go to stderr.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated
 
 from mcp.server.mcpserver import MCPServer
@@ -13,7 +14,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import Field
 
-from mcp_kdenlive import __version__, create, jobs, kdenlive_doc, media, project, render
+from mcp_kdenlive import __version__, create, jobs, kdenlive_doc, media, project, render, writer
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.kdenlive_doc import ProjectError
 
@@ -57,7 +58,13 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
         website_url="https://github.com/mhbxyz/kdenlive-mcp",
         log_level="WARNING",
     )
+    _register_inspection(server)
+    _register_rendering(server, manager)
+    _register_editing(server)
+    return server
 
+
+def _register_inspection(server: MCPServer) -> None:
     @server.tool(
         name="diagnose_environment",
         title="Diagnose environment",
@@ -160,6 +167,8 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
+
+def _register_rendering(server: MCPServer, manager: Callable[[], jobs.JobManager]) -> None:
     @server.tool(
         name="list_render_presets",
         title="List render presets",
@@ -210,50 +219,6 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
                 path, output, preset, overwrite=overwrite, allow_missing_media=allow_missing_media
             )
             return render.render(plan, timeout=timeout_seconds)
-        except ProjectError as exc:
-            raise _tool_error(exc) from exc
-
-    @server.tool(
-        name="list_profiles",
-        title="List project profiles",
-        description=(
-            "List the MLT video profiles available for new projects (name, resolution, "
-            "rational frame rate, progressive)."
-        ),
-        annotations=READ_ONLY,
-    )
-    def list_profiles() -> list[create.ProfileInfo]:
-        return create.list_profiles()
-
-    @server.tool(
-        name="create_project",
-        title="Create project",
-        description=(
-            "Create a new Kdenlive project file containing one media clip placed at the start "
-            "of the timeline (video on V1, audio on A1, grouped). The project is modeled on "
-            "Kdenlive 26.08 files and stays editable in Kdenlive. `profile` is an MLT profile "
-            "name (see list_profiles) or 'auto' to use the standard profile matching the "
-            "media. Refuses to replace an existing file unless overwrite=true; writes "
-            "atomically and never modifies the media. Media inside the project's directory "
-            "is stored with a relative path."
-        ),
-        annotations=ToolAnnotations(
-            read_only_hint=False,
-            destructive_hint=True,
-            idempotent_hint=False,
-            open_world_hint=False,
-        ),
-    )
-    def create_project(
-        output: Annotated[str, Field(description="Absolute path of the new .kdenlive file.")],
-        media_path: Annotated[str, Field(description="Absolute path of an audio or video file.")],
-        profile: Annotated[
-            str, Field(description="MLT profile name, or 'auto' to match the media.")
-        ] = "auto",
-        overwrite: Annotated[bool, Field(description="Replace an existing project file.")] = False,
-    ) -> create.CreateResult:
-        try:
-            return create.create_project(output, media_path, profile, overwrite=overwrite)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
@@ -346,4 +311,84 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
-    return server
+
+def _register_editing(server: MCPServer) -> None:
+    @server.tool(
+        name="list_profiles",
+        title="List project profiles",
+        description=(
+            "List the MLT video profiles available for new projects (name, resolution, "
+            "rational frame rate, progressive)."
+        ),
+        annotations=READ_ONLY,
+    )
+    def list_profiles() -> list[create.ProfileInfo]:
+        return create.list_profiles()
+
+    @server.tool(
+        name="create_project",
+        title="Create project",
+        description=(
+            "Create a new Kdenlive project file containing one media clip placed at the start "
+            "of the timeline (video on V1, audio on A1, grouped). The project is modeled on "
+            "Kdenlive 26.08 files and stays editable in Kdenlive. `profile` is an MLT profile "
+            "name (see list_profiles) or 'auto' to use the standard profile matching the "
+            "media. Refuses to replace an existing file unless overwrite=true; writes "
+            "atomically and never modifies the media. Media inside the project's directory "
+            "is stored with a relative path."
+        ),
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=True,
+            idempotent_hint=False,
+            open_world_hint=False,
+        ),
+    )
+    def create_project(
+        output: Annotated[str, Field(description="Absolute path of the new .kdenlive file.")],
+        media_path: Annotated[str, Field(description="Absolute path of an audio or video file.")],
+        profile: Annotated[
+            str, Field(description="MLT profile name, or 'auto' to match the media.")
+        ] = "auto",
+        overwrite: Annotated[bool, Field(description="Replace an existing project file.")] = False,
+    ) -> create.CreateResult:
+        try:
+            return create.create_project(output, media_path, profile, overwrite=overwrite)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="save_project_copy",
+        title="Save project copy",
+        description=(
+            "Write a verified copy of a Kdenlive project to another .kdenlive file, preserving "
+            "all project data (unknown metadata included). Relative media paths are rewritten so "
+            "they still work from the destination folder. Refuses to overwrite an existing file "
+            "unless overwrite=true (a timestamped backup is kept), refuses to write over the "
+            "source unless overwrite=true and expected_sha256 (from inspect_project) match, and "
+            "refuses if the source changed since it was read or the destination is open in "
+            "Kdenlive."
+        ),
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=True,
+            idempotent_hint=False,
+            open_world_hint=False,
+        ),
+    )
+    def save_project_copy(
+        path: ProjectPath,
+        destination: Annotated[str, Field(description="Absolute path of the .kdenlive to write.")],
+        overwrite: Annotated[bool, Field(description="Allow replacing an existing file.")] = False,
+        expected_sha256: Annotated[
+            str | None,
+            Field(description="Required to write over the source: its sha256 as last read."),
+        ] = None,
+    ) -> writer.SaveResult:
+        try:
+            edit = writer.open_for_edit(path)
+            return writer.save(
+                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
+            )
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
