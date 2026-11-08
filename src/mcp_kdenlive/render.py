@@ -350,6 +350,12 @@ def prepare(
         if item.resolved_path and item.status is media.MediaStatus.OK:
             policy.check_allowed(Path(item.resolved_path), "Rendering reads media")
     warnings: list[str] = []
+    if any(a.service == "avfilter.subtitles" for a in report.asset_files):
+        warnings.append(
+            "This project has subtitles: Kdenlive 26.08.2's command-line render crashed (SIGSEGV) "
+            "on such projects in our tests, while melt rendered them. The job will report the "
+            "failure if it happens (see #42 for a melt-based engine)."
+        )
     if report.missing:
         message = f"{len(report.missing)} media or asset file(s) are missing: {report.missing[:10]}"
         if not allow_missing_media:

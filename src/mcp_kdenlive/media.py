@@ -457,7 +457,7 @@ def _asset_files(doc: KdenliveDocument, resolver: _Resolver) -> list[AssetFile]:
             service = p.get("mlt_service") or ""
             prop = pairs.get(service)
             reference = p.get(prop) if prop else None
-            if not reference or (service == "avfilter.subtitles" and p.get("internal_added")):
+            if not reference:
                 continue
             if URL_RE.match(reference) and not reference.startswith("file://"):
                 continue

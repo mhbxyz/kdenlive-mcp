@@ -1,0 +1,421 @@
+{
+ "description": "Expected reading of every fixture (tests/test_compat.py). Regenerate values only after checking them by hand.",
+ "fixtures": [
+  {
+   "file": "kd26/kd26-ntsc.kdenlive",
+   "written_by": "Kdenlive 26.08.2",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 0,
+   "active_clips": 0,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "empty_timeline",
+    "fractional_fps",
+    "unicode_media_name",
+    "bin_audio_only"
+   ]
+  },
+  {
+   "file": "kd26/kd26-ntsc-timeline.kdenlive",
+   "written_by": "Kdenlive 26.08.2",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 60,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "unicode_media_name"
+   ]
+  },
+  {
+   "file": "kd26/kd26-subtitle.kdenlive",
+   "written_by": "Kdenlive 26.08.2",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 60,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "subtitles_ass",
+    "unicode_text"
+   ]
+  },
+  {
+   "file": "kd26/generated-montage.kdenlive",
+   "written_by": "kdenlive-mcp (Kdenlive 26.08.2 skeleton)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 190,
+   "active_clips": 8,
+   "tracks": [
+    "A3",
+    "A2",
+    "A1",
+    "V1",
+    "V2",
+    "V3"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "gaps",
+    "av_group",
+    "split",
+    "trim",
+    "subrange",
+    "named_tracks",
+    "unicode_track_name",
+    "six_tracks"
+   ]
+  },
+  {
+   "file": "upstream/av.kdenlive",
+   "written_by": "Kdenlive 22.07.70",
+   "document_version": "1.04",
+   "generation": 4,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 500,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": false,
+   "features": [
+    "document_1.04",
+    "generator_clips"
+   ]
+  },
+  {
+   "file": "upstream/clip-ids.kdenlive",
+   "written_by": "Kdenlive 23.04.0",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 36,
+   "active_clips": 16,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "gaps",
+    "av_group",
+    "many_clips"
+   ]
+  },
+  {
+   "file": "upstream/clip-ids.resaved-26.08.2.kdenlive",
+   "written_by": "Kdenlive 26.08.2",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 36,
+   "active_clips": 16,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "gaps",
+    "av_group",
+    "many_clips"
+   ]
+  },
+  {
+   "file": "upstream/missing-proxy.kdenlive",
+   "written_by": "Kdenlive 23.11.70",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 11,
+   "active_clips": 4,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "proxy_missing"
+   ]
+  },
+  {
+   "file": "upstream/test-keyframes.kdenlive",
+   "written_by": "Kdenlive 23.07.70",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 5,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "effects",
+    "keyframes"
+   ]
+  },
+  {
+   "file": "upstream/test-keyframes.resaved-26.08.2.kdenlive",
+   "written_by": "Kdenlive 26.08.2",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 5,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "effects",
+    "keyframes"
+   ]
+  },
+  {
+   "file": "upstream/test-missing.kdenlive",
+   "written_by": "Kdenlive 23.07.90",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 405,
+   "active_clips": 1,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 1,
+   "editable": true,
+   "features": [
+    "missing_lut"
+   ]
+  },
+  {
+   "file": "upstream/test-mix.kdenlive",
+   "written_by": "Kdenlive 22.11.70",
+   "document_version": "1.04",
+   "generation": 4,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 973,
+   "active_clips": 5,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": false,
+   "features": [
+    "document_1.04",
+    "same_track_mix",
+    "color_clips"
+   ]
+  },
+  {
+   "file": "upstream/test-nesting.kdenlive",
+   "written_by": "Kdenlive 24.01.95",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 3,
+   "active_duration_frames": 125,
+   "active_clips": 1,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "multiple_sequences",
+    "nested_sequence"
+   ]
+  },
+  {
+   "file": "upstream/test-nesting.resaved-26.08.2.kdenlive",
+   "written_by": "Kdenlive 26.08.2",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 3,
+   "active_duration_frames": 125,
+   "active_clips": 1,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "multiple_sequences",
+    "nested_sequence"
+   ]
+  },
+  {
+   "file": "upstream/test-nesting-effects.kdenlive",
+   "written_by": "Kdenlive 23.07.70",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 2,
+   "active_duration_frames": 10,
+   "active_clips": 4,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "multiple_sequences",
+    "nested_sequence",
+    "effects"
+   ]
+  },
+  {
+   "file": "upstream/test-nesting-effects.resaved-26.08.2.kdenlive",
+   "written_by": "Kdenlive 26.08.2",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 2,
+   "active_duration_frames": 10,
+   "active_clips": 4,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "multiple_sequences",
+    "nested_sequence",
+    "effects"
+   ]
+  }
+ ]
+}
