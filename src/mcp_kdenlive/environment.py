@@ -11,6 +11,7 @@ import platform
 import re
 import shutil
 import sys
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -19,7 +20,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import __version__, policy
+from mcp_kdenlive import __version__, flatpak, policy
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.policy import child_env
 from mcp_kdenlive.process import ProcessTimeout, run
@@ -241,6 +242,9 @@ def _resolve(
         found = shutil.which(name, path=env.get("PATH"))
         if found:
             return found, "path", None
+    launcher = flatpak.wrapper(spec.name, env)
+    if launcher is not None:
+        return launcher, "flatpak", None
     return (
         None,
         None,
@@ -315,6 +319,26 @@ def probe_tool(spec: ToolSpec, env: Mapping[str, str], timeout: float) -> ToolRe
     return _report(spec, ToolStatus.AVAILABLE, path=path, source=source, version=match.group(1))
 
 
+def work_dir(prefix: str, env: Mapping[str, str] | None = None) -> Path:
+    """A private temporary folder (0700) in the server's cache, which a Flatpak Kdenlive can
+    see (it cannot see /tmp). The caller removes it."""
+    base = flatpak.cache_dir(env) / "tmp"
+    base.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return Path(tempfile.mkdtemp(prefix=prefix, dir=base))
+
+
+def check_visible(path: Path, program: str | None, what: str) -> None:
+    """Refuse a path that a Flatpak program (launcher) cannot see."""
+    if flatpak.is_wrapper(program) and flatpak.hidden(path):
+        raise ProjectError(
+            "invalid_path",
+            f"{what}: {path} is in a folder the Flatpak Kdenlive cannot see "
+            "(/tmp, /usr, /etc and other system folders are hidden from it).",
+            "Move it under your home folder (or another data folder), or install Kdenlive "
+            "from your distribution.",
+        )
+
+
 def locate(name: str, env: Mapping[str, str] | None = None) -> str | None:
     """Path of a usable executable for tool `name` (override or PATH), without running it."""
     spec = next((s for s in TOOL_SPECS if s.name == name), None)
@@ -349,10 +373,16 @@ def diagnose(env: Mapping[str, str] | None = None) -> EnvironmentReport:
         "that rendering, codecs, MLT plugins or fonts work.",
         "Versions are reported as observed; no minimum supported version is enforced yet.",
     ]
+    if any(t.source == "flatpak" for t in tools):
+        notes.append(
+            "Programs marked 'flatpak' run inside the Flatpak org.kde.kdenlive, which cannot see "
+            "/tmp, /usr, /etc and other system folders: keep projects, media and render outputs "
+            "under your home folder (or another data folder)."
+        )
     if any(t.name == "kdenlive" and t.status is ToolStatus.MISSING for t in tools):
         notes.append(
-            "Flatpak and Snap installations of Kdenlive do not expose kdenlive, melt or ffprobe "
-            "on PATH; point the KDENLIVE_MCP_* variables to executables or wrapper scripts."
+            "Snap installations of Kdenlive do not expose kdenlive, melt or ffprobe on PATH; "
+            "point the KDENLIVE_MCP_* variables to executables or wrapper scripts."
         )
     return EnvironmentReport(
         server_version=__version__,
