@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-kdenlive"
-version = "0.2.0.dev0"
+version = "0.2.0"
 description = "Local-first MCP server to inspect, edit and render Kdenlive projects."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -7,6 +7,10 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-08
+
+Editing essentials (milestone M6). **Contains breaking changes**: read the *Changed* section and its migrations before upgrading.
+
 ### Changed
 
 - **Breaking — clip references (#63):** `get_timeline` refs are now `<track>@<start>` (e.g. `V1@90`), stable while a clip does not move. Edit tools still accept the 0.1 form `index:layer:entry`. **Migration:** read refs from `get_timeline` instead of building them.
