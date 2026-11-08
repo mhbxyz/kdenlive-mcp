@@ -69,6 +69,9 @@ grok mcp add kdenlive /path/to/kdenlive-mcp      # user scope
 grok mcp doctor kdenlive                         # expect: handshake OK, 5 tools discovered
 ```
 
+**With uv, no install**: command `uvx`, args `["mcp-kdenlive"]`. The package also provides an
+`mcp-kdenlive` command, so this works; it is also how the MCP Registry entry describes it.
+
 **From a source checkout** (any client): command `uv`, args
 `["run", "--directory", "/path/to/repo", "kdenlive-mcp"]`.
 

@@ -2,7 +2,8 @@
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[docs/versioning.md](docs/versioning.md).
+[docs/versioning.md](docs/versioning.md). Breaking changes are marked **Breaking** and come with
+migration notes in the same entry.
 
 ## [Unreleased]
 

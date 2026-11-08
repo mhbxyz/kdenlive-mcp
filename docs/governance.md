@@ -75,6 +75,7 @@ Verified on 2026-11-08:
 - **Direct push to `main`:** rejected (`GH013: Changes must be made through a pull request; 8 of 8 required status checks are expected`), and `main` was unchanged.
 - **Effective rules on `main`** (`GET /rules/branches/main`): deletion, non_fast_forward, required_linear_history, pull_request, required_status_checks.
 - **Environments:** `testpypi` and `pypi` have deployment policy `v*` (tag) and no reviewers.
-- **Tag immutability:** configured, **not yet exercised**, because exercising it requires a real `v*` tag. It is tested at the first release by attempting to move the tag (#29).
+- **Tag immutability, exercised with `v0.1.0rc1` (#29):** `git push -f` moving the tag was rejected (`GH013 … Cannot update this protected ref`), and the tag is unchanged.
+- **Tag creation by an admin:** creating `v0.1.0rc1` succeeded through the admin bypass; the push output reported the bypassed creation rule.
 
 Not changed: repository visibility, collaborators, third-party access.
