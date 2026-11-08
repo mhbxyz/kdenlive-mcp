@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-kdenlive"
+version = "0.1.0.dev0"
+description = "Local-first MCP server to inspect, edit and render Kdenlive projects."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3,<3",
+    "pydantic>=2.11,<3",
+]
+
+[project.scripts]
+kdenlive-mcp = "mcp_kdenlive.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "anyio>=4.9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_kdenlive"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: needs real Kdenlive/MLT/FFmpeg installations (skipped when unavailable)",
+]
