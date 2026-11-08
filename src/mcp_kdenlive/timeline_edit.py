@@ -40,7 +40,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mcp_kdenlive import project
-from mcp_kdenlive.clip_effects import END_FADES, START_FADES, fade_length
+from mcp_kdenlive.clip_effects import END_FADES, FADE_PAIRS, START_FADES, fade_length
 from mcp_kdenlive.edits import _next_id, _sequence, _set_prop
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import props
@@ -464,23 +464,33 @@ def _has_keyframes(entry: ET.Element) -> bool:
     )
 
 
-def anchor_fades(tl: Timeline, entry: ET.Element, lengths: dict[str, int] | None = None) -> None:
+def anchor_fades(
+    tl: Timeline,
+    entry: ET.Element,
+    lengths: dict[str, int] | None = None,
+    only: set[str] | None = None,
+) -> None:
     """Keep edge fades at the clip's edges after its source range changed (trim, split).
 
     Fade filters store source frames (see audio.py). `lengths` overrides a fade's length by
-    kdenlive_id; a fade never gets longer than the clip.
+    kdenlive_id; `only` limits the fades that are rewritten. A fade-in keeps at most the whole
+    clip, and its fade-out at most what the fade-in leaves.
     """
     source_in, source_out = tl._entry_bounds(entry)
     clip_length = source_out - source_in + 1
     rate = tl.doc.rate
+    wanted = {
+        kid: (lengths or {}).get(kid, fade_length(entry, kid, tl.doc.time))
+        for kid in START_FADES + END_FADES
+    }
+    for start_id, end_id in FADE_PAIRS.items():
+        wanted[start_id] = min(wanted[start_id], clip_length)
+        wanted[end_id] = min(wanted[end_id], clip_length - wanted[start_id])
     for flt in entry.findall("filter"):
         kdenlive_id = props(flt).get("kdenlive_id", "")
-        if kdenlive_id not in START_FADES + END_FADES:
+        if kdenlive_id not in wanted or (only is not None and kdenlive_id not in only):
             continue
-        length = (lengths or {}).get(kdenlive_id)
-        if length is None:
-            length = fade_length(entry, kdenlive_id, tl.doc.time)
-        length = min(length, clip_length)
+        length = wanted[kdenlive_id]
         if kdenlive_id in START_FADES:
             flt.set("in", frames_to_clock(source_in, rate))
             flt.set("out", frames_to_clock(source_in + length, rate))
@@ -846,6 +856,8 @@ def split_clip(
         # The cut is in the middle: the left half keeps the fade-in, the right half the fade-out.
         _drop_fades(i.element, END_FADES)
         _drop_fades(right, START_FADES)
+        for flt in right.findall("filter"):
+            flt.set("id", _next_id(edit.root, "filter"))
         anchor_fades(tl, i.element)
         anchor_fades(tl, right)
         tl._rebuild(t, [*before, (at, right)], i.layer)

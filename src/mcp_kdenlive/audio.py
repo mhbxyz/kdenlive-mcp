@@ -78,7 +78,9 @@ def _new_filter(tl: Timeline, entry: ET.Element, values: dict[str, str]) -> ET.E
 
 
 def _format_db(value: float) -> str:
-    return f"{value:g}"
+    """Two decimals at most, no exponent, no negative zero (Kdenlive writes e.g. -6 or -6.5)."""
+    text = f"{round(value, 2) + 0.0:.2f}".rstrip("0").rstrip(".")
+    return "0" if text in ("", "-0") else text
 
 
 def set_clip_volume(
@@ -101,12 +103,12 @@ def set_clip_volume(
     for t, i in targets:
         tl.check_editable(t)
         existing = effects(i.element, "volume")
-        if len(existing) > 1 or (
-            existing and len(keyframes(props(existing[0]).get("level", "0"))) > 1
-        ):
+        level_prop = props(existing[0]).get("level") if existing else "0"
+        if len(existing) > 1 or level_prop is None or len(keyframes(level_prop)) > 1:
             raise ProjectError(
                 "unsupported_structure",
-                f"The clip on {t.label} has an animated or repeated volume effect.",
+                f"The clip on {t.label} has a volume effect this tool cannot set "
+                "(animated, repeated, or not a dB level).",
                 "Edit it in Kdenlive; this tool only sets a constant level.",
             )
     changed = []
@@ -158,16 +160,21 @@ def set_clip_fades(
             )
         plan.append((t, i, wanted_in, wanted_out))
     changed = []
+    requested = {"fadein": fade_in, "fadeout": fade_out}
     for t, i, wanted_in, wanted_out in plan:
-        for kdenlive_id, length in (("fadein", wanted_in), ("fadeout", wanted_out)):
-            for old in effects(i.element, kdenlive_id):
-                i.element.remove(old)
-            if length:
+        lengths = {"fadein": wanted_in, "fadeout": wanted_out}
+        touched = [kid for kid, value in requested.items() if value is not None]  # in order
+        for kdenlive_id in touched:
+            existing = effects(i.element, kdenlive_id)
+            if not lengths[kdenlive_id]:
+                for old in existing:
+                    i.element.remove(old)
+            elif not existing:  # an existing fade is updated in place (id, position, extras)
                 gain, end = FADES[kdenlive_id]
                 _new_filter(
                     tl, i.element, {**COMMON, "kdenlive_id": kdenlive_id, "gain": gain, "end": end}
                 )
-        anchor_fades(tl, i.element, {"fadein": wanted_in, "fadeout": wanted_out})
+        anchor_fades(tl, i.element, lengths, only=set(touched))
         changed.append(_state(tl, t, i))
     edit.changes.append(f"audio: fades in {fade_in} / out {fade_out} frames on {ref}")
     return AudioEditResult(operation="fades", clips=changed)

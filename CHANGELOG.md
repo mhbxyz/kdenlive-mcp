@@ -9,13 +9,15 @@ migration notes in the same entry.
 
 ### Changed
 
+- **Trims and splits with effects (#13):** edge fades (audio fades, fades from/to black) now stay at the clip's edges when it is trimmed or split, and shrink to fit a shorter clip; a split gives the fade-in to the left half and the fade-out to the right half, with new filter ids. A constant (single-keyframe) effect value no longer blocks trimming the start or splitting; animated effects still do.
+
 - **Breaking — filesystem scope by default (#60):** without `KDENLIVE_MCP_ALLOWED_ROOTS`, the tools now only read and write inside the user's videos directory (`XDG_VIDEOS_DIR`, usually `~/Videos`) and refuse other paths with `[path_not_allowed]`. Before, the unset variable meant no restriction.
   - **Migration:** if your projects or media are elsewhere, add `"env": {"KDENLIVE_MCP_ALLOWED_ROOTS": "/path/one:/path/two"}` to the server entry of your MCP client. `KDENLIVE_MCP_ALLOWED_ROOTS=unrestricted` restores the 0.1 behaviour (not recommended).
   - `kdenlive-mcp diagnose` prints the effective folders, and the server logs them on stderr at startup.
 
 ### Added
 
-- **Audio level and fades (#13):** `set_clip_volume` (constant dB level, Kdenlive's *Volume* effect) and `set_clip_fades` (fade-in/fade-out in frames, Kdenlive's *Fade in*/*Fade out*) on a clip's audio. `get_timeline` reports each clip's `audio` settings. Fades follow trims and splits; a constant level no longer blocks trims and splits.
+- **Audio level and fades (#13):** `set_clip_volume` (constant dB level, Kdenlive's *Volume* effect) and `set_clip_fades` (fade-in/fade-out in frames, Kdenlive's *Fade in*/*Fade out*) on a clip's audio. `get_timeline` reports each clip's `audio` settings.
 
 - **Editing tracks with crossfades (#61):** `insert_clip`, `move_clip`, `trim_clip`, `split_clip` and `remove_clip` now work on tracks that contain Kdenlive same-track mixes. Mixed clips keep their mix: they cannot be moved, their mixed side cannot be trimmed, and they cannot be split inside the mix. Removing a mixed clip removes its mixes and trims the partner back to the original cut. Verified with mixes made by Kdenlive 26.08.2.
 - **`get_timeline` mixes:** a `cut` field, the frame where the clips met before the mix (#61).

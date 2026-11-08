@@ -515,14 +515,20 @@ def _register_editing(server: MCPServer) -> None:
         destination: str,
         overwrite: bool,
         expected_sha256: str | None,
-        operation: Callable[[writer.EditableProject], timeline_edit.TimelineEditResult],
+        operation: Callable[
+            [writer.EditableProject],
+            timeline_edit.TimelineEditResult | audio_mod.AudioEditResult,
+        ],
     ) -> EditResult:
+        """Open, apply one operation, save; the result goes in its EditResult field."""
         try:
             edit = writer.open_for_edit(path)
             result = operation(edit)
             saved = writer.save(
                 edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
             )
+            if isinstance(result, audio_mod.AudioEditResult):
+                return EditResult(saved=saved, audio=result)
             return EditResult(saved=saved, timeline=result)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
@@ -671,23 +677,6 @@ def _register_editing(server: MCPServer) -> None:
             lambda e: timeline_edit.remove_clip(e, clip, revision, sequence),
         )
 
-    def _audio_edit(
-        path: str,
-        destination: str,
-        overwrite: bool,
-        expected_sha256: str | None,
-        operation: Callable[[writer.EditableProject], audio_mod.AudioEditResult],
-    ) -> EditResult:
-        try:
-            edit = writer.open_for_edit(path)
-            result = operation(edit)
-            saved = writer.save(
-                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
-            )
-            return EditResult(saved=saved, audio=result)
-        except ProjectError as exc:
-            raise _tool_error(exc) from exc
-
     @server.tool(
         name="set_clip_volume",
         title="Set clip volume",
@@ -709,7 +698,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _audio_edit(
+        return _timeline_edit(
             path,
             destination,
             overwrite,
@@ -740,7 +729,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _audio_edit(
+        return _timeline_edit(
             path,
             destination,
             overwrite,

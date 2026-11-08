@@ -45,7 +45,8 @@ def filters(s: Session, label: str, index: int = 0) -> list[dict[str, str | None
     tl = te.Timeline(edit, edit.doc.sequence_tractors()[0])
     _, item = tl.resolve_ref(info(s, label, index).ref)
     return [
-        {"in": f.get("in"), "out": f.get("out"), **props(f)} for f in item.element.findall("filter")
+        {"id": f.get("id"), "in": f.get("in"), "out": f.get("out"), **props(f)}
+        for f in item.element.findall("filter")
     ]
 
 
@@ -150,3 +151,64 @@ def test_unrelated_effects_are_kept(s, tmp_path):
     s.apply(audio.set_clip_fades, s.ref("A1", 0), s.rev(), fade_in=5)
     s.apply(audio.set_clip_volume, s.ref("A1", 0), s.rev(), -1.0)
     assert [f["kdenlive_id"] for f in filters(s, "A1")] == ["pan", "fadein", "volume"]
+
+
+# ------------------------------------------------------------------ review cases ------
+def test_existing_fades_are_updated_in_place(s, tmp_path):
+    s.apply(audio.set_clip_fades, s.ref("A1", 0), s.rev(), fade_in=10)
+    s.apply(audio.set_clip_volume, s.ref("A1", 0), s.rev(), -2.0)
+    before = filters(s, "A1")
+    s.apply(audio.set_clip_fades, s.ref("A1", 0), s.rev(), fade_in=12, fade_out=8)
+    after = filters(s, "A1")
+    assert [f["kdenlive_id"] for f in after] == ["fadein", "volume", "fadeout"]
+    assert after[0]["id"] == before[0]["id"]  # same filter, updated
+    # setting only the fade-out leaves the fade-in untouched
+    s.apply(audio.set_clip_fades, s.ref("A1", 0), s.rev(), fade_out=4)
+    assert filters(s, "A1")[0] == after[0]
+
+
+def test_volume_effect_without_level_is_refused(s, tmp_path):
+    s.apply(audio.set_clip_volume, s.ref("A1", 0), s.rev(), -6.0)
+    text = s.current.read_text(encoding="utf-8").replace(
+        '<property name="level">0=-6</property>', '<property name="gain">0.5</property>'
+    )
+    gained = tmp_path / "gain.kdenlive"
+    gained.write_text(text, encoding="utf-8")
+    s.current = gained
+    assert info(s, "A1").audio is None  # not reported as 0 dB
+    assert code(s, audio.set_clip_volume, s.ref("A1", 0), s.rev(), -3.0) == "unsupported_structure"
+
+
+def test_fades_shrink_to_fit_a_trimmed_clip(s):
+    s.apply(audio.set_clip_fades, s.ref("A1", 0), s.rev(), fade_in=25, fade_out=25)
+    s.apply(te.trim_clip, s.ref("V1", 0), s.rev(), end=20)
+    a1 = info(s, "A1").audio
+    assert a1.fade_in + a1.fade_out <= 20
+    assert (a1.fade_in, a1.fade_out) == (20, 0)
+    s.apply(audio.set_clip_fades, s.ref("A1", 0), s.rev(), fade_in=10, fade_out=5)
+
+
+@pytest.mark.parametrize("level", [-100.0, 20.0, 0.0, -0.0, 0.00001, 1.25])
+def test_level_boundaries_and_formatting(s, level):
+    s.apply(audio.set_clip_volume, s.ref("A1", 0), s.rev(), level)
+    (flt,) = filters(s, "A1")
+    assert "e" not in flt["level"] and flt["level"] != "0=-0"
+    assert info(s, "A1").audio.level_db == pytest.approx(round(level, 2))
+
+
+def test_fades_filling_the_whole_clip(s):
+    s.apply(audio.set_clip_fades, s.ref("A1", 0), s.rev(), fade_in=30, fade_out=30)
+    assert (info(s, "A1").audio.fade_in, info(s, "A1").audio.fade_out) == (30, 30)
+
+
+def test_stale_revision_is_refused(s):
+    old = s.rev()
+    s.apply(audio.set_clip_fades, s.ref("A1", 0), old, fade_in=5)
+    assert code(s, audio.set_clip_volume, s.ref("A1", 0), old, -1.0) == "stale_revision"
+
+
+def test_split_gives_new_filter_ids(s):
+    s.apply(audio.set_clip_volume, s.ref("A1", 0), s.rev(), -3.0)
+    s.apply(te.split_clip, s.ref("V1", 0), s.rev(), 30)
+    ids = [f["id"] for f in filters(s, "A1", 0) + filters(s, "A1", 1)]
+    assert len(ids) == len(set(ids)) == 2

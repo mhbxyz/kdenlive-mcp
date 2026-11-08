@@ -12,8 +12,10 @@ from collections.abc import Callable
 from mcp_kdenlive.kdenlive_doc import props
 
 # Effects anchored to a clip edge: their in/out follow the clip when it is trimmed or split.
-START_FADES = ("fadein", "fade_from_black")
-END_FADES = ("fadeout", "fade_to_black")
+# Pairs that share a clip: an audio fade-in and fade-out, a video fade from and to black.
+FADE_PAIRS = {"fadein": "fadeout", "fade_from_black": "fade_to_black"}
+START_FADES = tuple(FADE_PAIRS)
+END_FADES = tuple(FADE_PAIRS.values())
 
 TimeParser = Callable[..., int]
 
@@ -38,7 +40,10 @@ def level_db(entry: ET.Element) -> float | None:
     found = effects(entry, "volume")
     if len(found) != 1:
         return None
-    frames = keyframes(props(found[0]).get("level", "0"))
+    level = props(found[0]).get("level")
+    if level is None:  # e.g. a volume effect using `gain`: not a dB level
+        return None
+    frames = keyframes(level)
     if len(frames) != 1:
         return None
     try:
