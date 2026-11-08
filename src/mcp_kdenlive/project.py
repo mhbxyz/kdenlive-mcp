@@ -493,13 +493,8 @@ def summarize(doc: KdenliveDocument) -> ProjectSummary:
     )
 
 
-def timeline(
-    doc: KdenliveDocument, sequence: str | None = None, max_clips: int = DEFAULT_MAX_CLIPS
-) -> Timeline:
-    if not 1 <= max_clips <= MAX_CLIPS_LIMIT:
-        raise ProjectError(
-            "invalid_argument", f"max_clips must be between 1 and {MAX_CLIPS_LIMIT}."
-        )
+def select_sequence(doc: KdenliveDocument, sequence: str | None = None) -> _SequenceView:
+    """The sequence named by uuid, name or id; by default the active one."""
     sequences = _sequences(doc)
     if sequence:
         matches = [s for s in sequences if sequence in (s.uuid, s.name, s.tractor.get("id"))]
@@ -521,6 +516,17 @@ def timeline(
         view = next((s for s in sequences if s.uuid == active), None) or (
             sequences[-1] if doc.generation < 5 else sequences[0]
         )
+    return view
+
+
+def timeline(
+    doc: KdenliveDocument, sequence: str | None = None, max_clips: int = DEFAULT_MAX_CLIPS
+) -> Timeline:
+    if not 1 <= max_clips <= MAX_CLIPS_LIMIT:
+        raise ProjectError(
+            "invalid_argument", f"max_clips must be between 1 and {MAX_CLIPS_LIMIT}."
+        )
+    view = select_sequence(doc, sequence)
     total = sum(t.clip_count for t in view.tracks)
     remaining = max_clips
     tracks: list[TrackInfo] = []

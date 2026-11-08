@@ -17,6 +17,8 @@ migration notes in the same entry.
 
 ### Added
 
+- **Guides and clip markers (#12):** `list_markers`, `add_marker`, `update_marker` and `remove_marker` for timeline guides (chapters) and clip markers, with comments, categories and durations, in Kdenlive 26.08's format.
+
 - **Audio level and fades (#13):** `set_clip_volume` (constant dB level, Kdenlive's *Volume* effect) and `set_clip_fades` (fade-in/fade-out in frames, Kdenlive's *Fade in*/*Fade out*) on a clip's audio. `get_timeline` reports each clip's `audio` settings.
 
 - **Editing tracks with crossfades (#61):** `insert_clip`, `move_clip`, `trim_clip`, `split_clip` and `remove_clip` now work on tracks that contain Kdenlive same-track mixes. Mixed clips keep their mix: they cannot be moved, their mixed side cannot be trimmed, and they cannot be split inside the mix. Removing a mixed clip removes its mixes and trims the partner back to the original cut. Verified with mixes made by Kdenlive 26.08.2.
@@ -24,6 +26,10 @@ migration notes in the same entry.
 - **`remove_clip` result:** `clips` now lists the neighbours trimmed back to a cut when a crossfade was removed with the clip; it is empty otherwise, as before (#61).
 - **Open-project detection (#62):** writing over a project shown by a running Kdenlive is refused even when it was opened from Kdenlive's *Open* dialog without changes: the server reads Kdenlive's window title over the session D-Bus (read-only). When a running Kdenlive cannot be checked, the write carries a warning to close or reload the project.
 - **`diagnose_environment`:** a `filesystem` field with the effective roots, their source (`default`, `environment`, `unrestricted`) and the ones that do not exist (#60).
+
+### Known limitations
+
+- **Manual Kdenlive checks pending** for crossfade editing (#61), open-project detection (#62), audio level and fades (#13) and guides and markers (#12): automated round trips through Kdenlive 26.08.2 pass, but interactive checks (playback, undo/redo, GUI editing of server-written data) wait for a person. Checklists are linked from #67.
 
 ### Fixed
 

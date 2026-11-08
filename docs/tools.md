@@ -17,6 +17,8 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 | `add_track` | no (writes a file) | Add a named audio or video track |
 | `insert_clip` / `move_clip` / `trim_clip` / `split_clip` / `remove_clip` | no (writes a file) | Frame-accurate timeline edits |
 | `set_clip_volume` / `set_clip_fades` | no (writes a file) | Constant audio level (dB) and audio fade-in/fade-out of a clip |
+| `list_markers` | yes | Timeline guides, clip markers and marker categories |
+| `add_marker` / `update_marker` / `remove_marker` | no (writes a file) | Timeline guides (chapters) and clip markers |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 | `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
@@ -376,3 +378,20 @@ audio clip is changed (the video is not), and a video-only clip is refused
 - **Edits afterwards:** fades stay at the clip's edges when it is trimmed; a split gives the fade-in to the left half and the fade-out to the right half; a constant level is kept on both halves and no longer blocks trims and splits (only animated effects do).
 - **Other effects** on the clip are kept, in order.
 - **Verified:** level and fades on an AV pair, a WAV clip, a clip in a crossfade, and after a trim and a split, reopened in Kdenlive 26.08.2 without dialogs; Kdenlive's own save kept the effects, levels and fade lengths. E2E: a −12 dB level measures 12 dB lower in the render (±1.5 dB), and the first and last quarter seconds are more than 6 dB quieter with 30-frame fades.
+
+
+## Guides and clip markers: `list_markers`, `add_marker`, `update_marker`, `remove_marker`
+
+| | Guide (timeline marker) | Clip marker |
+|---|---|---|
+| Target | `bin_id` omitted | `bin_id` of a bin clip (not a sequence) |
+| `position`, `duration` | timeline frames | **source** frames of the clip, inside `0..length-1` |
+| Stored in | the sequence (`kdenlive:sequenceproperties.guides`) | the bin clip (`kdenlive:markers`), so every instance of the clip shows it |
+
+- **Format:** Kdenlive 26.08's JSON, `{"comment", "duration", "pos", "type"}`, written with sorted keys and UTF-8 like Kdenlive. Keys the server does not know are kept.
+- **Identity:** a marker is its target plus its position; Kdenlive keeps one per position, so adding at a taken position is refused (`[invalid_argument]`), and a missing one is `[not_found]`.
+- **Categories:** `category` is an index from the project's categories (`list_markers` → `categories`, 9 by default: index, name, color); an unknown index is refused.
+- **Duration:** 0 for a point marker; a range marker needs `position + duration` to fit in a clip.
+- **Sequences:** guides belong to one sequence (`sequence`, default: the active one, like `get_timeline`). Markers stored on a sequence's own bin clip are not listed or edited.
+- **Damaged data:** entries without an integer position are skipped when listing and kept untouched when writing; several markers at one position are refused (`[unsupported_structure]`). A category that is not in the project is kept unless you change it.
+- **Verified:** guides with Unicode comments, categories and durations, clip markers at the first and last frame, then moved, renamed, recategorised and removed, reopen in Kdenlive 26.08.2 and survive its own save unchanged.
