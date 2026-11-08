@@ -13,8 +13,19 @@ Conventions (see docs/tools.md):
 * like Kdenlive 26.08, every timeline clip instance gets its own ``<chain>`` copied from the
   bin clip, with ``set.test_audio``/``set.test_image`` disabling the unused half of AV media.
 
-Refused (``[unsupported_structure]``): tracks using same-track mixes, groups other than AV pairs,
-and splitting or trimming the start of clips whose effects are animated (keyframes would shift).
+Same-track mixes (crossfades, #61): a track has two layers (playlists). Kdenlive puts mixed
+clips on alternate layers so that they overlap during the mix; the mix is a transition inside the
+track tractor whose ``in`` is where the right clip starts and whose ``out`` is where the left
+clip ends; ``kdenlive:mixcut`` counts the frames from the original cut to that end. Clips that
+are not part of a mix can be inserted, moved, trimmed, split and removed as usual; a mixed clip
+keeps its mix: it cannot be moved, its mixed side cannot be trimmed, and it cannot be split
+inside the mix. Removing a mixed clip removes its mixes and trims the partner back to the
+original cut, like deleting the mix in Kdenlive. A clip left on layer 1 without a mix goes back
+to layer 0.
+
+Refused (``[unsupported_structure]``): same-track transitions that are not Kdenlive mixes,
+groups other than AV pairs, moving a mixed clip, and splitting or trimming the start of clips
+whose effects are animated (keyframes would shift).
 """
 
 from __future__ import annotations
@@ -58,6 +69,7 @@ class Item:
     element: ET.Element
     start: int
     length: int
+    layer: int = 0
 
     @property
     def is_blank(self) -> bool:
@@ -74,8 +86,36 @@ class Track:
     label: str
     kind: str
     tractor: ET.Element
-    playlist: ET.Element  # layer 0
-    other: ET.Element | None  # layer 1
+    layers: list[ET.Element]  # playlists: 0 main, 1 used by same-track mixes
+
+    @property
+    def playlist(self) -> ET.Element:
+        return self.layers[0]
+
+
+@dataclass
+class Mix:
+    """A same-track mix: `left` ends at `end`, `right` starts at `start`, on other layers."""
+
+    element: ET.Element
+    start: int
+    end: int
+    cut: int
+    left: Item
+    right: Item
+
+    def involves(self, item: Item) -> bool:
+        return item.element is self.left.element or item.element is self.right.element
+
+    def at_end_of(self, item: Item) -> bool:
+        """True when the mix is at the end of `item` (it is the left clip)."""
+        return item.element is self.left.element
+
+    def partner(self, item: Item) -> Item:
+        return self.right if item.element is self.left.element else self.left
+
+    def describe(self, label: str) -> str:
+        return f"mix (crossfade) on {label} at frames {self.start}-{self.end}"
 
 
 class Timeline:
@@ -101,23 +141,31 @@ class Timeline:
                 info.label,
                 info.kind,
                 tractor,
-                layers[0],
-                layers[1] if len(layers) > 1 else None,
+                [layer for layer in layers[:2] if layer is not None],
             )
 
     # -- playlist helpers ------------------------------------------------------------
-    def items(self, track: Track) -> list[Item]:
-        out, pos = [], 0
-        for el in track.playlist:
+    def items(self, track: Track, layer: int = 0) -> list[Item]:
+        """Entries and blanks of one layer, with their timeline positions."""
+        out: list[Item] = []
+        if layer >= len(track.layers):
+            return out
+        pos = 0
+        for el in track.layers[layer]:
             if el.tag == "blank":
                 length = self.doc.time(el.get("length"), what="blank length")
             elif el.tag == "entry":
                 length = self._entry_bounds(el)[1] - self._entry_bounds(el)[0] + 1
             else:
                 continue
-            out.append(Item(el, pos, length))
+            out.append(Item(el, pos, length, layer))
             pos += length
         return out
+
+    def clips(self, track: Track) -> list[Item]:
+        """Clips of both layers, by position."""
+        found = [i for layer in range(len(track.layers)) for i in self.items(track, layer)]
+        return sorted((i for i in found if not i.is_blank), key=lambda i: (i.start, i.layer))
 
     def _entry_bounds(self, entry: ET.Element) -> tuple[int, int]:
         producer = self.doc.by_id.get(entry.get("producer") or "")
@@ -130,49 +178,99 @@ class Timeline:
             self.doc.time(entry.get("out"), default=default_out, what="entry out"),
         )
 
-    def check_editable(self, track: Track) -> None:
-        mixes = [
-            t for t in track.tractor.findall("transition") if not props(t).get("internal_added")
-        ]
-        if mixes or (track.other is not None and any(e.tag == "entry" for e in track.other)):
-            raise ProjectError(
-                "unsupported_structure",
-                f"Track {track.label} uses same-track mixes; editing it is not supported yet.",
-            )
+    def set_bounds(self, track: Track, item: Item, start: int, end: int) -> None:
+        """Resize a clip to [start, end) on its layer; the source range follows."""
+        source_in, source_out = self._entry_bounds(item.element)
+        before = self.placed(track, item.layer)  # read positions before the bounds change
+        rate = self.doc.rate
+        item.element.set("in", frames_to_clock(source_in + start - item.start, rate))
+        item.element.set("out", frames_to_clock(source_out + end - item.end, rate))
+        self._rebuild(
+            track, [(start if e is item.element else s, e) for s, e in before], item.layer
+        )
 
-    def _rebuild(self, track: Track, entries: list[tuple[int, ET.Element]]) -> None:
-        """Rewrite layer 0 from (start, entry) pairs with blanks between (no trailing blank)."""
-        for el in list(track.playlist):
+    # -- mixes ---------------------------------------------------------------------------
+    def mixes(self, track: Track) -> list[Mix]:
+        """The track's same-track mixes; anything else inside the track is refused."""
+        clips = self.clips(track)
+        found = []
+        for transition in track.tractor.findall("transition"):
+            p = props(transition)
+            if p.get("internal_added"):
+                continue
+            start = self.doc.time(transition.get("in"), default=-1, what="mix in")
+            end = self.doc.time(transition.get("out"), default=-1, what="mix out")
+            cut_offset = p.get("kdenlive:mixcut", "")
+            # Which layer holds the left clip: video mixes swap a_track/b_track, audio mixes
+            # set reverse (docs/research/mixes.md).
+            left_layer = int((p.get("a_track") == "1") != (p.get("reverse") == "1"))
+            left = next((c for c in clips if c.end == end and c.layer == left_layer), None)
+            right = next((c for c in clips if c.start == start and c.layer != left_layer), None)
+            if left is None or right is None or not cut_offset.lstrip("-").isdigit():
+                raise ProjectError(
+                    "unsupported_structure",
+                    f"Track {track.label} has a same-track transition ({p.get('mlt_service')}, "
+                    f"frames {start}-{end}) that is not a Kdenlive mix of two clips.",
+                )
+            found.append(Mix(transition, start, end, end - int(cut_offset), left, right))
+        return found
+
+    def mixes_of(self, track: Track, item: Item) -> list[Mix]:
+        return [mix for mix in self.mixes(track) if mix.involves(item)]
+
+    def check_editable(self, track: Track) -> None:
+        self.mixes(track)
+
+    def settle(self, track: Track) -> None:
+        """Move clips left on layer 1 without a mix back to layer 0 (Kdenlive's layout)."""
+        if len(track.layers) < 2:
+            return
+        mixed = {id(x.element) for m in self.mixes(track) for x in (m.left, m.right)}
+        for item in [i for i in self.items(track, 1) if not i.is_blank]:
+            if id(item.element) in mixed or not self.free(
+                track, item.start, item.end, {id(item.element)}
+            ):
+                continue
+            self._rebuild(
+                track, [(s, e) for s, e in self.placed(track, 1) if e is not item.element], 1
+            )
+            self._rebuild(track, [*self.placed(track, 0), (item.start, item.element)], 0)
+
+    # -- layout ----------------------------------------------------------------------------
+    def _rebuild(self, track: Track, entries: list[tuple[int, ET.Element]], layer: int = 0) -> None:
+        """Rewrite one layer from (start, entry) pairs with blanks between (no trailing blank)."""
+        playlist = track.layers[layer]
+        for el in list(playlist):
             if el.tag in ("entry", "blank"):
-                track.playlist.remove(el)
+                playlist.remove(el)
         pos = 0
         indent = "\n  "
         for start, entry in sorted(entries, key=lambda pair: pair[0]):
             if start > pos:
                 blank = ET.SubElement(
-                    track.playlist, "blank", {"length": frames_to_clock(start - pos, self.doc.rate)}
+                    playlist, "blank", {"length": frames_to_clock(start - pos, self.doc.rate)}
                 )
                 blank.tail = indent
             entry.tail = indent
-            track.playlist.append(entry)
+            playlist.append(entry)
             source_in, source_out = self._entry_bounds(entry)
             pos = start + source_out - source_in + 1
-        if len(track.playlist):
-            track.playlist[-1].tail = "\n "
-        out = frames_to_clock(max(pos - 1, 0), self.doc.rate)
-        if pos:
-            track.tractor.set("out", out)
+        if len(playlist):
+            playlist[-1].tail = "\n "
+        end = max((i.end for i in self.clips(track)), default=0)
+        if end:
+            track.tractor.set("out", frames_to_clock(end - 1, self.doc.rate))
         elif "out" in track.tractor.attrib:
             del track.tractor.attrib["out"]
 
-    def placed(self, track: Track) -> list[tuple[int, ET.Element]]:
-        return [(i.start, i.element) for i in self.items(track) if not i.is_blank]
+    def placed(self, track: Track, layer: int = 0) -> list[tuple[int, ET.Element]]:
+        return [(i.start, i.element) for i in self.items(track, layer) if not i.is_blank]
 
     def free(self, track: Track, start: int, end: int, ignore: set[int] | None = None) -> bool:
+        """No clip of either layer (except `ignore`d ones) in [start, end)."""
         ignore = ignore or set()
         return all(
-            i.is_blank or id(i.element) in ignore or i.end <= start or i.start >= end
-            for i in self.items(track)
+            id(i.element) in ignore or i.end <= start or i.start >= end for i in self.clips(track)
         )
 
     # -- references --------------------------------------------------------------------
@@ -184,13 +282,13 @@ class Timeline:
             )
         index, layer, entry_index = (int(g) for g in match.groups())
         track = next((t for t in self.tracks.values() if t.index == index), None)
-        if track is None or layer != 0:
+        if track is None or layer >= len(track.layers):
             raise ProjectError("clip_not_found", f"No clip {ref!r} on an editable track layer.")
-        elements = [el for el in track.playlist if el.tag in ("entry", "blank")]
+        elements = [el for el in track.layers[layer] if el.tag in ("entry", "blank")]
         if entry_index >= len(elements) or elements[entry_index].tag != "entry":
             raise ProjectError("clip_not_found", f"No clip at {ref!r}.")
         target = elements[entry_index]
-        item = next(i for i in self.items(track) if i.element is target)
+        item = next(i for i in self.items(track, layer) if i.element is target)
         return track, item
 
     # -- groups -------------------------------------------------------------------------
@@ -231,14 +329,20 @@ class Timeline:
             for data in datas:
                 t_index, pos = (int(x) for x in str(data).split(":")[:2])
                 other_track = next(t for t in self.tracks.values() if t.index == t_index + 1)
-                other_item = next(
-                    (i for i in self.items(other_track) if not i.is_blank and i.start == pos), None
-                )
-                if other_item is None:
+                found = [i for i in self.clips(other_track) if i.start == pos]
+                if other_track is track and item in found:
+                    found = [item]
+                if len(found) != 1:
                     raise ProjectError(
-                        "unsupported_structure", "Clip groups do not match the timeline content."
+                        "unsupported_structure",
+                        "Clip groups do not match the timeline content"
+                        + (
+                            f": two clips start at frame {pos} on {other_track.label}."
+                            if found
+                            else "."
+                        ),
                     )
-                result.append((other_track, other_item))
+                result.append((other_track, found[0]))
             return result
         return [(track, item)]
 
@@ -275,13 +379,33 @@ class Timeline:
         if kept or groups:
             self._save_groups(kept)
 
+    def rekey(self, moved: dict[tuple[int, int], int]) -> None:
+        """Point group leaves at new start positions: {(track index, old start): new start}."""
+        if not moved:
+            return
+        groups = self._groups()
+
+        def walk(node: dict[str, Any]) -> None:
+            data = node.get("data")
+            if isinstance(data, str) and data.count(":") >= 2:
+                track_index, pos, rest = data.split(":", 2)
+                new = moved.get((int(track_index) + 1, int(pos)))
+                if new is not None:
+                    node["data"] = f"{track_index}:{new}:{rest}"
+            for child in node.get("children", []):
+                if isinstance(child, dict):
+                    walk(child)
+
+        for group in groups:
+            walk(group)
+        if groups:
+            self._save_groups(groups)
+
     # -- durations ----------------------------------------------------------------------
     def refresh_durations(self) -> int:
         end = 0
         for track in self.tracks.values():
-            items = [i for i in self.items(track) if not i.is_blank]
-            if items:
-                end = max(end, items[-1].end)
+            end = max([end, *(i.end for i in self.clips(track))])
         rate = self.doc.rate
         out = frames_to_clock(max(end - 1, 0), rate)
         self.sequence.set("out", out)
@@ -491,6 +615,14 @@ def move_clip(
                 )
         tl.check_editable(t)
         tl.check_editable(destination)
+        if mixed := tl.mixes_of(t, i):
+            raise ProjectError(
+                "unsupported_structure",
+                f"The clip on {t.label} at {i.start}-{i.end} is part of a "
+                f"{mixed[0].describe(t.label)}; moving it would break the mix.",
+                "Trim, split or remove clips around the mix instead, or remove the mix in "
+                "Kdenlive first.",
+            )
         moves.append((t, i, destination))
     ignore = {id(i.element) for _, i, _ in moves}
     for _t, i, destination in moves:
@@ -505,7 +637,7 @@ def move_clip(
                 f"{i.start + delta} and {i.end + delta}.",
             )
     for t, i, _destination in moves:
-        tl._rebuild(t, [(s, e) for s, e in tl.placed(t) if e is not i.element])
+        tl._rebuild(t, [(s, e) for s, e in tl.placed(t, i.layer) if e is not i.element], i.layer)
     placements, new_leaves = [], []
     for _t, i, destination in moves:
         tl._rebuild(destination, [*tl.placed(destination), (i.start + delta, i.element)])
@@ -523,15 +655,36 @@ def remove_clip(
     tl = _open(edit, revision, sequence, needs_revision=True)
     track, item = tl.resolve_ref(ref)
     group = tl.partners(track, item)
-    for t, i in group:
+    for t, _i in group:
         tl.check_editable(t)
-        tl._rebuild(t, [(s, e) for s, e in tl.placed(t) if e is not i.element])
+    moved: dict[tuple[int, int], int] = {}
+    placements, unmixed = [], 0
+    for t, i in group:
+        mixes = tl.mixes_of(t, i)
+        for mix in mixes:
+            t.tractor.remove(mix.element)
+        tl._rebuild(t, [(s, e) for s, e in tl.placed(t, i.layer) if e is not i.element], i.layer)
+        # Like deleting the mix in Kdenlive: the partner goes back to the original cut.
+        for mix in mixes:
+            other = mix.partner(i)
+            current = next(c for c in tl.clips(t) if c.element is other.element)
+            start, end = (mix.cut, current.end) if other is mix.right else (current.start, mix.cut)
+            tl.set_bounds(t, current, start, end)
+            if start != current.start:
+                moved[(t.index, current.start)] = start
+            placements.append(_placement(tl, t, start, current.element))
+            unmixed += 1
+        tl.settle(t)
     tl.regroup([(t, i.start) for t, i in group], None)
+    tl.rekey(moved)
     duration = tl.refresh_durations()
     edit.changes.append(
         f"timeline: removed {ref} (+{len(group) - 1} grouped); neighbours not moved"
+        + (f"; {unmixed} mix(es) removed, partners trimmed back to the cut" if unmixed else "")
     )
-    return TimelineEditResult(operation="remove", clips=[], sequence_duration_frames=duration)
+    return TimelineEditResult(
+        operation="remove", clips=placements, sequence_duration_frames=duration
+    )
 
 
 def trim_clip(
@@ -552,40 +705,59 @@ def trim_clip(
             "invalid_range", "A clip must keep at least one frame: need 0 <= start < end."
         )
     group = tl.partners(track, item)
+    # Grouped clips move their edges by the same amounts, even when their bounds differ.
+    d_start, d_end = new_start - item.start, new_end - item.end
     plan = []
     for t, i in group:
         tl.check_editable(t)
+        p_start, p_end = i.start + d_start, i.end + d_end
+        if p_end <= p_start or p_start < 0:
+            raise ProjectError(
+                "invalid_range", f"The grouped clip on {t.label} would have no frame left."
+            )
         source_in, source_out = tl._entry_bounds(i.element)
         producer = tl.doc.by_id.get(i.element.get("producer") or "")
         length = int(props(producer).get("length", "0") or 0) if producer is not None else 0
-        new_in = source_in + (new_start - item.start)
-        new_out = source_out + (new_end - item.end)
-        if new_in < 0 or (length and new_out >= length):
+        if source_in + d_start < 0 or (length and source_out + d_end >= length):
             raise ProjectError(
                 "invalid_range",
                 f"The source has frames 0..{length - 1}; trimming to "
-                f"{new_in}..{new_out} is not possible.",
+                f"{source_in + d_start}..{source_out + d_end} is not possible.",
             )
-        if new_start != item.start and _has_keyframes(i.element):
+        if d_start and _has_keyframes(i.element):
             raise ProjectError(
                 "unsupported_structure",
                 "Trimming the start of a clip with animated "
                 "effects would shift its keyframes; not supported yet.",
             )
-        if not tl.free(t, new_start, new_end, {id(i.element)}):
+        for mix in tl.mixes_of(t, i):
+            at_end = mix.at_end_of(i)
+            if d_end if at_end else d_start:
+                raise ProjectError(
+                    "unsupported_structure",
+                    f"The {'end' if at_end else 'start'} of the clip on {t.label} is in a "
+                    f"{mix.describe(t.label)}; trimming that side would break the mix.",
+                    "Trim the other side, or remove the mix in Kdenlive first.",
+                )
+            # Keep at least one frame outside the mix so partners never share an edge.
+            if (p_start >= mix.start) if at_end else (p_end <= mix.end):
+                raise ProjectError(
+                    "unsupported_structure",
+                    f"The clip on {t.label} must extend beyond its {mix.describe(t.label)}.",
+                )
+        ignore = {id(i.element)}
+        if (p_start < i.start and not tl.free(t, p_start, i.start, ignore)) or (
+            p_end > i.end and not tl.free(t, i.end, p_end, ignore)
+        ):
             raise ProjectError(
-                "overlap", f"{t.label} is not free between frames {new_start} and {new_end}."
+                "overlap", f"{t.label} is not free between frames {p_start} and {p_end}."
             )
-        plan.append((t, i, new_in, new_out))
-    rate = tl.doc.rate
+        plan.append((t, i, p_start, p_end))
     placements = []
-    for t, i, new_in, new_out in plan:
-        before = tl.placed(t)  # positions must be read before the entry's bounds change
-        i.element.set("in", frames_to_clock(new_in, rate))
-        i.element.set("out", frames_to_clock(new_out, rate))
-        tl._rebuild(t, [(new_start if e is i.element else s, e) for s, e in before])
-        placements.append(_placement(tl, t, new_start, i.element))
-    tl.regroup([(t, i.start) for t, i in group], [(t, new_start) for t, *_ in plan])
+    for t, i, p_start, p_end in plan:
+        tl.set_bounds(t, i, p_start, p_end)
+        placements.append(_placement(tl, t, p_start, i.element))
+    tl.regroup([(t, i.start) for t, i in group], [(t, p_start) for t, _i, p_start, _e in plan])
     duration = tl.refresh_durations()
     edit.changes.append(f"timeline: trimmed {ref} to [{new_start}, {new_end})")
     return TimelineEditResult(operation="trim", clips=placements, sequence_duration_frames=duration)
@@ -611,6 +783,17 @@ def split_clip(
                 "unsupported_structure",
                 "Splitting a clip with animated effects is not supported yet.",
             )
+        if not i.start < at < i.end:
+            raise ProjectError(
+                "unsupported_structure",
+                f"The grouped clip on {t.label} ({i.start}-{i.end}) does not span frame {at}.",
+            )
+        for mix in tl.mixes_of(t, i):
+            if mix.start < at < mix.end:
+                raise ProjectError(
+                    "unsupported_structure",
+                    f"Frame {at} is inside a {mix.describe(t.label)}; cut outside the mix.",
+                )
     for t, i in group:
         source_in, source_out = tl._entry_bounds(i.element)
         cut = source_in + (at - i.start)
@@ -622,11 +805,12 @@ def split_clip(
             edit.root.insert(list(edit.root).index(chain) + 1, new_chain)
             tl.doc.by_id[new_chain.get("id", "")] = new_chain
             right.set("producer", new_chain.get("id", ""))
-        before = tl.placed(t)  # positions must be read before the entry's bounds change
+        before = tl.placed(t, i.layer)  # positions must be read before the bounds change
         i.element.set("out", frames_to_clock(cut - 1, rate))
         right.set("in", frames_to_clock(cut, rate))
         right.set("out", frames_to_clock(source_out, rate))
-        tl._rebuild(t, [*before, (at, right)])
+        tl._rebuild(t, [*before, (at, right)], i.layer)
+        tl.settle(t)
         placements += [_placement(tl, t, i.start, i.element), _placement(tl, t, at, right)]
         right_leaves.append((t, at))
     if len(group) > 1:

@@ -46,7 +46,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 
 - **Ordering:** tracks are listed in MLT order. `index` is the MLT track index (0 is the background and is omitted).
 - **Labels:** `label` follows Kdenlive's convention, derived from the order. `V1` is the lowest video track and `A1` is the audio track directly below the video tracks.
-- **Layers:** each Kdenlive track has two playlists. `layer` 1 holds the second clip of a same-track mix, and `mixes` lists those transitions.
+- **Layers:** each Kdenlive track has two playlists. `layer` 1 holds the second clip of a same-track mix, and `mixes` lists those transitions: `start` is where the right clip starts, `end` (exclusive) where the left clip ends, and `cut` the frame where the clips met before the mix (`end - cut_offset`).
 - **Clip references:** `ref` (`track:layer:entry`) identifies a clip *in this file revision only*.
 
 ### Limits
@@ -307,18 +307,39 @@ After Kdenlive's save, these were identical:
 | `move_clip(clip, revision, start, track=None)` | Moves a clip, optionally to another track of the same kind. |
 | `trim_clip(clip, revision, start=None, end=None)` | New timeline bounds `[start, end)`; the source in/out follow, like resizing in Kdenlive. |
 | `split_clip(clip, revision, at)` | Razor cut at timeline frame `at` (`start < at < end`). |
-| `remove_clip(clip, revision)` | Removes the clip and leaves a gap. The bin clip stays. |
+| `remove_clip(clip, revision)` | Removes the clip and leaves a gap. The bin clip stays. `clips` lists the neighbours that were trimmed back to a cut (only when a mix was removed, see below). |
 
 ### Rules
 
 - **Units and references:** frames at the project rate; timeline `[start, end)`, source in/out inclusive. Clips are referenced by `ref` (`track:layer:entry`) from `get_timeline`, together with `revision`, the `file.sha256` returned by that same call. If the file changed since, the edit is refused (`[stale_revision]`), because refs could point at another clip.
-- **No ripple, no overwrite:** neighbours never move, and any overlap is refused (`[overlap]`). Trimming and extending are limited by the source length.
+- **No ripple, no overwrite:** neighbours never move, and any overlap is refused (`[overlap]`). The only exception is removing a clip that is part of a crossfade: its partner is trimmed back to the original cut (see below). Trimming and extending are limited by the source length.
 - **Groups:** a clip in a Kdenlive audio/video group (`AVSplit`) is moved, trimmed, split and removed together with its counterpart, as Kdenlive does by default. Groups are updated (a split creates a group for the new right halves).
 - **Kdenlive's layout:** like Kdenlive 26.08, each clip instance on the timeline gets its own `<chain>`, a copy of the bin clip. On AV media, `set.test_audio` or `set.test_image` disables the unused half.
 
+### Tracks with crossfades (same-track mixes)
+
+Kdenlive overlaps two clips during a mix: the right clip is on the track's second layer, and
+both are extended into their handles. Clips that are not part of a mix are edited as usual. A
+mixed clip keeps its mix:
+
+| Operation | On a mixed clip |
+|---|---|
+| `insert_clip`, `move_clip` of other clips | allowed where both layers are free (`[overlap]` otherwise) |
+| `move_clip` | refused (`[unsupported_structure]`, names the mix) |
+| `trim_clip` | the side without a mix only, and the clip must still extend at least one frame beyond the mix (`[unsupported_structure]`). Grouped audio and video move their edges by the same amounts, even when only one of them is mixed |
+| `split_clip` | allowed outside the mix (`[unsupported_structure]` inside it); each half keeps the mix it touches |
+| `remove_clip` | removes the clip **and its mixes**; each partner is trimmed back to the original `cut`, like deleting the mix in Kdenlive (`saved.changes` says so) |
+
+A clip left on the second layer without a mix goes back to the first one, as in Kdenlive.
+Verified: Kdenlive-made mixes (`tests/fixtures/kd26/kd26-mixes.kdenlive`) edited by each
+operation reopen in Kdenlive 26.08.2 without dialogs, and Kdenlive's own save keeps clips,
+groups, mixes and layers identical. The format is described in
+[research/mixes.md](research/mixes.md).
+
 ### Refused (`[unsupported_structure]`)
 
-- tracks that contain same-track mixes;
+- same-track transitions that are not Kdenlive mixes of two clips;
+- moving a clip that is part of a mix;
 - groups other than audio/video pairs;
 - splitting, or trimming the start of, a clip whose effects are animated (keyframes would shift).
 

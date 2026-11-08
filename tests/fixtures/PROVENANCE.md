@@ -25,6 +25,7 @@ and `addTimelineClip` methods and saved through the GUI file dialog.
 | `kd26-ntsc.kdenlive` | 3 bin clips (`media/ntsc.mp4`, `media/pal clip é.mp4`, `media/tone.wav`), empty timeline (2 audio + 2 video tracks). |
 | `kd26-ntsc-timeline.kdenlive` | Same bin; `ntsc.mp4` placed at frame 0 (video on V1, audio on A2). |
 | `kd26-subtitle.kdenlive` + `.kdenlive.ass` | `kd26-ntsc-timeline` with one subtitle ("Bonjour é ✓", 00:00:02–00:00:07) added by Kdenlive 26.08.2 through D-Bus `slotAddSubtitle`, then saved with *Save As*. Kdenlive wrote the ASS file. |
+| `kd26-mixes.kdenlive` | Built by `scripts/make_fixtures.py mixes`: three adjacent AV clips of `ntsc.mp4` with handles placed by this package on `kd26-ntsc`, then **Kdenlive 26.08.2 itself** added the crossfades (headless GUI lab: *Select All*, *Mix Clips*, *Save As*). Two same-track mixes on V1 and on A1 (`luma` and `mix`), a clip on the secondary layer, AV groups. `root` and `browserurl` sanitized. |
 | `generated-montage.kdenlive` | **Not written by Kdenlive.** Built by `scripts/make_fixtures.py montage` with this package's editing functions, starting from `kd26-ntsc-timeline`. It contains 2 named tracks, gaps, a split, a grouped move, a trim, sub-ranges and a video-only clip. Verified to open and round-trip in Kdenlive 26.08.2. |
 | `media/*` | Synthetic media generated with FFmpeg `lavfi` (`smptebars` 30000/1001 fps, `testsrc2` 25 fps, `sine`). See `scripts/make_fixtures.py media`. |
 
