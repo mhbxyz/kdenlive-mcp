@@ -1,0 +1,270 @@
+{
+ "add_media_to_bin": {
+  "params": [
+   "destination",
+   "expected_sha256",
+   "media_paths",
+   "overwrite",
+   "path"
+  ],
+  "required": [
+   "destination",
+   "media_paths",
+   "path"
+  ],
+  "read_only": false
+ },
+ "add_track": {
+  "params": [
+   "destination",
+   "expected_sha256",
+   "kind",
+   "name",
+   "overwrite",
+   "path",
+   "sequence"
+  ],
+  "required": [
+   "destination",
+   "kind",
+   "path"
+  ],
+  "read_only": false
+ },
+ "cancel_render_job": {
+  "params": [
+   "job_id"
+  ],
+  "required": [
+   "job_id"
+  ],
+  "read_only": false
+ },
+ "create_project": {
+  "params": [
+   "media_path",
+   "output",
+   "overwrite",
+   "profile"
+  ],
+  "required": [
+   "media_path",
+   "output"
+  ],
+  "read_only": false
+ },
+ "diagnose_environment": {
+  "params": [],
+  "required": [],
+  "read_only": true
+ },
+ "get_render_job": {
+  "params": [
+   "job_id"
+  ],
+  "required": [
+   "job_id"
+  ],
+  "read_only": true
+ },
+ "get_timeline": {
+  "params": [
+   "max_clips",
+   "path",
+   "sequence"
+  ],
+  "required": [
+   "path"
+  ],
+  "read_only": true
+ },
+ "insert_clip": {
+  "params": [
+   "audio_track",
+   "bin_id",
+   "destination",
+   "expected_sha256",
+   "overwrite",
+   "path",
+   "sequence",
+   "source_in",
+   "source_out",
+   "start",
+   "track"
+  ],
+  "required": [
+   "bin_id",
+   "destination",
+   "path",
+   "start",
+   "track"
+  ],
+  "read_only": false
+ },
+ "inspect_project": {
+  "params": [
+   "path"
+  ],
+  "required": [
+   "path"
+  ],
+  "read_only": true
+ },
+ "list_profiles": {
+  "params": [],
+  "required": [],
+  "read_only": true
+ },
+ "list_project_media": {
+  "params": [
+   "max_items",
+   "path",
+   "probe"
+  ],
+  "required": [
+   "path"
+  ],
+  "read_only": true
+ },
+ "list_render_jobs": {
+  "params": [],
+  "required": [],
+  "read_only": true
+ },
+ "list_render_presets": {
+  "params": [],
+  "required": [],
+  "read_only": true
+ },
+ "move_clip": {
+  "params": [
+   "clip",
+   "destination",
+   "expected_sha256",
+   "overwrite",
+   "path",
+   "revision",
+   "sequence",
+   "start",
+   "track"
+  ],
+  "required": [
+   "clip",
+   "destination",
+   "path",
+   "revision",
+   "start"
+  ],
+  "read_only": false
+ },
+ "probe_media": {
+  "params": [
+   "path"
+  ],
+  "required": [
+   "path"
+  ],
+  "read_only": true
+ },
+ "remove_clip": {
+  "params": [
+   "clip",
+   "destination",
+   "expected_sha256",
+   "overwrite",
+   "path",
+   "revision",
+   "sequence"
+  ],
+  "required": [
+   "clip",
+   "destination",
+   "path",
+   "revision"
+  ],
+  "read_only": false
+ },
+ "render_project": {
+  "params": [
+   "allow_missing_media",
+   "output",
+   "overwrite",
+   "path",
+   "preset",
+   "timeout_seconds"
+  ],
+  "required": [
+   "output",
+   "path"
+  ],
+  "read_only": false
+ },
+ "save_project_copy": {
+  "params": [
+   "destination",
+   "expected_sha256",
+   "overwrite",
+   "path"
+  ],
+  "required": [
+   "destination",
+   "path"
+  ],
+  "read_only": false
+ },
+ "split_clip": {
+  "params": [
+   "at",
+   "clip",
+   "destination",
+   "expected_sha256",
+   "overwrite",
+   "path",
+   "revision",
+   "sequence"
+  ],
+  "required": [
+   "at",
+   "clip",
+   "destination",
+   "path",
+   "revision"
+  ],
+  "read_only": false
+ },
+ "start_render": {
+  "params": [
+   "allow_missing_media",
+   "output",
+   "overwrite",
+   "path",
+   "preset",
+   "timeout_seconds"
+  ],
+  "required": [
+   "output",
+   "path"
+  ],
+  "read_only": false
+ },
+ "trim_clip": {
+  "params": [
+   "clip",
+   "destination",
+   "end",
+   "expected_sha256",
+   "overwrite",
+   "path",
+   "revision",
+   "sequence",
+   "start"
+  ],
+  "required": [
+   "clip",
+   "destination",
+   "path",
+   "revision"
+  ],
+  "read_only": false
+ }
+}

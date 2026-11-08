@@ -36,6 +36,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run mypy
+      - run: uv run --no-project python scripts/check_version.py
 
   test:
     name: Tests (Python ${{ matrix.python }})
