@@ -47,7 +47,7 @@ def attrs(name: str) -> dict[str, str]:
         (
             "MPEG-2",
             NTSC,
-            ["properties=MPEG-2", "qscale=5", "aq=3", "subq=5", "cmp=2", "subcmp=2", "trellis=1",
+            ["properties=MPEG-2", "qscale=5", "aq=3", "subq=3", "cmp=1", "subcmp=1", "trellis=1",
              "bf=2"],
         ),
         ("WAV", NTSC, ["properties=WAV", "video_off=1"]),
@@ -61,13 +61,38 @@ def attrs(name: str) -> dict[str, str]:
             "VOB (DVD)",
             PAL,
             ["properties=dv_pal/DVD", "mlt_profile=dv_pal", "f=dvd", "vcodec=mpeg2video",
-             "acodec=ac3", "qscale=5", "ab=160k", "subq=5", "cmp=2", "subcmp=2", "trellis=1",
+             "acodec=ac3", "qscale=5", "ab=160k", "subq=3", "cmp=1", "subcmp=1", "trellis=1",
              "bf=2"],
         ),
     ],
 )  # fmt: skip
 def test_preset_arguments_resolve_like_kdenlive(name, rate, expected):
     assert render.melt_consumer_args(attrs(name), rate) == expected
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        "f=mp4 target=/home/x/escaped.mp4",
+        "f=mp4 /home/x/extra-input.mp4",
+        "f=mp4 -consumer xml:/home/x/out.xml",
+        "f=mp4 resource=http://attacker.example/x",
+        "f=mp4 vcodec=http://attacker.example/x",
+    ],
+)
+def test_unsafe_preset_arguments_are_refused(args):
+    """Custom presets (e.g. downloaded ones) must not redirect the output or add inputs."""
+    with pytest.raises(ProjectError) as err:
+        render.melt_consumer_args({"name": "evil", "args": args}, NTSC)
+    assert err.value.code == "unknown_preset"
+
+
+def test_image_sequence_presets_are_refused_for_melt():
+    with pytest.raises(ProjectError) as err:
+        render.melt_consumer_args(
+            {"name": "PNG with alpha", "extension": "png", "args": "vcodec=png"}, NTSC
+        )
+    assert err.value.code == "unknown_preset"
 
 
 def test_dv_standard_follows_the_frame_rate():
@@ -117,9 +142,13 @@ def test_auto_engine_uses_melt_without_cli_render(no_cli_kdenlive):
     assert run.running is not None
     run.running.proc.wait(10)
     args = args_file.read_text().splitlines()
-    assert args[0] == str(ws / "kd26-ntsc-timeline.kdenlive")
     assert f"avformat:{plan.temp_output}" in args
     assert "crf=23" in args and "real_time=-1" in args
+    assert "rescale=bilinear" in args and "deinterlacer=onefield" in args  # Kdenlive's defaults
+    # melt reads a copy whose `root` is the folder Kdenlive would use (the stored one is gone)
+    scene = Path(args[0])
+    assert scene.parent == run.workdir
+    assert f'root="{ws}"' in scene.read_text(encoding="utf-8")
     run.cleanup()
 
 
@@ -192,6 +221,10 @@ def test_melt_engine_renders_kdenlive_projects(fixture, tmp_path):
     assert result.state is render.RenderState.SUCCEEDED, result.error or result.log_tail
     assert result.engine == "melt" and result.validation and result.validation.ok
     assert any("not Kdenlive's own render" in w for w in result.warnings)
+    # picture and sound, not a blank render (projects whose stored root is gone, #42 review)
+    assert _mean_rgb(tmp_path / "o.mp4", 0.5) != (255, 255, 255)
+    assert max(_mean_rgb(tmp_path / "o.mp4", 0.5)) > 40
+    assert _mean_volume(tmp_path / "o.mp4") > -60
 
 
 @pytest.mark.integration
@@ -215,3 +248,27 @@ def test_melt_and_kdenlive_engines_agree(tmp_path):
     assert melt and kd
     assert abs((melt.duration_seconds or 0) - (kd.duration_seconds or 0)) < 0.1
     assert (melt.video_streams, melt.audio_streams) == (kd.video_streams, kd.audio_streams)
+
+
+def _mean_rgb(path: Path, t: float) -> tuple[int, ...]:
+    import subprocess
+
+    out = subprocess.run(
+        [shutil.which("ffmpeg") or "ffmpeg", "-v", "error", "-ss", str(t), "-i", str(path),
+         "-frames:v", "1", "-vf", "scale=1:1:flags=area,format=rgb24", "-f", "rawvideo", "-"],
+        capture_output=True, check=True, timeout=60,
+    ).stdout  # fmt: skip
+    return tuple(out[:3])
+
+
+def _mean_volume(path: Path) -> float:
+    import re
+    import subprocess
+
+    err = subprocess.run(
+        [shutil.which("ffmpeg") or "ffmpeg", "-hide_banner", "-i", str(path), "-vn",
+         "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True, check=True, timeout=60,
+    ).stderr  # fmt: skip
+    match = re.search(r"mean_volume: (-?[\d.]+) dB", err)
+    return float(match.group(1)) if match else -91.0
