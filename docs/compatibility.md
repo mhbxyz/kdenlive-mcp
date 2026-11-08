@@ -6,12 +6,12 @@ Statuses are defined in [docs/versioning.md](versioning.md#external-software-sup
 
 | Component | tested | supported | untested | unsupported |
 |---|---|---|---|---|
-| Kdenlive | 26.08.2 (everything); 23.08.5 (reading, editing, rendering with the melt engine) | 23.04 – 26.08 for reading and editing (document version 1.1); rendering with `kdenlive --render` from 24.02, with melt before | other versions | `engine="kdenlive"` before 24.02 (refused with `[unsupported_kdenlive]`); editing documents older than 1.1 |
+| Kdenlive | 26.08.2 (everything); 23.08.5 (reading, editing, rendering with the melt engine); 24.12.3 and 25.04.3 (rendering this server's and 26.08's projects, see below) | 23.04 – 26.08 for reading and editing (document version 1.1); rendering with `kdenlive --render` from 24.02, with melt before | other versions | `engine="kdenlive"` before 24.02 (refused with `[unsupported_kdenlive]`); editing documents older than 1.1 |
 | MLT | 7.42.0, 7.22.0 | 7.x | — | — |
 | FFmpeg / ffprobe | n9.0.2, 6.1.1 | ≥ 6 | older | — |
 | Python | 3.11, 3.12, 3.13, 3.14 | — | 3.15+ | ≤ 3.10 |
 | Linux | CachyOS (rolling), Ubuntu 24.04 (CI) | other distributions | Snap Kdenlive through wrappers | — |
-| AppImage (download.kde.org) | 24.12.3, 25.04.3 through `KDENLIVE_MCP_KDENLIVE`: detection and rendering | other releases | — | — |
+| AppImage (download.kde.org) | 24.12.3, 25.04.3 through `KDENLIVE_MCP_KDENLIVE`: detection and rendering | — | other releases | — |
 | Flatpak (Flathub `org.kde.kdenlive`) | 26.08.3 (user installation, with its melt 7.43.0 and FFmpeg 9.0.2): detection, probing, creation, both render engines | system installation | — | files in `/tmp`, `/usr`, `/etc`… (the sandbox cannot see them; refused with `[invalid_path]`) |
 | macOS, Windows | — | — | — | not supported |
 | MCP clients | see [docs/clients.md](clients.md) | standard stdio MCP clients | desktop/IDE variants | cloud-only clients without a local bridge |
@@ -39,12 +39,13 @@ pointed to by `KDENLIVE_MCP_KDENLIVE`:
 | 24.12.3 (AppImage) | ✅ version, `--render` detected | ✅ montage, crossfades, AV pair: picture and sound | pending (#86) |
 | 25.04.3 (AppImage) | ✅ version, `--render` detected | ✅ same | pending (#86) |
 
-`tests/test_compat.py::test_other_kdenlive_releases_render_fixtures` repeats this with any
+`tests/test_compat.py::test_other_kdenlive_releases_render_fixtures` repeats the rendering checks with any
 binaries listed in `KDENLIVE_MCP_TEST_KDENLIVE` (`:`-separated; skipped when unset). AppImages are
 supported through `KDENLIVE_MCP_KDENLIVE`; they bundle their own MLT, used by `kdenlive --render`.
 
-Projects *saved* by 24.x/25.x need Kdenlive's GUI: these AppImages expose neither the
-accessibility bus nor D-Bus in the headless lab, so the files are produced by hand (#86).
+Projects *saved* by 24.x/25.x need Kdenlive's GUI: in the headless lab these AppImages
+register on neither the accessibility bus nor the session D-Bus, so the files are produced by
+hand (#86).
 
 ## Tested versions
 

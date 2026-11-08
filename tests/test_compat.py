@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -142,9 +143,11 @@ OTHER_KDENLIVE = [
 
 
 @pytest.mark.integration
+@pytest.mark.timeout(660)
 @pytest.mark.skipif(
     not OTHER_KDENLIVE, reason="set KDENLIVE_MCP_TEST_KDENLIVE to Kdenlive binaries"
 )
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg to check the render")
 @pytest.mark.parametrize("kdenlive", OTHER_KDENLIVE or ["none"])
 @pytest.mark.parametrize(
     "fixture", ["generated-montage.kdenlive", "kd26-mixes.kdenlive", "kd26-ntsc-timeline.kdenlive"]
@@ -153,8 +156,10 @@ def test_other_kdenlive_releases_render_fixtures(kdenlive, fixture, tmp_path, mo
     """#66: e.g. the official 24.12.3 and 25.04.3 AppImages, through KDENLIVE_MCP_KDENLIVE.
     Projects written by this server and by Kdenlive 26.08.2 must render with picture and sound."""
     monkeypatch.setenv("KDENLIVE_MCP_KDENLIVE", kdenlive)
+    if not Path(kdenlive).is_file():
+        pytest.fail(f"{kdenlive} (KDENLIVE_MCP_TEST_KDENLIVE) does not exist")
     if not render.supports_cli_render(kdenlive):
-        pytest.skip(f"{kdenlive} has no --render (before 24.02)")
+        pytest.skip(f"{kdenlive} does not accept --render (Kdenlive before 24.02)")
     shutil.copytree(FIX / "kd26", tmp_path / "p")
     out = tmp_path / "o.mp4"
     result = render.render(
@@ -172,4 +177,5 @@ def test_other_kdenlive_releases_render_fixtures(kdenlive, fixture, tmp_path, mo
          "-f", "null", "-"],
         capture_output=True, text=True, check=True, timeout=60,
     ).stderr  # fmt: skip
-    assert "mean_volume: -inf" not in level and "mean_volume: -91" not in level
+    mean = re.search(r"mean_volume: (-?[\d.]+|-inf) dB", level)
+    assert mean and mean.group(1) != "-inf" and float(mean.group(1)) > -60  # sound, not silence

@@ -17,7 +17,8 @@ Requirements: Linux, Kdenlive, `kwin_wayland`, `qdbus6`, `dbus-run-session`, `at
 
 `KD_BIN` runs another Kdenlive executable (default: `kdenlive` on `PATH`), `KD_FLAGS` replaces the
 startup options (default `--no-welcome`, unknown to 24.x), `KD_WAIT` the start timeout in
-seconds (default 60), and the `apps` command lists the applications on the accessibility bus.
+seconds (default 60), `KD_APPNAME` an extra application name to look for on the accessibility
+bus, and the `apps` command lists the applications on the accessibility bus.
 Finding (#66): the official 24.12.3 AppImage starts in the lab but registers neither on the
 accessibility bus nor on the session D-Bus, so the lab cannot drive it.
 
