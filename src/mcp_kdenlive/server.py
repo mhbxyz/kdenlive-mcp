@@ -112,7 +112,10 @@ def _project_edit(
     expected_sha256: str | None,
     operation: Callable[
         [writer.EditableProject],
-        timeline_edit.TimelineEditResult | audio_mod.AudioEditResult | MarkerEditResult,
+        timeline_edit.TimelineEditResult
+        | audio_mod.AudioEditResult
+        | MarkerEditResult
+        | relink_mod.RelinkResult,
     ],
 ) -> EditResult:
     """Open, apply one operation, save; the result goes in its EditResult field."""
@@ -124,6 +127,8 @@ def _project_edit(
             return EditResult(saved=saved, audio=result)
         if isinstance(result, MarkerEditResult):
             return EditResult(saved=saved, markers=result)
+        if isinstance(result, relink_mod.RelinkResult):
+            return EditResult(saved=saved, relink=result)
         return EditResult(saved=saved, timeline=result)
     except ProjectError as exc:
         raise _tool_error(exc) from exc
