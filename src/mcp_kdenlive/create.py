@@ -457,7 +457,7 @@ def create_project(
         )
     if out.is_dir():
         raise ProjectError("invalid_output", f"{out} is a directory.")
-    policy.check_write_target(out, "Creating a project", env)
+    policy.check_write_target(out, "Creating a project")
     if out.exists() and not overwrite:
         raise ProjectError(
             "output_exists",

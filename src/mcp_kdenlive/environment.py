@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -146,11 +147,13 @@ class FilesystemAccess(BaseModel):
     """Which folders the tools may read and write (KDENLIVE_MCP_ALLOWED_ROOTS, #60)."""
 
     roots: list[str] | None = Field(description="Allowed roots, resolved; null when unrestricted.")
-    source: str = Field(
+    source: Literal["default", "environment", "unrestricted", "invalid"] = Field(
         description="'default' (the user's videos directory), 'environment' "
-        "(KDENLIVE_MCP_ALLOWED_ROOTS) or 'unrestricted' (explicit opt-out)."
+        "(KDENLIVE_MCP_ALLOWED_ROOTS), 'unrestricted' (explicit opt-out) or 'invalid' "
+        "(see error; every path is refused)."
     )
     missing: list[str] = Field(description="Allowed roots that do not exist.")
+    summary: str | None = Field(default=None, description="One-line description for people.")
     error: str | None = Field(default=None, description="Invalid configuration, if any.")
 
 
@@ -325,10 +328,14 @@ def filesystem_access(env: Mapping[str, str]) -> FilesystemAccess:
     try:
         config = policy.roots_config(env)
     except ProjectError as err:
-        return FilesystemAccess(roots=[], source="environment", missing=[], error=err.message)
+        return FilesystemAccess(roots=None, source="invalid", missing=[], error=err.message)
     roots = [str(r) for r in config.roots] if config.roots is not None else None
-    missing = [r for r in roots or [] if not Path(r).is_dir()]
-    return FilesystemAccess(roots=roots, source=config.source, missing=missing)
+    return FilesystemAccess(
+        roots=roots,
+        source=config.source,
+        missing=[str(r) for r in config.missing],
+        summary=config.describe(),
+    )
 
 
 def diagnose(env: Mapping[str, str] | None = None) -> EnvironmentReport:

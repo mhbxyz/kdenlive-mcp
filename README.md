@@ -82,7 +82,7 @@ configurations are listed in [docs/clients.md](https://github.com/mhbxyz/kdenliv
     "kdenlive": {
       "command": "uv",
       "args": ["run", "--directory", "/path/to/kdenlive-mcp", "kdenlive-mcp"],
-      "env": { "KDENLIVE_MCP_KDENLIVE": "/usr/bin/kdenlive" }
+      "env": { "KDENLIVE_MCP_ALLOWED_ROOTS": "/home/you/Videos:/home/you/Projects/edits" }
     }
   }
 }

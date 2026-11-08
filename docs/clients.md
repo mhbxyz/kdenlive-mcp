@@ -41,10 +41,15 @@ Replace `/path/to/kdenlive-mcp` with the absolute path of the `kdenlive-mcp` exe
 (`command -v kdenlive-mcp` after `pipx install mcp-kdenlive`), or use the `uv run` form for a
 source checkout. No secrets are required.
 
+Set `KDENLIVE_MCP_ALLOWED_ROOTS` to the folders that hold your projects and media (`:`-separated
+absolute paths). Without it, the server only reaches your videos directory (since 0.2). The
+examples below allow `/home/you/Videos` and `/home/you/Projects/edits`.
+
 **Claude Code**, `mcp.json` (or `claude mcp add kdenlive -- /path/to/kdenlive-mcp`):
 
 ```json
-{ "mcpServers": { "kdenlive": { "command": "/path/to/kdenlive-mcp", "args": [] } } }
+{ "mcpServers": { "kdenlive": { "command": "/path/to/kdenlive-mcp", "args": [],
+    "env": { "KDENLIVE_MCP_ALLOWED_ROOTS": "/home/you/Videos:/home/you/Projects/edits" } } } }
 ```
 
 **Codex CLI**, `~/.codex/config.toml`:
@@ -53,19 +58,21 @@ source checkout. No secrets are required.
 [mcp_servers.kdenlive]
 command = "/path/to/kdenlive-mcp"
 args = []
+env = { KDENLIVE_MCP_ALLOWED_ROOTS = "/home/you/Videos:/home/you/Projects/edits" }
 ```
 
 **OpenCode**, `opencode.json` (project) or the global config:
 
 ```json
 { "$schema": "https://opencode.ai/config.json",
-  "mcp": { "kdenlive": { "type": "local", "command": ["/path/to/kdenlive-mcp"], "enabled": true } } }
+  "mcp": { "kdenlive": { "type": "local", "command": ["/path/to/kdenlive-mcp"], "enabled": true,
+    "environment": { "KDENLIVE_MCP_ALLOWED_ROOTS": "/home/you/Videos:/home/you/Projects/edits" } } } }
 ```
 
 **Grok Build CLI:**
 
 ```sh
-grok mcp add kdenlive /path/to/kdenlive-mcp      # user scope
+grok mcp add kdenlive /path/to/kdenlive-mcp      # user scope; set KDENLIVE_MCP_ALLOWED_ROOTS in its env
 grok mcp doctor kdenlive                         # expect: handshake OK, 5 tools discovered
 ```
 

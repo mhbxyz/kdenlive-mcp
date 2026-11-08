@@ -12,6 +12,7 @@ import stat
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from mcp_kdenlive.errors import ProjectError
 
@@ -54,12 +55,29 @@ CHILD_ENV_ALLOW = (
 UNRESTRICTED = "unrestricted"
 
 
+ScopeSource = Literal["default", "environment", "unrestricted"]
+
+
 @dataclass(frozen=True)
 class RootsConfig:
     """Effective filesystem scope and where it comes from."""
 
     roots: list[Path] | None  # None: unrestricted
-    source: str  # "default" (videos directory), "environment" or "unrestricted"
+    source: ScopeSource
+
+    @property
+    def missing(self) -> list[Path]:
+        return [r for r in self.roots or [] if not r.is_dir()]
+
+    def describe(self) -> str:
+        """One line for people: the roots and their origin."""
+        if self.roots is None:
+            return f"unrestricted ({ALLOWED_ROOTS_ENV}={UNRESTRICTED})"
+        origin = "default: videos directory" if self.source == "default" else ALLOWED_ROOTS_ENV
+        text = f"{os.pathsep.join(str(r) for r in self.roots)} ({origin})"
+        if self.missing:
+            text += f"; does not exist: {', '.join(str(r) for r in self.missing)}"
+        return text
 
 
 def videos_dir(env: Mapping[str, str] | None = None) -> Path:
@@ -79,19 +97,22 @@ def videos_dir(env: Mapping[str, str] | None = None) -> Path:
         if value.startswith("$HOME"):
             value = str(home) + value[len("$HOME") :]
         path = Path(value)
-        # A directory set to $HOME itself is disabled (xdg-user-dirs convention).
+        # Relative values are invalid, and a directory set to $HOME itself is disabled
+        # (xdg-user-dirs conventions): both fall back to ~/Videos.
         if path.is_absolute() and path.resolve() != home.resolve():
             return path
     return home / "Videos"
 
 
 def roots_config(env: Mapping[str, str] | None = None) -> RootsConfig:
-    """Parse KDENLIVE_MCP_ALLOWED_ROOTS: unset → videos directory, 'unrestricted', or a list."""
+    """Parse KDENLIVE_MCP_ALLOWED_ROOTS: unset → videos directory, 'unrestricted', or a list.
+
+    Enforcement always reads the server's own environment (`env=None`); a mapping is only
+    passed to describe another environment (diagnostics, tests).
+    """
     raw = (os.environ if env is None else env).get(ALLOWED_ROOTS_ENV, "").strip()
     if raw == UNRESTRICTED:
-        return RootsConfig(None, UNRESTRICTED)
-    if not raw:
-        return RootsConfig([videos_dir(env).resolve()], "default")
+        return RootsConfig(None, "unrestricted")
     roots = []
     for part in raw.split(os.pathsep):
         if not part:
@@ -103,41 +124,31 @@ def roots_config(env: Mapping[str, str] | None = None) -> RootsConfig:
                 f"{ALLOWED_ROOTS_ENV} entries must be absolute paths: {part!r}.",
             )
         roots.append(path.resolve())
-    if not roots:
-        return RootsConfig([videos_dir(env).resolve()], "default")
-    return RootsConfig(roots, "environment")
-
-
-def allowed_roots(env: Mapping[str, str] | None = None) -> list[Path] | None:
-    """Effective roots (resolved), or None when explicitly unrestricted."""
-    return roots_config(env).roots
+    if roots:
+        return RootsConfig(roots, "environment")
+    return RootsConfig([videos_dir(env).resolve()], "default")
 
 
 def _scope_hint(config: RootsConfig) -> str:
-    roots = [str(r) for r in config.roots or []]
-    origin = (
-        "the default (your videos directory)"
-        if config.source == "default"
-        else f"{ALLOWED_ROOTS_ENV}"
-    )
-    hint = f"Allowed roots, from {origin}: {roots}."
-    missing = [r for r in roots if not Path(r).is_dir()]
-    if missing:
-        hint += f" {missing} does not exist."
     return (
-        hint + f" To allow other folders, set {ALLOWED_ROOTS_ENV} in the MCP client's server"
-        f" configuration to absolute directories separated by '{os.pathsep}'"
-        f" (or to '{UNRESTRICTED}', not recommended)."
+        f"Allowed roots: {config.describe()}. To allow other folders, set {ALLOWED_ROOTS_ENV}"
+        " in the MCP client's server configuration to absolute directories separated by"
+        f" '{os.pathsep}' (or to '{UNRESTRICTED}', not recommended)."
     )
 
 
-def check_allowed(path: Path, purpose: str, env: Mapping[str, str] | None = None) -> Path:
-    """Refuse `path` if it resolves (symlinks included) outside the allowed roots."""
-    config = roots_config(env)
+def check_allowed(path: Path, purpose: str) -> Path:
+    """Refuse `path` if it resolves (symlinks included) outside the existing allowed roots.
+
+    The scope comes from the server's own environment, never from an environment prepared
+    for a child process.
+    """
+    config = roots_config()
     if config.roots is None:
         return path
     real = path.resolve()
-    if any(real == root or root in real.parents for root in config.roots):
+    existing = [r for r in config.roots if r.is_dir()]
+    if any(real == root or root in real.parents for root in existing):
         return path
     raise ProjectError(
         "path_not_allowed",
@@ -148,9 +159,9 @@ def check_allowed(path: Path, purpose: str, env: Mapping[str, str] | None = None
     )
 
 
-def check_write_target(path: Path, purpose: str, env: Mapping[str, str] | None = None) -> Path:
+def check_write_target(path: Path, purpose: str) -> Path:
     """A file the server is about to create or replace: allowed root, no symlink, regular file."""
-    check_allowed(path.parent, purpose, env)
+    check_allowed(path.parent, purpose)
     if path.is_symlink():
         raise ProjectError(
             "invalid_output",

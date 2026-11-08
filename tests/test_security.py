@@ -65,36 +65,69 @@ def test_default_honours_xdg_config_home_and_absolute_paths(tmp_path):
     assert policy.roots_config(env).roots == [(tmp_path / "vids").resolve()]
 
 
-def test_default_root_is_enforced(tmp_path):
+def test_default_root_is_enforced(tmp_path, monkeypatch):
     env = _home(tmp_path)
+    monkeypatch.delenv(policy.ALLOWED_ROOTS_ENV)
+    monkeypatch.setenv("HOME", env["HOME"])
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     videos = tmp_path / "home" / "Videos"
     videos.mkdir()
     shutil.copy(FIX / "kd26" / "kd26-ntsc.kdenlive", videos / "p.kdenlive")
     shutil.copy(FIX / "kd26" / "kd26-ntsc.kdenlive", tmp_path / "elsewhere.kdenlive")
-    assert policy.check_allowed(videos / "p.kdenlive", "Reading a project", env)
+    assert policy.check_allowed(videos / "p.kdenlive", "Reading a project")
     with pytest.raises(ProjectError) as err:
-        policy.check_allowed(tmp_path / "elsewhere.kdenlive", "Reading a project", env)
+        policy.check_allowed(tmp_path / "elsewhere.kdenlive", "Reading a project")
     assert err.value.code == "path_not_allowed"
     assert policy.ALLOWED_ROOTS_ENV in err.value.hint
     assert "default" in err.value.hint and "unrestricted" in err.value.hint
 
 
-def test_missing_default_directory_refuses_everything_without_crashing(tmp_path):
+def test_missing_default_directory_refuses_everything_without_crashing(tmp_path, monkeypatch):
     env = _home(tmp_path)  # no ~/Videos
-    with pytest.raises(ProjectError) as err:
-        policy.check_allowed(tmp_path / "x.kdenlive", "Reading a project", env)
-    assert err.value.code == "path_not_allowed"
-    assert "does not exist" in err.value.hint
+    monkeypatch.delenv(policy.ALLOWED_ROOTS_ENV)
+    monkeypatch.setenv("HOME", env["HOME"])
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    for path in (tmp_path / "x.kdenlive", tmp_path / "home" / "Videos" / "x.kdenlive"):
+        with pytest.raises(ProjectError) as err:
+            policy.check_allowed(path, "Reading a project")
+        assert err.value.code == "path_not_allowed"
+        assert "does not exist" in err.value.hint
 
 
-def test_symlinked_videos_directory(tmp_path):
+def test_symlinked_videos_directory(tmp_path, monkeypatch):
     env = _home(tmp_path)
+    monkeypatch.delenv(policy.ALLOWED_ROOTS_ENV)
+    monkeypatch.setenv("HOME", env["HOME"])
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     target = tmp_path / "disk" / "videos"
     target.mkdir(parents=True)
     (tmp_path / "home" / "Videos").symlink_to(target)
     (target / "a.mp4").write_bytes(b"x")
-    assert policy.check_allowed(tmp_path / "home" / "Videos" / "a.mp4", "Reading media", env)
-    assert policy.check_allowed(target / "a.mp4", "Reading media", env)
+    assert policy.check_allowed(tmp_path / "home" / "Videos" / "a.mp4", "Reading media")
+    assert policy.check_allowed(target / "a.mp4", "Reading media")
+
+
+def test_relative_videos_dir_in_user_dirs_falls_back_to_home_videos(tmp_path):
+    env = _home(tmp_path, 'XDG_VIDEOS_DIR="Videos/mine"\n')
+    assert policy.roots_config(env).roots == [(tmp_path / "home" / "Videos").resolve()]
+
+
+def test_only_empty_entries_mean_the_default(tmp_path):
+    env = dict(_home(tmp_path), KDENLIVE_MCP_ALLOWED_ROOTS=":")
+    assert policy.roots_config(env).source == "default"
+
+
+def test_scope_comes_from_the_server_environment_not_a_child_env(ws, stub_melt, monkeypatch):
+    """The env given to create_project is for running melt; the policy uses os.environ."""
+    env, _ = stub_melt
+    monkeypatch.setenv(policy.ALLOWED_ROOTS_ENV, str(ws / "allowed"))
+    child = dict(env, KDENLIVE_MCP_ALLOWED_ROOTS="unrestricted")
+    media_file = str(ws / "allowed" / "proj" / "media" / "ntsc.mp4")
+    out = str(ws / "outside" / "new.kdenlive")
+    assert (
+        code_of(create.create_project, out, media_file, "atsc_720p_2997", env=child)
+        == "path_not_allowed"
+    )
 
 
 def test_explicit_opt_out_is_unrestricted(ws, monkeypatch):

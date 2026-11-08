@@ -36,18 +36,8 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _scope(files: FilesystemAccess) -> str:
-    if files.error:
-        return f"INVALID: {files.error}"
-    if files.roots is None:
-        return "unrestricted (KDENLIVE_MCP_ALLOWED_ROOTS=unrestricted)"
-    origin = (
-        "default: videos directory" if files.source == "default" else "KDENLIVE_MCP_ALLOWED_ROOTS"
-    )
-    text = f"{':'.join(files.roots)} ({origin})"
-    if files.missing:
-        text += f"; missing: {', '.join(files.missing)}"
-    return text
+def _scope(access: FilesystemAccess) -> str:
+    return f"INVALID: {access.error}" if access.error else str(access.summary)
 
 
 def _print_human(report: EnvironmentReport) -> None:

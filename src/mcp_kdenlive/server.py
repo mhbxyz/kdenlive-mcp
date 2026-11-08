@@ -124,7 +124,9 @@ def _register_inspection(server: MCPServer) -> None:
             "Report whether Kdenlive, MLT (melt), ffprobe and ffmpeg are installed and usable, "
             "with their paths, versions and actionable hints. Read-only: modifies nothing. "
             "Locations can be overridden with KDENLIVE_MCP_KDENLIVE, KDENLIVE_MCP_MELT, "
-            "KDENLIVE_MCP_FFPROBE and KDENLIVE_MCP_FFMPEG in the server environment."
+            "KDENLIVE_MCP_FFPROBE and KDENLIVE_MCP_FFMPEG in the server environment. "
+            "`filesystem` lists the folders the tools may read and write "
+            "(KDENLIVE_MCP_ALLOWED_ROOTS; by default the user's videos directory)."
         ),
         annotations=READ_ONLY,
     )

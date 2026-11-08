@@ -164,3 +164,9 @@ def test_diagnose_reports_filesystem_access(all_tools_stubbed, tmp_path):
     assert report.filesystem.missing == [str((tmp_path / "Videos").resolve())]
     opt_out = diagnose(dict(env, KDENLIVE_MCP_ALLOWED_ROOTS="unrestricted")).filesystem
     assert (opt_out.source, opt_out.roots, opt_out.missing) == ("unrestricted", None, [])
+
+
+def test_diagnose_reports_invalid_scope(all_tools_stubbed):
+    files = diagnose(dict(all_tools_stubbed, KDENLIVE_MCP_ALLOWED_ROOTS="relative")).filesystem
+    assert (files.source, files.roots) == ("invalid", None)
+    assert "absolute" in files.error

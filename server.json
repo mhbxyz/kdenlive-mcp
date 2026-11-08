@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/mhbxyz/kdenlive-mcp",
-  "version": "0.1.1.dev0",
+  "version": "0.2.0.dev0",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "mcp-kdenlive",
-      "version": "0.1.1.dev0",
+      "version": "0.2.0.dev0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -22,7 +22,7 @@
       "environmentVariables": [
         {
           "name": "KDENLIVE_MCP_ALLOWED_ROOTS",
-          "description": "Colon-separated absolute directories; every file the server reads or writes must be inside them (recommended).",
+          "description": "Colon-separated absolute directories; every file the server reads or writes must be inside them. Unset: only the user's videos directory. 'unrestricted': no limit (not recommended).",
           "isRequired": false,
           "format": "string"
         },
