@@ -1,0 +1,50 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mhbxyz/kdenlive-mcp",
+  "title": "Kdenlive",
+  "description": "Inspect, edit and render Kdenlive video projects locally on Linux.",
+  "repository": {
+    "url": "https://github.com/mhbxyz/kdenlive-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/mhbxyz/kdenlive-mcp",
+  "version": "0.1.0rc1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "mcp-kdenlive",
+      "version": "0.1.0rc1",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "KDENLIVE_MCP_ALLOWED_ROOTS",
+          "description": "Colon-separated absolute directories; every file the server reads or writes must be inside them (recommended).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "KDENLIVE_MCP_KDENLIVE",
+          "description": "Absolute path of the kdenlive executable if it is not on PATH (for example an AppImage).",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "KDENLIVE_MCP_MELT",
+          "description": "Absolute path of the MLT melt executable if it is not on PATH.",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "KDENLIVE_MCP_FFPROBE",
+          "description": "Absolute path of the ffprobe executable if it is not on PATH.",
+          "isRequired": false,
+          "format": "filepath"
+        }
+      ]
+    }
+  ]
+}

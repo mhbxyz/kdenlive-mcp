@@ -38,6 +38,7 @@ Source = "https://github.com/mhbxyz/kdenlive-mcp"
 
 [project.scripts]
 kdenlive-mcp = "mcp_kdenlive.cli:main"
+mcp-kdenlive = "mcp_kdenlive.cli:main"  # same command; lets `uvx mcp-kdenlive` work
 
 [dependency-groups]
 dev = [

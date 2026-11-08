@@ -66,8 +66,10 @@ def main() -> None:
         if not any(n.endswith(".dist-info/licenses/LICENSE") for n in names):
             fail("wheel lacks LICENSE")
         entry = next(n for n in names if n.endswith(".dist-info/entry_points.txt"))
-        if "kdenlive-mcp = mcp_kdenlive.cli:main" not in whl.read(entry).decode():
-            fail("console script kdenlive-mcp missing")
+        scripts = whl.read(entry).decode()
+        for command in ("kdenlive-mcp", "mcp-kdenlive"):
+            if f"{command} = mcp_kdenlive.cli:main" not in scripts:
+                fail(f"console script {command} missing")
 
     with tarfile.open(sdists[0]) as sd:
         members = [m.name.split("/", 1)[1] for m in sd.getmembers() if "/" in m.name]
