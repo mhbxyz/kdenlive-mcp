@@ -144,3 +144,59 @@ def test_fractional_rate_boundaries(s):
     found = listing(s)
     assert found.clip_markers[0].position == 59
     assert found.guides[0].position == 10_000
+
+
+# ------------------------------------------------------------------ review cases ------
+def _with_guides(s: Session, tmp_path: Path, guides: list) -> None:  # type: ignore[type-arg]
+    edit = writer.open_for_edit(str(s.current))
+    seq = edit.doc.sequence_tractors()[0]
+    for p in seq.findall("property"):
+        if p.get("name") == "kdenlive:sequenceproperties.guides":
+            p.text = json.dumps(guides)
+    writer.save(edit, str(tmp_path / "g.kdenlive"))
+    s.current = tmp_path / "g.kdenlive"
+
+
+def test_malformed_entries_are_skipped_and_kept(s, tmp_path):
+    _with_guides(
+        s,
+        tmp_path,
+        [{"pos": "abc"}, {"pos": None}, {"pos": 3, "type": "x"}, {"pos": 9, "comment": "ok"}],
+    )
+    assert [(g.position, g.category) for g in listing(s).guides] == [(3, 0), (9, 0)]
+    s.apply(markers.update_marker, 9, comment="still ok")
+    seq = kdenlive_doc.load(str(s.current)).sequence_tractors()[0]
+    stored = json.loads(props(seq)["kdenlive:sequenceproperties.guides"])
+    assert {"pos": "abc"} in stored and {"pos": None} in stored  # untouched
+
+
+def test_unknown_existing_category_does_not_block_other_changes(s, tmp_path):
+    _with_guides(s, tmp_path, [{"pos": 3, "type": 42, "comment": "x"}])
+    s.apply(markers.update_marker, 3, comment="y")
+    assert code(s, markers.update_marker, 3, category=43) == "invalid_argument"
+
+
+def test_duplicate_positions_in_a_file_are_refused(s, tmp_path):
+    _with_guides(s, tmp_path, [{"pos": 3, "comment": "a"}, {"pos": 3, "comment": "b"}])
+    assert code(s, markers.update_marker, 3, comment="c") == "unsupported_structure"
+    assert code(s, markers.remove_marker, 3) == "unsupported_structure"
+
+
+def test_sequences_are_selected_like_get_timeline(tmp_path):
+    shutil.copytree(FIX / "upstream", tmp_path / "u")
+    s = Session(tmp_path / "u")
+    s.current = tmp_path / "u" / "test-nesting.resaved-26.08.2.kdenlive"
+    s.apply(markers.add_marker, 7, comment="active")
+    active = s.timeline().sequence_uuid
+    assert [g.position for g in listing(s).guides] == [7]
+    assert [
+        g.position for g in markers.list_markers(kdenlive_doc.load(str(s.current)), active).guides
+    ] == [7]
+    with pytest.raises(ProjectError) as err:
+        markers.list_markers(kdenlive_doc.load(str(s.current)), "nope")
+    assert err.value.code == "sequence_not_found"
+
+
+def test_emoji_comments(s):
+    s.apply(markers.add_marker, 1, comment="🎬 prise 2 — ok")
+    assert listing(s).guides[0].comment == "🎬 prise 2 — ok"

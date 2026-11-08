@@ -392,4 +392,6 @@ audio clip is changed (the video is not), and a video-only clip is refused
 - **Identity:** a marker is its target plus its position; Kdenlive keeps one per position, so adding at a taken position is refused (`[invalid_argument]`), and a missing one is `[not_found]`.
 - **Categories:** `category` is an index from the project's categories (`list_markers` → `categories`, 9 by default: index, name, color); an unknown index is refused.
 - **Duration:** 0 for a point marker; a range marker needs `position + duration` to fit in a clip.
+- **Sequences:** guides belong to one sequence (`sequence`, default: the active one, like `get_timeline`). Markers stored on a sequence's own bin clip are not listed or edited.
+- **Damaged data:** entries without an integer position are skipped when listing and kept untouched when writing; several markers at one position are refused (`[unsupported_structure]`). A category that is not in the project is kept unless you change it.
 - **Verified:** guides with Unicode comments, categories and durations, clip markers at the first and last frame, then moved, renamed, recategorised and removed, reopen in Kdenlive 26.08.2 and survive its own save unchanged.

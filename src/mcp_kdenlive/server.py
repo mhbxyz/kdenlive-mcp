@@ -103,24 +103,31 @@ BinId = Annotated[
 ]
 
 
-def _register_markers(server: MCPServer) -> None:
-    def _marker_edit(
-        path: str,
-        destination: str,
-        overwrite: bool,
-        expected_sha256: str | None,
-        operation: Callable[[writer.EditableProject], markers.MarkerEditResult],
-    ) -> EditResult:
-        try:
-            edit = writer.open_for_edit(path)
-            result = operation(edit)
-            saved = writer.save(
-                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
-            )
+def _project_edit(
+    path: str,
+    destination: str,
+    overwrite: bool,
+    expected_sha256: str | None,
+    operation: Callable[
+        [writer.EditableProject],
+        timeline_edit.TimelineEditResult | audio_mod.AudioEditResult | MarkerEditResult,
+    ],
+) -> EditResult:
+    """Open, apply one operation, save; the result goes in its EditResult field."""
+    try:
+        edit = writer.open_for_edit(path)
+        result = operation(edit)
+        saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected_sha256)
+        if isinstance(result, audio_mod.AudioEditResult):
+            return EditResult(saved=saved, audio=result)
+        if isinstance(result, MarkerEditResult):
             return EditResult(saved=saved, markers=result)
-        except ProjectError as exc:
-            raise _tool_error(exc) from exc
+        return EditResult(saved=saved, timeline=result)
+    except ProjectError as exc:
+        raise _tool_error(exc) from exc
 
+
+def _register_markers(server: MCPServer) -> None:
     marker_target = (
         " Without `bin_id` the marker is a timeline **guide** (position in timeline frames); with "
         "`bin_id` it is a **clip marker** on that bin clip (position in the clip's source frames, "
@@ -163,13 +170,19 @@ def _register_markers(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _marker_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
             expected_sha256,
             lambda e: markers.add_marker(
-                e, position, comment, category, duration, bin_id, sequence
+                e,
+                position,
+                comment=comment,
+                category=category,
+                duration=duration,
+                bin_id=bin_id,
+                sequence=sequence,
             ),
         )
 
@@ -193,13 +206,20 @@ def _register_markers(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _marker_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
             expected_sha256,
             lambda e: markers.update_marker(
-                e, position, bin_id, new_position, comment, category, duration, sequence
+                e,
+                position,
+                bin_id=bin_id,
+                new_position=new_position,
+                comment=comment,
+                category=category,
+                duration=duration,
+                sequence=sequence,
             ),
         )
 
@@ -218,12 +238,12 @@ def _register_markers(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _marker_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
             expected_sha256,
-            lambda e: markers.remove_marker(e, position, bin_id, sequence),
+            lambda e: markers.remove_marker(e, position, bin_id=bin_id, sequence=sequence),
         )
 
 
@@ -644,29 +664,6 @@ def _register_editing(server: MCPServer) -> None:
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
-    def _timeline_edit(
-        path: str,
-        destination: str,
-        overwrite: bool,
-        expected_sha256: str | None,
-        operation: Callable[
-            [writer.EditableProject],
-            timeline_edit.TimelineEditResult | audio_mod.AudioEditResult,
-        ],
-    ) -> EditResult:
-        """Open, apply one operation, save; the result goes in its EditResult field."""
-        try:
-            edit = writer.open_for_edit(path)
-            result = operation(edit)
-            saved = writer.save(
-                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
-            )
-            if isinstance(result, audio_mod.AudioEditResult):
-                return EditResult(saved=saved, audio=result)
-            return EditResult(saved=saved, timeline=result)
-        except ProjectError as exc:
-            raise _tool_error(exc) from exc
-
     @server.tool(
         name="insert_clip",
         title="Insert clip",
@@ -692,7 +689,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _timeline_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
@@ -722,7 +719,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _timeline_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
@@ -751,7 +748,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _timeline_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
@@ -777,7 +774,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _timeline_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
@@ -803,7 +800,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _timeline_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
@@ -832,7 +829,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _timeline_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,
@@ -863,7 +860,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        return _timeline_edit(
+        return _project_edit(
             path,
             destination,
             overwrite,

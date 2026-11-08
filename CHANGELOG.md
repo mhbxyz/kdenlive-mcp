@@ -27,6 +27,10 @@ migration notes in the same entry.
 - **Open-project detection (#62):** writing over a project shown by a running Kdenlive is refused even when it was opened from Kdenlive's *Open* dialog without changes: the server reads Kdenlive's window title over the session D-Bus (read-only). When a running Kdenlive cannot be checked, the write carries a warning to close or reload the project.
 - **`diagnose_environment`:** a `filesystem` field with the effective roots, their source (`default`, `environment`, `unrestricted`) and the ones that do not exist (#60).
 
+### Known limitations
+
+- **Manual Kdenlive checks pending** for crossfade editing (#61), open-project detection (#62), audio level and fades (#13) and guides and markers (#12): automated round trips through Kdenlive 26.08.2 pass, but interactive checks (playback, undo/redo, GUI editing of server-written data) wait for a person. Checklists are linked from #67.
+
 ### Fixed
 
 - **`get_timeline` mixes (#61):** `end` was one frame too late. Kdenlive stores a mix's `out` as the left clip's exclusive end. `cut_offset` is now documented correctly: frames from the cut to the **end** of the mix.

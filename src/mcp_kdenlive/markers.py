@@ -20,6 +20,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from mcp_kdenlive import project
 from mcp_kdenlive.edits import _sequence, _set_prop
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import KdenliveDocument, props
@@ -72,11 +73,26 @@ def _load(raw: str | None) -> list[dict[str, Any]]:
     return data
 
 
+def _int(value: Any) -> int | None:
+    """An int from a marker field, or None for anything else (kept untouched, not listed)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def _valid(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [m for m in items if _int(m.get("pos")) is not None]
+
+
 def _dump(items: list[dict[str, Any]]) -> str:
     # Kdenlive (Qt) writes sorted keys, 4-space indents, UTF-8, and "[\n]\n" when empty.
     if not items:
         return "[\n]\n"
-    ordered = sorted(items, key=lambda m: int(m.get("pos", 0)))
+    ordered = sorted(items, key=lambda m: _int(m.get("pos")) or 0)
     return json.dumps(ordered, indent=4, sort_keys=True, ensure_ascii=False) + "\n"
 
 
@@ -105,15 +121,15 @@ def _categories(doc: KdenliveDocument) -> list[Category]:
 
 
 def _marker(doc: KdenliveDocument, target: str, item: dict[str, Any], name: str | None) -> Marker:
-    pos = int(item.get("pos", 0))
+    pos = _int(item.get("pos")) or 0
     return Marker(
         target=target,
         clip_name=name,
         position=pos,
         timecode=frames_to_timecode(pos, doc.rate),
-        duration=int(item.get("duration", 0) or 0),
+        duration=_int(item.get("duration")) or 0,
         comment=str(item.get("comment", "")),
-        category=int(item.get("type", 0) or 0),
+        category=_int(item.get("type")) or 0,
     )
 
 
@@ -123,18 +139,17 @@ def _clip_name(clip: ET.Element) -> str | None:
 
 
 def list_markers(doc: KdenliveDocument, sequence: str | None = None) -> MarkerList:
-    tractors = doc.sequence_tractors()
-    seq = next(
-        (t for t in tractors if sequence in (None, props(t).get("kdenlive:uuid"), t.get("id"))),
-        None,
-    )
-    stored = _load(props(seq).get(GUIDES)) if seq is not None else []
-    guides = [_marker(doc, TIMELINE, g, None) for g in stored]
+    """Guides of a sequence (default: the active one, like get_timeline) and clip markers."""
+    view = project.select_sequence(doc, sequence)
+    raw = props(view.tractor).get(GUIDES)
+    if raw is None:  # documents before Kdenlive 23.04 kept guides in the document properties
+        raw = doc.doc_property("guides")
+    guides = [_marker(doc, TIMELINE, g, None) for g in _valid(_load(raw))]
     clip_markers = [
         _marker(doc, bin_id, m, _clip_name(clip))
         for bin_id, clip in sorted(_bin_clips(doc).items())
         if clip.tag != "tractor"
-        for m in _load(props(clip).get(CLIP_MARKERS))
+        for m in _valid(_load(props(clip).get(CLIP_MARKERS)))
     ]
     return MarkerList(
         categories=_categories(doc),
@@ -171,7 +186,7 @@ class _Target:
 
 
 def _check(
-    edit: EditableProject, target: _Target, position: int, duration: int, category: int
+    edit: EditableProject, target: _Target, position: int, duration: int, category: int | None
 ) -> None:
     if position < 0 or duration < 0:
         raise ProjectError("invalid_argument", "Positions and durations are frames >= 0.")
@@ -182,18 +197,24 @@ def _check(
             f"lasting {duration} frames does not fit.",
         )
     known = {c.index for c in _categories(edit.doc)}
-    if known and category not in known:
+    if category is not None and known and category not in known:
         raise ProjectError(
             "invalid_argument", f"Unknown category {category}; categories: {sorted(known)}."
         )
 
 
 def _find(items: list[dict[str, Any]], position: int, target: _Target) -> dict[str, Any]:
-    found = next((m for m in items if int(m.get("pos", -1)) == position), None)
-    if found is None:
-        where = "the timeline" if target.label == TIMELINE else f"clip {target.label}"
+    found = [m for m in items if _int(m.get("pos")) == position]
+    where = "the timeline" if target.label == TIMELINE else f"clip {target.label}"
+    if not found:
         raise ProjectError("not_found", f"No marker at frame {position} on {where}.")
-    return found
+    if len(found) > 1:
+        raise ProjectError(
+            "unsupported_structure",
+            f"{len(found)} markers share frame {position} on {where}; Kdenlive keeps one.",
+            "Fix them in Kdenlive first.",
+        )
+    return found[0]
 
 
 def _result(
@@ -206,6 +227,7 @@ def _result(
 def add_marker(
     edit: EditableProject,
     position: int,
+    *,
     comment: str = "",
     category: int = 0,
     duration: int = 0,
@@ -215,7 +237,7 @@ def add_marker(
     target = _Target(edit, bin_id, sequence)
     _check(edit, target, position, duration, category)
     items = target.items()
-    if any(int(m.get("pos", -1)) == position for m in items):
+    if any(_int(m.get("pos")) == position for m in items):
         raise ProjectError(
             "invalid_argument",
             f"There is already a marker at frame {position}; Kdenlive keeps one per position.",
@@ -230,6 +252,7 @@ def add_marker(
 def update_marker(
     edit: EditableProject,
     position: int,
+    *,
     bin_id: str | None = None,
     new_position: int | None = None,
     comment: str | None = None,
@@ -241,11 +264,10 @@ def update_marker(
     items = target.items()
     item = _find(items, position, target)
     pos = position if new_position is None else new_position
-    if pos != position and any(int(m.get("pos", -1)) == pos for m in items):
+    if pos != position and any(_int(m.get("pos")) == pos for m in items):
         raise ProjectError("invalid_argument", f"There is already a marker at frame {pos}.")
-    new_duration = int(item.get("duration", 0) or 0) if duration is None else duration
-    new_category = int(item.get("type", 0) or 0) if category is None else category
-    _check(edit, target, pos, new_duration, new_category)
+    new_duration = (_int(item.get("duration")) or 0) if duration is None else duration
+    _check(edit, target, pos, new_duration, category)
     item["pos"] = pos
     if comment is not None:
         item["comment"] = comment
@@ -261,6 +283,7 @@ def update_marker(
 def remove_marker(
     edit: EditableProject,
     position: int,
+    *,
     bin_id: str | None = None,
     sequence: str | None = None,
 ) -> MarkerEditResult:
