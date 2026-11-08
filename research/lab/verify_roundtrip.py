@@ -47,7 +47,13 @@ def clips(path: Path) -> list[tuple]:
     # same-track mixes (crossfades, #61): bounds, cut and service per track
     mixes = sorted((t.label, m.service, m.start, m.end, m.cut) for t in tl.tracks for m in t.mixes)
     layers = sorted((t.label, c.start, c.layer) for t in tl.tracks for c in t.clips)
-    return [tracks, timeline, bin_media, internal, groups, mixes, layers]
+    # clip effects (#13): identifiers in order, plus level and fade lengths read back
+    effects = sorted(
+        (t.label, c.start, tuple(c.effects), c.audio.model_dump_json() if c.audio else None)
+        for t in tl.tracks
+        for c in t.clips
+    )
+    return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects]
 
 
 def verify(path: Path) -> bool:

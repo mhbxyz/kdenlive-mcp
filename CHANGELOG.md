@@ -15,6 +15,8 @@ migration notes in the same entry.
 
 ### Added
 
+- **Audio level and fades (#13):** `set_clip_volume` (constant dB level, Kdenlive's *Volume* effect) and `set_clip_fades` (fade-in/fade-out in frames, Kdenlive's *Fade in*/*Fade out*) on a clip's audio. `get_timeline` reports each clip's `audio` settings. Fades follow trims and splits; a constant level no longer blocks trims and splits.
+
 - **Editing tracks with crossfades (#61):** `insert_clip`, `move_clip`, `trim_clip`, `split_clip` and `remove_clip` now work on tracks that contain Kdenlive same-track mixes. Mixed clips keep their mix: they cannot be moved, their mixed side cannot be trimmed, and they cannot be split inside the mix. Removing a mixed clip removes its mixes and trims the partner back to the original cut. Verified with mixes made by Kdenlive 26.08.2.
 - **`get_timeline` mixes:** a `cut` field, the frame where the clips met before the mix (#61).
 - **`remove_clip` result:** `clips` now lists the neighbours trimmed back to a cut when a crossfade was removed with the clip; it is empty otherwise, as before (#61).

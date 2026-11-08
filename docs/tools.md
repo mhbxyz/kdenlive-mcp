@@ -16,6 +16,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 | `add_media_to_bin` | no (writes a file) | Add audio/video files to the bin |
 | `add_track` | no (writes a file) | Add a named audio or video track |
 | `insert_clip` / `move_clip` / `trim_clip` / `split_clip` / `remove_clip` | no (writes a file) | Frame-accurate timeline edits |
+| `set_clip_volume` / `set_clip_fades` | no (writes a file) | Constant audio level (dB) and audio fade-in/fade-out of a clip |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 | `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
@@ -358,3 +359,20 @@ project in five steps:
 The step files after the split, the move and the final removal open in Kdenlive 26.08.2 without
 dialogs. After Kdenlive's save, these are identical: tracks, clips, bin media, internal
 transitions and **groups**. melt renders the result (180 frames).
+
+
+## Audio: `set_clip_volume(clip, revision, level_db)`, `set_clip_fades(clip, revision, fade_in=None, fade_out=None)`
+
+Both write the effects Kdenlive 26.08 uses, on the clip's **audio**: for an audio/video pair the
+audio clip is changed (the video is not), and a video-only clip is refused
+(`[incompatible_track]`). The original media is never changed.
+
+| Tool | Units and range | Kdenlive effect |
+|---|---|---|
+| `set_clip_volume` | `level_db` from -100 to +20 dB (Kdenlive caps boosts at +20 dB with `max_gain`); 0 dB keeps the level | *Volume* (`volume`, `level="0=<dB>"`). An existing constant level is replaced; an animated one (several keyframes) is refused (`[unsupported_structure]`). |
+| `set_clip_fades` | `fade_in`, `fade_out` in frames; omit to keep, 0 to remove; together they must fit in the clip (`[invalid_range]`) | *Fade in* / *Fade out* (`volume` with `gain`/`end`). The filter's `in`/`out` are **source** frames of the clip instance. |
+
+- **Reading:** `get_timeline` reports each clip's `audio` (`level_db`, `fade_in`, `fade_out`), or `null`.
+- **Edits afterwards:** fades stay at the clip's edges when it is trimmed; a split gives the fade-in to the left half and the fade-out to the right half; a constant level is kept on both halves and no longer blocks trims and splits (only animated effects do).
+- **Other effects** on the clip are kept, in order.
+- **Verified:** level and fades on an AV pair, a WAV clip, a clip in a crossfade, and after a trim and a split, reopened in Kdenlive 26.08.2 without dialogs; Kdenlive's own save kept the effects, levels and fade lengths. E2E: a −12 dB level measures 12 dB lower in the render (±1.5 dB), and the first and last quarter seconds are more than 6 dB quieter with 30-frame fades.

@@ -20,6 +20,7 @@ from pathlib import PurePosixPath
 
 from pydantic import BaseModel, Field
 
+from mcp_kdenlive import clip_effects
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import KdenliveDocument, props
 from mcp_kdenlive.timecode import FrameRate, frames_to_seconds, frames_to_timecode
@@ -83,6 +84,14 @@ class ProjectSummary(BaseModel):
     notes: list[str]
 
 
+class AudioSettings(BaseModel):
+    """Audio effects of a clip instance that the server understands (#13)."""
+
+    level_db: float | None = Field(description="Constant volume in dB; null when not set.")
+    fade_in: int = Field(description="Audio fade-in length in frames (0 = none).")
+    fade_out: int = Field(description="Audio fade-out length in frames (0 = none).")
+
+
 class ClipInfo(BaseModel):
     ref: str = Field(
         description="Position-based reference 'track:layer:entry', valid for this file revision."
@@ -102,6 +111,11 @@ class ClipInfo(BaseModel):
         description="MLT service, e.g. avformat-novalidate, color, tractor."
     )
     effects: list[str] = Field(description="Effect identifiers applied to this clip instance.")
+    audio: AudioSettings | None = Field(
+        default=None,
+        description="Level and fades set on this clip (volume, fadein, fadeout effects); "
+        "null when none.",
+    )
 
 
 class MixInfo(BaseModel):
@@ -197,6 +211,15 @@ def _effect_names(element: ET.Element) -> list[str]:
     return names
 
 
+def _audio_settings(entry: ET.Element, doc: KdenliveDocument) -> AudioSettings | None:
+    level = clip_effects.level_db(entry)
+    fade_in = clip_effects.fade_length(entry, "fadein", doc.time)
+    fade_out = clip_effects.fade_length(entry, "fadeout", doc.time)
+    if level is None and not fade_in and not fade_out:
+        return None
+    return AudioSettings(level_db=level, fade_in=fade_in, fade_out=fade_out)
+
+
 def _clip_name(producer: ET.Element | None) -> str | None:
     if producer is None:
         return None
@@ -271,6 +294,7 @@ class _SequenceView:
                     service=pp.get("mlt_service")
                     or (producer.tag if producer is not None else None),
                     effects=_effect_names(item),
+                    audio=_audio_settings(item, doc),
                 )
             )
             position += duration
