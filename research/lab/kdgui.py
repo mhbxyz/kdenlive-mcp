@@ -122,7 +122,7 @@ try:
             target = p[1]; hit = None
             for w in windows():
                 if w.get_role_name() not in ("dialog", "alert"): continue
-                hit = find(w, lambda n: n.get_name() == target and n.get_role_name() in ("push button", "button"))
+                hit = find(w, lambda n: n.get_name() == target and n.get_role_name() in ("push button", "button", "push button menu"))
                 if hit: break
             if hit:
                 try: res = hit.get_action_iface().do_action(0)
