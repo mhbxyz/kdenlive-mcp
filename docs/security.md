@@ -57,7 +57,7 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
   | Kdenlive autosave lock (`stalefiles/kdenlive/*.lock`, live pid) | projects with unsaved changes | unmodified projects |
   | Main window title over the session D-Bus (`busctl --user get-property org.kde.kdenlive-* /kdenlive/MainWindow_1 org.qtproject.Qt.QWidget windowTitle`) | any project currently shown, even unmodified (verified in Kdenlive 26.08.2) | the folder: the title has only the file name, so a project with the same name elsewhere is also refused |
 
-  The D-Bus query is **read-only** (`org.freedesktop.DBus.Properties.Get` on two properties; no Kdenlive method is ever called), runs with a 2 s timeout, and is the only child process that receives the session bus address. When a Kdenlive process runs but cannot be checked (no `busctl`, no session bus, more Kdenlive processes than windows on the bus), the write goes through with a warning asking the user to close or reload the project.
+  The D-Bus query is **read-only** (`org.freedesktop.DBus.Properties.Get` on two properties; no Kdenlive method is ever called) and runs with a 2 s timeout. It is the only child process given `DBUS_SESSION_BUS_ADDRESS`. Renders are explicitly cut off from the bus; melt and ffprobe receive `XDG_RUNTIME_DIR`, through which a D-Bus client could find the default session bus, but they are not D-Bus clients. Every running Kdenlive process must be matched, by pid, to a window with a readable title; when one cannot be checked (no `busctl`, no session bus, a busy or unknown window), the write goes through with a warning asking the user to close or reload the project. `create_project` with `overwrite` follows the same rule.
 
   Signals investigated and rejected: Kdenlive's recent-files and recent-folders entries are only written when Kdenlive exits; the per-project cache folder (`~/.cache/kdenlive/<documentid>`) is created when the project is closed and not touched when it is reopened; Kdenlive keeps no file descriptor on the project; `windowFilePath` is empty.
 
@@ -83,7 +83,8 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
   - basics: `HOME`, `PATH`, `USER`, `LANG`/`LC_*`, `TZ`, `TMPDIR`;
   - XDG directories;
   - plugin paths and library settings: `MLT_*`, `QT_*`, `KDE_*`, `FREI0R_PATH`, `LADSPA_PATH`, `LV2_PATH`, `LD_LIBRARY_PATH`, `LIBVA_*`, `VDPAU_*`, `MESA_*`, fontconfig;
-  - `KDENLIVE_MCP_*`.
+  - `KDENLIVE_MCP_*`;
+  - only for the read-only Kdenlive window check (#62): `DBUS_SESSION_BUS_ADDRESS`.
 
   Tokens and credentials of other tools in the server's environment are not inherited.
 - **Executable trust.** The programs found on `PATH` (or set via `KDENLIVE_MCP_*`) are trusted. Do not point these variables at untrusted files.

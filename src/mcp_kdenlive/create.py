@@ -28,7 +28,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, media, policy, project, safexml
+from mcp_kdenlive import kdenlive_doc, media, policy, presence, project, safexml
 from mcp_kdenlive.environment import locate
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, run
@@ -476,7 +476,7 @@ def create_project(
     media_path = Path(checked.path)
     if media_path.resolve() == out.resolve():
         raise ProjectError("invalid_output", "The output path is the media file.")
-    warnings = []
+    warnings = presence.check_not_open(out)
     if profile == "auto":
         if checked.probe is None or not checked.probe.ok:
             raise ProjectError(

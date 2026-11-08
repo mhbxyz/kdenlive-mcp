@@ -29,7 +29,6 @@ import os
 import re
 import secrets
 import shutil
-import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -63,14 +62,6 @@ class EditableProject:
     @property
     def root(self) -> ET.Element:
         return self.doc.root
-
-
-class KdenliveUsage(BaseModel):
-    open: bool | None = Field(
-        description="True if Kdenlive appears to have the file open; "
-        "None when it cannot be determined."
-    )
-    evidence: list[str]
 
 
 class SaveResult(BaseModel):
@@ -128,54 +119,9 @@ def verify_serialization(project: EditableProject, data: bytes) -> None:
 
 
 # ---------------------------------------------------------------- open detection -----
-def kdenlive_usage(path: Path) -> KdenliveUsage:
-    """Best-effort detection of a Kdenlive instance holding `path` (see presence.py).
-
-    `open` is True with evidence, False when every running Kdenlive could be checked (or none
-    runs), and None when a running Kdenlive could not be checked.
-    """
-    evidence: list[str] = []
-    target = str(path.resolve())
-    processes = presence.kdenlive_processes()
-    for pid, args in processes.items():
-        for arg in args:
-            with contextlib.suppress(OSError, ValueError):
-                if str(Path(arg).resolve()) == target:
-                    evidence.append(f"Kdenlive process {pid} was started with this file.")
-    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    stale = data_home / "stalefiles" / "kdenlive"
-    encoded = urllib.parse.quote(target, safe="")
-    if stale.is_dir():
-        for lock in stale.glob("*.lock"):
-            if encoded not in lock.name and encoded.replace("%2F", "%2f") not in lock.name:
-                continue
-            try:
-                pid = int(lock.read_text(errors="replace").split()[0])
-                os.kill(pid, 0)
-                evidence.append(f"Kdenlive (pid {pid}) holds an autosave of unsaved changes.")
-            except (OSError, ValueError, IndexError):
-                continue
-    shown = presence.windows()
-    for window in shown or []:
-        if window.project == path.stem:
-            evidence.append(
-                f"Kdenlive{f' (pid {window.pid})' if window.pid else ''} shows a project named "
-                f"{window.project!r} in its window"
-                + (" with unsaved changes" if window.modified else "")
-                + " (the title has no folder: it may be another file with the same name)."
-            )
-    if evidence:
-        return KdenliveUsage(open=True, evidence=evidence)
-    # No Kdenlive process at all (Flatpak ones included: /proc shows them) rules it out.
-    checked = not processes or (shown is not None and len(shown) >= len(processes))
-    return KdenliveUsage(open=False if checked else None, evidence=[])
-
-
-RUNNING_WARNING = (
-    "Kdenlive is running and it could not be checked whether it has {name} open. If it does, "
-    "close the project there without saving, or reload it (File > Revert), otherwise Kdenlive "
-    "will overwrite this change the next time it saves."
-)
+# Detection lives in presence.py; re-exported for callers and tests.
+KdenliveUsage = presence.KdenliveUsage
+kdenlive_usage = presence.kdenlive_usage
 
 
 # ---------------------------------------------------------------- path rebasing ------
@@ -301,20 +247,6 @@ def _check_destination(
     return dest
 
 
-def _check_not_open(dest: Path) -> list[str]:
-    """Refuse to replace a project Kdenlive shows; warn when that cannot be ruled out."""
-    if not dest.exists():
-        return []
-    usage = kdenlive_usage(dest)
-    if usage.open:
-        raise ProjectError(
-            "open_in_kdenlive",
-            f"{dest} appears to be open in Kdenlive: " + "; ".join(usage.evidence),
-            "Close it in Kdenlive (or save to another file) and retry.",
-        )
-    return [RUNNING_WARNING.format(name=dest.name)] if usage.open is None else []
-
-
 def save(
     project: EditableProject,
     destination: str,
@@ -323,7 +255,7 @@ def save(
     expected_sha256: str | None = None,
 ) -> SaveResult:
     dest = _check_destination(project, destination, overwrite, expected_sha256)
-    warnings = _check_not_open(dest)
+    warnings = presence.check_not_open(dest)
     source_usage = kdenlive_usage(project.path)
     if source_usage.open:
         warnings.append(
