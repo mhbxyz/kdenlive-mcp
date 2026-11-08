@@ -26,6 +26,7 @@ from mcp_kdenlive import (
     timeline_edit,
     writer,
 )
+from mcp_kdenlive import audio as audio_mod
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.errors import ProjectError
 
@@ -68,6 +69,7 @@ class EditResult(BaseModel):
     media: list[edits.MediaAdded] | None = None
     track: edits.TrackAdded | None = None
     timeline: timeline_edit.TimelineEditResult | None = None
+    audio: audio_mod.AudioEditResult | None = None
 
 
 Revision = Annotated[
@@ -513,14 +515,20 @@ def _register_editing(server: MCPServer) -> None:
         destination: str,
         overwrite: bool,
         expected_sha256: str | None,
-        operation: Callable[[writer.EditableProject], timeline_edit.TimelineEditResult],
+        operation: Callable[
+            [writer.EditableProject],
+            timeline_edit.TimelineEditResult | audio_mod.AudioEditResult,
+        ],
     ) -> EditResult:
+        """Open, apply one operation, save; the result goes in its EditResult field."""
         try:
             edit = writer.open_for_edit(path)
             result = operation(edit)
             saved = writer.save(
                 edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
             )
+            if isinstance(result, audio_mod.AudioEditResult):
+                return EditResult(saved=saved, audio=result)
             return EditResult(saved=saved, timeline=result)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
@@ -667,4 +675,64 @@ def _register_editing(server: MCPServer) -> None:
             overwrite,
             expected_sha256,
             lambda e: timeline_edit.remove_clip(e, clip, revision, sequence),
+        )
+
+    @server.tool(
+        name="set_clip_volume",
+        title="Set clip volume",
+        annotations=EDIT,
+        description=(
+            "Set a constant audio level in dB (-100 to +20; 0 = unchanged level) on a clip's "
+            "audio, with Kdenlive's Volume effect. For an audio/video pair, the audio clip is "
+            "changed. An existing constant level is replaced; an animated one is refused. "
+            "The result is written to `destination` with the save_project_copy rules."
+        ),
+    )
+    def set_clip_volume(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        level_db: Annotated[float, Field(ge=-100, le=20)],
+        destination: Destination,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _timeline_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: audio_mod.set_clip_volume(e, clip, revision, level_db, sequence),
+        )
+
+    @server.tool(
+        name="set_clip_fades",
+        title="Set clip audio fades",
+        annotations=EDIT,
+        description=(
+            "Set the audio fade-in and/or fade-out of a clip, in frames (omit to keep, 0 to "
+            "remove), with Kdenlive's Fade in / Fade out effects. Both must fit in the clip. "
+            "For an audio/video pair, the audio clip is changed. Fades stay at the clip's edges "
+            "when it is later trimmed or split. The result is written to `destination` with the "
+            "save_project_copy rules."
+        ),
+    )
+    def set_clip_fades(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        destination: Destination,
+        fade_in: Annotated[int, Field(ge=0)] | None = None,
+        fade_out: Annotated[int, Field(ge=0)] | None = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _timeline_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: audio_mod.set_clip_fades(e, clip, revision, fade_in, fade_out, sequence),
         )

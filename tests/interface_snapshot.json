@@ -212,6 +212,46 @@
   ],
   "read_only": false
  },
+ "set_clip_fades": {
+  "params": [
+   "clip",
+   "destination",
+   "expected_sha256",
+   "fade_in",
+   "fade_out",
+   "overwrite",
+   "path",
+   "revision",
+   "sequence"
+  ],
+  "required": [
+   "clip",
+   "destination",
+   "path",
+   "revision"
+  ],
+  "read_only": false
+ },
+ "set_clip_volume": {
+  "params": [
+   "clip",
+   "destination",
+   "expected_sha256",
+   "level_db",
+   "overwrite",
+   "path",
+   "revision",
+   "sequence"
+  ],
+  "required": [
+   "clip",
+   "destination",
+   "level_db",
+   "path",
+   "revision"
+  ],
+  "read_only": false
+ },
  "split_clip": {
   "params": [
    "at",
