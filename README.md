@@ -1,5 +1,7 @@
 # kdenlive-mcp
 
+<!-- mcp-name: io.github.mhbxyz/kdenlive-mcp -->
+
 Local-first, client-agnostic [MCP](https://modelcontextprotocol.io) server for
 [Kdenlive](https://kdenlive.org) on Linux.
 
@@ -17,7 +19,18 @@ messages go to stdout and diagnostics go to stderr.
 - Kdenlive, MLT (`melt`) and FFmpeg (`ffprobe`), installed separately from your distribution.
   The Python package does not install them.
 
-## Install from source
+## Install
+
+The PyPI distribution is **`mcp-kdenlive`** (not yet published). The PyPI name `kdenlive-mcp` belongs
+to an unrelated project, so `pipx install kdenlive-mcp` installs something else. Once released:
+
+```sh
+pipx install mcp-kdenlive
+```
+
+See [docs/packaging.md](docs/packaging.md) for virtual environments, upgrades and artifact checks.
+
+### From source
 
 ```sh
 git clone https://github.com/mhbxyz/kdenlive-mcp.git
