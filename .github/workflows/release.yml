@@ -116,7 +116,7 @@ jobs:
           pip="$RUNNER_TEMP/v/bin/pip"
           mkdir -p "$RUNNER_TEMP/dl"
           # TestPyPI can take minutes to list a new upload: wait up to 15 min with backoff (#82).
-          python scripts/wait_for_index.py --pip "$pip" --index https://test.pypi.org/simple/ \
+          python -I "$GITHUB_WORKSPACE/scripts/wait_for_index.py" --pip "$pip" --index https://test.pypi.org/simple/ \
             --dest "$RUNNER_TEMP/dl" --requirement "mcp-kdenlive==$VERSION" --max-wait 900
           # The file served by TestPyPI must be byte-identical to the one built in this run.
           (cd built/dist && sha256sum *.whl) > expected.sha256

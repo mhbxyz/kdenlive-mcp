@@ -62,7 +62,7 @@ def test_release_workflow_uses_it_and_allows_the_time():
 def test_main_exit_code(monkeypatch, ok, tmp_path):
     w = load()
     monkeypatch.setattr(w, "download", lambda *a: ok)
-    monkeypatch.setattr(w, "wait", lambda probe, max_wait, clock=None: probe())
+    monkeypatch.setattr(w, "wait", lambda probe, max_wait, clock=None, what="": probe())
     code = w.main(
         [
             "--pip",

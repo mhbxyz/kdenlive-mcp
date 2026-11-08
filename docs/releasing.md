@@ -23,7 +23,7 @@ tag vX.Y.Z[rcN] ─► build (once)
                    ├─ build provenance attestation (GitHub)
                    └─ upload artifact "dist" (+ sha256 list)
                  ─► testpypi        publish the same files (OIDC, environment testpypi)
-                 ─► verify-testpypi download from TestPyPI, check it's byte-identical to the build,
+                 ─► verify-testpypi download from TestPyPI (waits up to 15 min, #82), check it's byte-identical to the build,
                                     install with --no-deps, dependencies from PyPI only, smoke test
                  ─► pypi            final tags only: publish the same files (OIDC + PEP 740 attestations)
                  ─► mcp-registry    final tags only: Sigstore-verified mcp-publisher, validate, OIDC login,

@@ -17,7 +17,8 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
-FIRST, CAP = 10, 120
+FIRST_DELAY_S, MAX_DELAY_S = 10, 120
+ATTEMPT_TIMEOUT_S = 180  # one pip download; counted in the overall wait
 
 
 class Clock(Protocol):
@@ -25,41 +26,57 @@ class Clock(Protocol):
     def sleep(self, seconds: float) -> None: ...
 
 
-def wait(probe: Callable[[], bool], max_wait: float, clock: Clock | None = None) -> bool:
+def wait(
+    probe: Callable[[], bool], max_wait: float, clock: Clock | None = None, what: str = ""
+) -> bool:
     clock = clock or time
     start = clock.time()
-    interval = FIRST
+    interval = FIRST_DELAY_S
     while True:
         if probe():
-            print(f"visible on the index after {clock.time() - start:.0f} s", flush=True)
+            print(
+                f"{what} visible on the index after {clock.time() - start:.0f} s".strip(),
+                flush=True,
+            )
             return True
         remaining = max_wait - (clock.time() - start)
         if remaining <= 0:
-            print(f"not visible on the index after {clock.time() - start:.0f} s", flush=True)
+            print(
+                f"{what} not visible on the index after {clock.time() - start:.0f} s".strip(),
+                flush=True,
+            )
             return False
         print(f"not visible yet; next try in {min(interval, remaining):.0f} s", flush=True)
         clock.sleep(min(interval, remaining))
-        interval = min(interval * 2, CAP)
+        interval = min(interval * 2, MAX_DELAY_S)
 
 
 def download(pip: str, index: str, dest: str, requirement: str) -> bool:
-    done = subprocess.run(  # an argument list, no shell
-        [pip, "download", "--no-deps", "--only-binary", ":all:", "--index-url", index,
-         "-d", dest, requirement],
-        check=False,
-    )  # fmt: skip
+    try:
+        done = subprocess.run(  # an argument list, no shell
+            [pip, "download", "--no-deps", "--only-binary", ":all:", "--index-url", index,
+             "--timeout", "60", "-d", dest, requirement],
+            check=False,
+            timeout=ATTEMPT_TIMEOUT_S,
+        )  # fmt: skip
+    except subprocess.TimeoutExpired:
+        return False
     return done.returncode == 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser = argparse.ArgumentParser(description="Wait until a package index serves a release.")
     parser.add_argument("--pip", required=True)
     parser.add_argument("--index", required=True)
     parser.add_argument("--dest", required=True)
     parser.add_argument("--requirement", required=True)
     parser.add_argument("--max-wait", type=float, default=900)
     opts = parser.parse_args(argv)
-    found = wait(lambda: download(opts.pip, opts.index, opts.dest, opts.requirement), opts.max_wait)
+    found = wait(
+        lambda: download(opts.pip, opts.index, opts.dest, opts.requirement),
+        opts.max_wait,
+        what=f"{opts.requirement} on {opts.index}:",
+    )
     return 0 if found else 1
 
 
