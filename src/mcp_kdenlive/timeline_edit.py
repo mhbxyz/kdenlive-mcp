@@ -6,7 +6,7 @@ Conventions (see docs/tools.md):
   source ranges are inclusive ``source_in..source_out`` like MLT;
 * nothing ripples: neighbouring clips never move, and an operation that would overlap another
   clip fails with ``[overlap]`` (there is no overwrite mode);
-* clips are addressed by the ``ref`` returned by get_timeline (``track:layer:entry``) together
+* clips are addressed by the ``ref`` returned by get_timeline (``V1@90``) together
   with the file ``revision`` (its sha256), so stale references are rejected;
 * a clip grouped with its audio/video counterpart (Kdenlive ``AVSplit`` group) is moved, trimmed,
   split and removed together with it, like Kdenlive does by default;

@@ -91,7 +91,13 @@ Revision = Annotated[
         "ref comes from; the edit is refused if the file changed since."
     ),
 ]
-ClipRef = Annotated[str, Field(description="Clip ref 'track:layer:entry' from get_timeline.")]
+ClipRef = Annotated[
+    str,
+    Field(
+        description="Clip ref from get_timeline, '<track>@<start>' (e.g. 'V1@90'). It changes "
+        "when the clip moves: read the timeline again after an edit."
+    ),
+]
 Sequence = Annotated[
     str | None, Field(description="Sequence uuid or name; default: active sequence.")
 ]
