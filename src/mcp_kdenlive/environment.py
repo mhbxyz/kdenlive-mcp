@@ -127,7 +127,9 @@ class ToolReport(BaseModel):
     purpose: str
     path: str | None = Field(default=None, description="Resolved absolute path, when found.")
     source: str | None = Field(
-        default=None, description="'override' (environment variable) or 'path' (PATH lookup)."
+        default=None,
+        description="'override' (environment variable), 'path' (PATH lookup) or 'flatpak' "
+        "(launcher into the Flatpak org.kde.kdenlive).",
     )
     override_env: str = Field(description="Environment variable that overrides the location.")
     version: str | None = Field(default=None, description="Version reported by the program.")
@@ -329,8 +331,7 @@ def probe_tool(spec: ToolSpec, env: Mapping[str, str], timeout: float) -> ToolRe
 def work_dir(prefix: str, env: Mapping[str, str] | None = None) -> Path:
     """A private temporary folder (0700) in the server's cache, which a Flatpak Kdenlive can
     see (it cannot see /tmp). The caller removes it."""
-    base = flatpak.cache_dir(env) / "tmp"
-    base.mkdir(parents=True, exist_ok=True, mode=0o700)
+    base = flatpak.private_dir(flatpak.cache_dir(env) / "tmp", env)
     return Path(tempfile.mkdtemp(prefix=prefix, dir=base))
 
 
@@ -344,15 +345,21 @@ def temporary_dir(prefix: str, env: Mapping[str, str] | None = None) -> Iterator
         shutil.rmtree(path, ignore_errors=True)
 
 
-def check_visible(path: Path, program: str | None, what: str) -> None:
-    """Refuse a path that a Flatpak program (launcher) cannot see."""
-    if flatpak.is_wrapper(program) and flatpak.hidden(path):
+def check_visible(
+    path: Path, program: str | None, what: str, env: Mapping[str, str] | None = None
+) -> None:
+    """Refuse an absolute path that a Flatpak program (launcher) cannot see."""
+    if not path.is_absolute() or not flatpak.is_wrapper(program, env):
+        return
+    allowed = flatpak.permissions(env)
+    if flatpak.hidden(path, allowed):
         raise ProjectError(
             "invalid_path",
-            f"{what}: {path} is in a folder the Flatpak Kdenlive cannot see "
-            "(/tmp, /usr, /etc and other system folders are hidden from it).",
-            "Move it under your home folder (or another data folder), or install Kdenlive "
-            "from your distribution.",
+            f"{what}: {path} is in a folder the Flatpak Kdenlive cannot see (its filesystem "
+            f"permissions: {allowed or 'none'}; /tmp, /usr, /etc and /var are always hidden).",
+            "Move it under your home folder (or another data folder), grant access with "
+            "`flatpak override --user --filesystem=<folder> org.kde.kdenlive`, or install "
+            "Kdenlive from your distribution.",
         )
 
 

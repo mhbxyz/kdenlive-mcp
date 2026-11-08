@@ -69,17 +69,18 @@ class ProfileInfo(BaseModel):
 def profiles_dir(env: Mapping[str, str] | None = None) -> Path | None:
     environ = os.environ if env is None else env
     candidates = []
+    melt = locate("melt", environ)
+    if melt and flatpak.is_wrapper(melt, environ) and (app_files := flatpak.files_dir(environ)):
+        # melt runs inside the Flatpak: its own profiles, not the host's MLT_PROFILES_PATH.
+        candidates.append(app_files / "share" / "mlt-7" / "profiles")
     if environ.get("MLT_PROFILES_PATH"):
         candidates.append(Path(environ["MLT_PROFILES_PATH"]))
-    melt = locate("melt", environ)
     if melt:
         prefix = Path(melt).resolve().parent.parent
         candidates += [
             prefix / "share" / "mlt-7" / "profiles",
             prefix / "share" / "mlt" / "profiles",
         ]
-    if melt and flatpak.is_wrapper(melt) and (app_files := flatpak.files_dir(environ)):
-        candidates.append(app_files / "share" / "mlt-7" / "profiles")  # melt inside the Flatpak
     candidates += [Path("/usr/share/mlt-7/profiles"), Path("/usr/share/mlt/profiles")]
     return next((c for c in candidates if c.is_dir()), None)
 
@@ -185,8 +186,8 @@ def melt_producer(path: Path, profile: str, env: Mapping[str, str] | None = None
             "melt (MLT) is not available.",
             "Run diagnose_environment, or set KDENLIVE_MCP_MELT.",
         )
-    check_visible(path, melt, "Reading media")
-    check_visible(Path(profile), melt, "MLT profile")
+    check_visible(path, melt, "Reading media", env)
+    check_visible(Path(profile), melt, "MLT profile", env)  # only checked when it is a file
     with temporary_dir("kdenlive-mcp-melt-", env) as tmp:
         out = tmp / "probe.mlt"
         # "avformat:<path>" stops melt from parsing '=' or a leading '-' in file names.

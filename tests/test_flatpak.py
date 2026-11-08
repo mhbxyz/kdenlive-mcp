@@ -13,6 +13,7 @@ Here `flatpak` is a stub that records its arguments; nothing is installed.
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -186,8 +187,9 @@ def test_restricted_filesystem_permissions(tmp_path):
     home = Path.home()
     assert flatpak.hidden(home / "Videos" / "a.mp4", permissions="home") is False
     assert flatpak.hidden(Path("/mnt/data/a.mp4"), permissions="home") is True
-    assert flatpak.hidden(home / "Videos" / "a.mp4", permissions="xdg-videos") is False
-    assert flatpak.hidden(home / "Music" / "a.mp4", permissions="xdg-videos") is True
+    videos, music = flatpak._xdg_dir("VIDEOS", home), flatpak._xdg_dir("MUSIC", home)
+    assert flatpak.hidden(videos / "a.mp4", permissions="xdg-videos") is False
+    assert flatpak.hidden(music / "a.mp4", permissions="xdg-videos") is True
     assert flatpak.hidden(Path("/srv/clips/a.mp4"), permissions="/srv/clips") is False
     assert flatpak.hidden(Path("/mnt/data/a.mp4"), permissions="") is True
 
@@ -205,7 +207,7 @@ def test_launcher_survives_odd_paths_and_concurrent_writers(fp, tmp_path, monkey
     with ThreadPoolExecutor(8) as pool:
         paths = list(pool.map(lambda _: flatpak.wrapper("melt", env), range(32)))
     assert len(set(paths)) == 1
-    out = subprocess.run(  # noqa: S603
+    out = subprocess.run(
         [paths[0], "a b"], env=dict(env), capture_output=True, text=True, check=True
     ).stdout
     assert out.startswith("odd-flatpak run --user --command=melt")
@@ -214,11 +216,11 @@ def test_launcher_survives_odd_paths_and_concurrent_writers(fp, tmp_path, monkey
 
 
 def test_host_mlt_variables_do_not_enter_the_sandbox(fp, tmp_path):
-    env, record = fp
+    env, _ = fp
     import subprocess
 
     melt = environment.locate("melt", env) or ""
-    subprocess.run([melt, "x"], env=dict(env, MLT_PROFILES_PATH="/host/profiles"), check=True)  # noqa: S603
+    subprocess.run([melt, "x"], env=dict(env, MLT_PROFILES_PATH="/host/profiles"), check=True)
     text = (tmp_path / "flatpak.args").read_text()
     assert "MLT_PROFILES_PATH" not in text  # the stub records TMPDIR only; see wrapper below
     assert "unset" in Path(melt).read_text() and "MLT_" in Path(melt).read_text()
@@ -254,3 +256,45 @@ def test_app_profiles_and_presets_are_used(fp, tmp_path, monkeypatch):
 def test_profile_names_are_not_checked_as_paths(fp, tmp_path, monkeypatch):
     monkeypatch.chdir("/")
     environment.check_visible(Path("atsc_1080p_25"), environment.locate("melt", fp[0]), "x")
+
+
+# ------------------------------------------------------------------ real Flatpak -------
+@pytest.mark.integration
+def test_real_flatpak_kdenlive(tmp_path, monkeypatch):
+    """With the Flathub app installed for the user (skipped otherwise): detection, a project
+    created and rendered by both engines, from a folder the sandbox can see."""
+    import uuid
+
+    real_home = Path.home()
+    monkeypatch.delenv("KDENLIVE_MCP_FLATPAK", raising=False)
+    monkeypatch.setenv("HOME", str(real_home))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")  # flatpak run needs it
+    if flatpak.installation() is None:
+        pytest.skip("no Flatpak org.kde.kdenlive installed")
+    from mcp_kdenlive import create, render
+
+    work = real_home / ".cache" / f"kdenlive-mcp-test-{uuid.uuid4().hex[:8]}"
+    try:
+        shutil.copytree(FIX / "kd26" / "media", work / "media")
+        monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+        monkeypatch.setenv("XDG_CACHE_HOME", str(work / "cache"))
+        monkeypatch.setenv("KDENLIVE_MCP_ALLOWED_ROOTS", str(work))
+        report = environment.diagnose()
+        assert {t.source for t in report.tools} == {"flatpak"}
+        assert all(t.status.value == "available" for t in report.tools)
+        created = create.create_project(
+            str(work / "p.kdenlive"), str(work / "media" / "ntsc.mp4"), "atsc_720p_2997"
+        )
+        assert created.clip_duration_frames == 60
+        for engine in ("kdenlive", "melt"):
+            plan = render.prepare(
+                str(work / "p.kdenlive"), str(work / f"{engine}.mp4"), engine=engine
+            )
+            result = render.render(plan, timeout=300)
+            assert result.state is render.RenderState.SUCCEEDED, (engine, result.log_tail)
+        with pytest.raises(ProjectError) as err:
+            render.prepare(str(FIX / "kd26" / "kd26-ntsc.kdenlive"), str(work / "x.mp4"))
+        assert err.value.code in {"invalid_path", "path_not_allowed"}
+    finally:
+        shutil.rmtree(work, ignore_errors=True)

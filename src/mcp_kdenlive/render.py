@@ -86,12 +86,18 @@ def preset_files(env: Mapping[str, str] | None = None) -> list[tuple[Path, bool]
     environ = dict(os.environ if env is None else env)
     data_home, data_dirs = _data_dirs(environ)
     files: list[tuple[Path, bool]] = []
-    candidates = [data_home / "kdenlive" / "export" / "profiles.xml"]
-    candidates += [d / "kdenlive" / "export" / "profiles.xml" for d in data_dirs]
     exe = locate("kdenlive", environ)
-    if exe and flatpak.is_wrapper(exe) and (app_files := flatpak.files_dir(environ)):
-        candidates.append(app_files / "share" / "kdenlive" / "export" / "profiles.xml")
-    elif exe:  # relocatable installs (AppImage, /opt): <prefix>/bin/kdenlive -> <prefix>/share
+    candidates = []
+    if exe and flatpak.is_wrapper(exe, environ):
+        # The Flatpak reads its own presets and keeps user presets in ~/.var/app/<id>/data.
+        app_files = flatpak.files_dir(environ)
+        if app_files:
+            candidates.append(app_files / "share" / "kdenlive" / "export" / "profiles.xml")
+        data_home = flatpak.app_data_dir(environ)
+    candidates.append(data_home / "kdenlive" / "export" / "profiles.xml")
+    candidates += [d / "kdenlive" / "export" / "profiles.xml" for d in data_dirs]
+    if exe and not flatpak.is_wrapper(exe, environ):
+        # relocatable installs (AppImage, /opt): <prefix>/bin/kdenlive -> <prefix>/share
         candidates.append(
             Path(exe).resolve().parent.parent / "share" / "kdenlive" / "export" / "profiles.xml"
         )
@@ -461,6 +467,29 @@ def _choose_engine(
     return engine
 
 
+def _check_sandbox_paths(
+    doc: kdenlive_doc.KdenliveDocument,
+    out: Path,
+    report: media.MediaReport,
+    engine: str,
+    kdenlive_exe: str | None,
+    melt_exe: str | None,
+    environ: Mapping[str, str],
+) -> None:
+    """Every program that touches the files must see them (#65): the render engine, and
+    ffprobe for the validation of the output; each may come from the host or a Flatpak."""
+    programs = [kdenlive_exe if engine == "kdenlive" else melt_exe, locate("ffprobe", environ)]
+    for program in programs:
+        check_visible(doc.path, program, "Rendering a project", environ)
+        check_visible(out.parent, program, "Render output", environ)
+        for item in report.items:
+            if item.resolved_path and item.status is media.MediaStatus.OK:
+                check_visible(Path(item.resolved_path), program, "Rendering reads media", environ)
+        for asset in report.asset_files:
+            if asset.resolved_path:
+                check_visible(Path(asset.resolved_path), program, "Rendering reads", environ)
+
+
 def prepare(
     project_path: str,
     output: str,
@@ -526,12 +555,7 @@ def prepare(
         )
     summary = project.summarize(doc)
     active = next((s for s in summary.sequences if s.active), None)
-    program = kdenlive_exe if engine == "kdenlive" else melt_exe
-    check_visible(doc.path, program, "Rendering a project")
-    check_visible(out.parent, program, "Render output")
-    for item in report.items:
-        if item.resolved_path and item.status is media.MediaStatus.OK:
-            check_visible(Path(item.resolved_path), program, "Rendering reads media")
+    _check_sandbox_paths(doc, out, report, engine, kdenlive_exe, melt_exe, environ)
     temp = out.with_name(f".{out.name}.kdenlive-mcp-{uuid.uuid4().hex[:8]}.partial{out.suffix}")
     consumer: list[str] = []
     if engine == "melt":
