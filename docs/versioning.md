@@ -21,6 +21,36 @@ Examples:
 - adding a `lock` option to `add_track` → `0.2.0`;
 - fixing a wrong duration in `get_timeline` → `0.1.1`.
 
+## Path to 1.0
+
+1.0 is a stability promise: from 1.0 on, a breaking change to a public interface needs a new
+major version. It is released when **all** of these hold (#64, owner decisions of 2026-11-08):
+
+1. **Scope:** every issue of milestones M6 (v0.2), M7 (v0.3) and M8 (v1.0) is closed. This
+   includes titles (#15) and subtitles (#16). Issues in *M9 – After 1.0* are additive and ship as
+   minor versions after 1.0.
+2. **Interface:** the tool interface review (#63) is done for every tool, including the tools
+   added in M7. Breaking changes it finds are made before 1.0.
+3. **Compatibility:** Kdenlive from 23.08 to the latest release is **tested** for reading,
+   editing and rendering (through melt where `kdenlive --render` is missing, #42), both as
+   distribution packages and as a Flatpak (#65), with fixtures from 24.x and 25.x (#66).
+4. **Manual verifications:** every pending Kdenlive GUI checklist is done (#67).
+5. **No open bug** in M6, M7 or M8.
+6. **Release candidate and feedback period** (#68):
+   - `1.0.0rc1` is published with the normal release workflow and announced as a pre-release;
+   - it is used for **at least 14 days**, on **at least 5 real projects** (copies), edited and
+     rendered through at least one tested MCP client; projects and findings are logged in #68;
+   - a breaking change or a serious bug found during the period means a fix, `1.0.0rc(N+1)`, and a
+     new period of **at least 7 days**;
+   - if a new Kdenlive feature release comes out during the period (KDE Gear ships them in April,
+     August and December), it is tested before 1.0;
+   - 14 days is long enough for several real editing sessions and usually one Kdenlive patch
+     release, and short enough to keep momentum.
+
+Defaults that are breaking to change later are settled before 1.0. The first one is the
+filesystem restriction: without configuration, tools only reach the user's videos directory
+(#60, 0.2.0).
+
 ## Public interfaces
 
 These are covered by the policy:
