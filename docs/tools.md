@@ -498,10 +498,14 @@ after    V1  [ A ............ ]                          layer 0, extended by `a
 - **Format:** Kdenlive 26.08.2's own: the second clip moves to the track's other layer, and a
   transition inside the track tractor with `kdenlive:mixcut` records where the original cut is.
   `get_timeline` reports it in the track's `mixes`.
-- **Refused:** a clip that already ends in a mix (use `remove_mix` first), a next clip that is
-  already in another mix (chains are not supported yet), or that has animated effects (their
-  keyframes would shift), and grouped clips whose next clips are not grouped together
-  (`[unsupported_structure]`). Nothing is written when a check fails.
+- **Chains:** crossfades can follow each other (A→B→C), as in Kdenlive: clips alternate between
+  the two layers, and a next clip already on the other layer stays there even if it ends in the
+  following crossfade. Clips after the crossfade never move.
+- **Refused:** a clip that already ends in a mix (use `remove_mix` first), a next clip on the
+  same layer that is already in another mix (it would have to cross to the layer of its other
+  partner), a next clip with animated effects (their keyframes would shift), and grouped clips
+  whose next clips are not grouped together (`[unsupported_structure]`). Nothing is written when
+  a check fails.
 - **Edge fades** (audio and black fades) stay at both clips' edges.
 - `remove_mix` removes the mix at the end of `clip` and puts both clips back to the cut; a track of
   the group without a mix (e.g. a video-only mix made in Kdenlive) is left as it is.

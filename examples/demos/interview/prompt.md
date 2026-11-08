@@ -14,9 +14,11 @@
 > - the transcript as subtitles;
 > - make both voices about as loud as each other;
 > - guides at the question, the answer and each cutaway.
->
-> Then I moved the media folder to `WORKDIR/archive/2026/media` — fix the project, render it to
+
+Then the media folder is moved to an archive disk (`run_demo.py` does it itself between the edit
+and the render), and the assistant is told:
+
+> I moved the media folder to `WORKDIR/archive/2026/media`. Fix the project, render it to
 > `WORKDIR/interview.mp4` and tell me what you checked.
 
-(`run_demo.py` moves the folder itself between the edit and the render.) The server must be
-allowed to read and write `WORKDIR`.
+The server must be allowed to read and write `WORKDIR`.

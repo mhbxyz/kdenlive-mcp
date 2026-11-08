@@ -13,6 +13,8 @@ migration notes in the same entry.
 
 ### Added
 
+- **Demos (#92):** `examples/demos/` holds four end-to-end scenarios (travel vlog, interview, rescue of a Kdenlive-made project, vertical short), each with a README, the prompt for an assistant, a media generator, a deterministic MCP client script with render checks (also run as e2e tests) and, in `RESULTS.md`, runs by a real client.
+
 - **Subtitles (#16):** `list_subtitles` reads a sequence's subtitles (file, styles, events with frames, layers and text). `import_subtitles` imports a SubRip or WebVTT file (UTF-8, or UTF-16 with a BOM) as the main sequence's subtitles in Kdenlive's own format: an ASS file named after the saved project, written with it (`saved.side_files`). Overlapping cues go to separate layers; existing subtitles are only replaced with `replace=true`, and their file is never modified. New error code `subtitles_exist`. `EditResult` gains `subtitles`; `SaveResult` gains `side_files`.
 
 - **Titles (#15):** `add_title` creates an editable Kdenlive title clip (text with Unicode and several lines, font checked with fontconfig, size, colour, outline, italic, preset or pixel position, duration) and places it on a video track. `EditResult` gains `title`. `insert_clip` accepts title clips from the bin, which the timeline plays from the bin producer like Kdenlive.
@@ -24,6 +26,10 @@ migration notes in the same entry.
 - **melt render engine (#42):** `render_project` and `start_render` take `engine` (`auto`, `kdenlive`, `melt`). `auto` renders with MLT's melt when Kdenlive has no `--render` (before 24.02, e.g. Ubuntu 24.04's 23.08) or when the project has subtitles (Kdenlive 26.08.2 crashes on them), using the preset's arguments filled with its defaults. Results report the `engine`; melt renders carry a warning that they are not Kdenlive's own render path.
 
 ### Fixed
+
+- **Crossfades moved later clips (found by the demos, #92):** `add_mix` extended the left clip before taking the right one off its layer, which pushed every later clip of that layer by the crossfade's second half.
+- **Crossfade into a clip already on the other layer:** in Kdenlive's own layout (clips alternating between the two layers), a crossfade into a clip that also ends in the next crossfade was refused; it is now made without moving the clip. Chains A→B→C work.
+- **Titles rendered thin by melt:** titles are written with Qt 6's font weight (`400` = normal) instead of Qt 5's `50`, which melt 7.42 drew as *Thin* (Kdenlive's own render was fine). MLT 7.22 draws both the same.
 
 - **melt engine without a display (#90):** with MLT 7.22 (Ubuntu 24.04), titles rendered as MLT's *INVALID* placeholder and video tracks were not composited, yet the render succeeded: MLT's Qt module needs an X display there. The melt engine now passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` (Qt still draws offscreen) and fails with an explanation (display, `xvfb-run`, newer MLT) when the module cannot load.
 

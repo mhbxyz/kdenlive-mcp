@@ -92,6 +92,8 @@ def test_title_in_kdenlive_format(s):
     assert content is not None and content.text == "Bonjour"
     assert content.get("font") == "Noto Sans"
     assert content.get("font-color") == "255,255,255,255"
+    # Qt 6 weight scale (400 = normal): melt 7.42 draws Kdenlive's legacy "50" as Thin (#92)
+    assert content.get("font-weight") == "400"
     assert doc.find("background").get("color") == "0,0,0,0"  # transparent over the footage
     v2 = next(t for t in s.timeline().tracks if t.label == "V2")
     assert [(c.start, c.end, c.bin_id) for c in v2.clips] == [(30, 120, r.bin_id)]
