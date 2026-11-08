@@ -11,6 +11,10 @@ migration notes in the same entry.
 
 - **Path to 1.0:** release criteria, release candidate procedure and feedback period (`docs/versioning.md`, `docs/releasing.md`, #64).
 
+### Development
+
+- **Tests:** an end-to-end level (`tests/e2e`, real server over stdio, renders checked objectively) and line and branch coverage with a floor in CI (#70).
+
 ## [0.1.0] - 2026-11-08
 
 First public release.
