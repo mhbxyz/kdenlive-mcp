@@ -480,6 +480,10 @@ def prepare(
     kdenlive_exe = locate("kdenlive", environ)
     melt_exe = locate("melt", environ)
     has_cli = kdenlive_exe is not None and supports_cli_render(kdenlive_exe, environ)
+    report = media.media_report(doc, max_items=media.MAX_ITEMS_LIMIT)
+    warnings: list[str] = []
+    subtitles = any(a.service == "avfilter.subtitles" for a in report.asset_files)
+    engine = _choose_engine(engine, kdenlive_exe, melt_exe, has_cli, subtitles, warnings)
     presets = {p.name: p for p in list_presets(environ).presets}
     chosen = presets.get(preset)
     if chosen is None:
@@ -490,7 +494,6 @@ def prepare(
             f"Similar presets: {close}" if close else "Call list_render_presets for valid names.",
         )
     out = _check_output(output, doc.path, overwrite=overwrite)
-    report = media.media_report(doc, max_items=media.MAX_ITEMS_LIMIT)
     media_paths = {i.resolved_path for i in report.items if i.resolved_path}
     if str(out) in media_paths or str(out.resolve()) in media_paths:
         raise ProjectError("invalid_output", "The output path is a media file used by the project.")
@@ -505,9 +508,6 @@ def prepare(
     for item in report.items:
         if item.resolved_path and item.status is media.MediaStatus.OK:
             policy.check_allowed(Path(item.resolved_path), "Rendering reads media")
-    warnings: list[str] = []
-    subtitles = any(a.service == "avfilter.subtitles" for a in report.asset_files)
-    engine = _choose_engine(engine, kdenlive_exe, melt_exe, has_cli, subtitles, warnings)
     if report.missing:
         message = f"{len(report.missing)} media or asset file(s) are missing: {report.missing[:10]}"
         if not allow_missing_media:
