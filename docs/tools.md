@@ -15,6 +15,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 | `save_project_copy` | no (writes a file) | Verified copy of a project; the base of every editing tool |
 | `add_media_to_bin` | no (writes a file) | Add audio/video files to the bin |
 | `add_track` | no (writes a file) | Add a named audio or video track |
+| `insert_clip` / `move_clip` / `trim_clip` / `split_clip` / `remove_clip` | no (writes a file) | Frame-accurate timeline edits |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 | `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
@@ -294,3 +295,41 @@ After Kdenlive's save, these were identical:
 
 - **Track positions:** other positions (a track between existing ones) are not supported yet.
 - **Track properties:** track locking, muting and hiding are not set by these tools.
+
+## Timeline edits: `insert_clip`, `move_clip`, `trim_clip`, `split_clip`, `remove_clip`
+
+| Tool | Effect |
+|---|---|
+| `insert_clip(bin_id, track, start, source_in=0, source_out=None, audio_track="A1")` | Places a bin clip at `start`. An audio+video clip on a video track also gets its audio on `audio_track` (pass `null` for video only), grouped like Kdenlive. |
+| `move_clip(clip, revision, start, track=None)` | Moves a clip, optionally to another track of the same kind. |
+| `trim_clip(clip, revision, start=None, end=None)` | New timeline bounds `[start, end)`; the source in/out follow, like resizing in Kdenlive. |
+| `split_clip(clip, revision, at)` | Razor cut at timeline frame `at` (`start < at < end`). |
+| `remove_clip(clip, revision)` | Removes the clip and leaves a gap. The bin clip stays. |
+
+### Rules
+
+- **Units and references:** frames at the project rate; timeline `[start, end)`, source in/out inclusive. Clips are referenced by `ref` (`track:layer:entry`) from `get_timeline`, together with `revision`, the `file.sha256` returned by that same call. If the file changed since, the edit is refused (`[stale_revision]`), because refs could point at another clip.
+- **No ripple, no overwrite:** neighbours never move, and any overlap is refused (`[overlap]`). Trimming and extending are limited by the source length.
+- **Groups:** a clip in a Kdenlive audio/video group (`AVSplit`) is moved, trimmed, split and removed together with its counterpart, as Kdenlive does by default. Groups are updated (a split creates a group for the new right halves).
+- **Kdenlive's layout:** like Kdenlive 26.08, each clip instance on the timeline gets its own `<chain>`, a copy of the bin clip. On AV media, `set.test_audio` or `set.test_image` disables the unused half.
+
+### Refused (`[unsupported_structure]`)
+
+- tracks that contain same-track mixes;
+- groups other than audio/video pairs;
+- splitting, or trimming the start of, a clip whose effects are animated (keyframes would shift).
+
+### Verification
+
+`research/lab/verify_roundtrip.py` checked a montage built on a 29.97 fps Kdenlive 26.08.2
+project in five steps:
+
+1. insert an AV clip;
+2. insert a sub-range of a WAV with a gap;
+3. split the first clip;
+4. move the right half (its audio followed);
+5. trim and remove.
+
+The step files after the split, the move and the final removal open in Kdenlive 26.08.2 without
+dialogs. After Kdenlive's save, these are identical: tracks, clips, bin media, internal
+transitions and **groups**. melt renders the result (180 frames).
