@@ -7,9 +7,9 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
-## [0.1.0rc1] - 2026-11-08
+## [0.1.0] - 2026-11-08
 
-Release candidate for 0.1.0, published to TestPyPI only to rehearse the release pipeline.
+First public release.
 
 ### Added
 
@@ -25,8 +25,14 @@ Release candidate for 0.1.0, published to TestPyPI only to rehearse the release 
   - timeline edits `insert_clip`, `move_clip`, `trim_clip`, `split_clip`, `remove_clip`.
 - **Security:** `KDENLIVE_MCP_ALLOWED_ROOTS`, an allow-listed child environment, and refusal of remote media and symlinked write targets.
 
+- **Since 0.1.0rc1:** `mcp-kdenlive` command alias (so `uvx mcp-kdenlive` works), publication to the official MCP Registry, user guide.
+
 ### Known limitations
 
 - **Interactive editing in Kdenlive:** checked manually only (checklists in #8, #10, #11). Automated checks cover *open → save → compare* in Kdenlive 26.08.2.
 - **Rendering on Kdenlive 23.08:** `kdenlive --render` is unavailable there (#42).
 - **Rendering with subtitles:** Kdenlive 26.08.2 crashes when rendering projects with subtitles (#16).
+
+## [0.1.0rc1] - 2026-11-08
+
+Release candidate for 0.1.0, published to TestPyPI only to rehearse the release pipeline.
