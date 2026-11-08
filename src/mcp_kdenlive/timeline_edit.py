@@ -1075,7 +1075,8 @@ def add_mix(
     placements = []
     for t, left, right, before, after in plan:
         cut = left.end
-        tl.set_bounds(t, left, left.start, left.end + after)
+        # Take the right clip off its layer first: extending the left clip while the right one
+        # is still next to it would push every later clip of the layer (#92).
         current = next(c for c in tl.clips(t) if c.element is right.element)
         new_layer = 1 - left.layer
         tl._rebuild(
@@ -1083,6 +1084,8 @@ def add_mix(
             [(s, e) for s, e in tl.placed(t, current.layer) if e is not right.element],
             current.layer,
         )
+        left = next(c for c in tl.clips(t) if c.element is left.element)
+        tl.set_bounds(t, left, left.start, left.end + after)
         source_in, _ = tl._entry_bounds(right.element)
         right.element.set("in", frames_to_clock(source_in - before, tl.doc.rate))
         tl._rebuild(t, [*tl.placed(t, new_layer), (cut - before, right.element)], new_layer)

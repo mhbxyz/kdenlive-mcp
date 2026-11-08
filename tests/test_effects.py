@@ -270,3 +270,22 @@ def test_catalog_describes_the_crossfade_and_versions():
     assert (mix.id, mix.tools, mix.min_frames) == ("crossfade", ["add_mix", "remove_mix"], 2)
     assert mix.targets == ["video", "audio"]
     assert "MLT 7.42.0" in catalog.effects[0].verified_with
+
+
+def test_crossfades_do_not_move_the_clips_after_them_and_can_chain(s):
+    """Found by the vertical-short demo (#92): extending the left clip pushed later clips."""
+    s.apply(te.trim_clip, "V1@0", s.rev(), end=40)  # A [0,40) src 0..39
+    s.apply(te.insert_clip, "4", "V1", 40, 10, 49)  # B [40,80) src 10..49
+    s.apply(te.insert_clip, "4", "V1", 80, 10, 49)  # C [80,120) src 10..49
+    s.apply(te.add_mix, "V1@0", s.rev(), 10)
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(c.start, c.end, c.layer) for c in v1.clips] == [(0, 45, 0), (35, 80, 1), (80, 120, 0)]
+    s.apply(te.add_mix, "V1@35", s.rev(), 10)  # B (layer 1) into C (back to layer 0)
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(c.start, c.end, c.layer) for c in v1.clips] == [(0, 45, 0), (35, 85, 1), (75, 120, 0)]
+    assert [(m.start, m.end, m.cut) for m in v1.mixes] == [(35, 45, 40), (75, 85, 80)]
+    s.apply(te.remove_mix, "V1@35", s.rev())
+    s.apply(te.remove_mix, "V1@0", s.rev())
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(c.start, c.end) for c in v1.clips] == [(0, 40), (40, 80), (80, 120)]
+    assert v1.mixes == []
