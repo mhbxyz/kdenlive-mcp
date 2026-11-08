@@ -63,9 +63,12 @@ Programs are looked up on `PATH`. Override their location with these environment
 | `KDENLIVE_MCP_PROBE_TIMEOUT` | Seconds allowed for each version probe (default 10) |
 | `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated absolute directories; every read and write must stay inside them. **Unset: only your videos directory** (`XDG_VIDEOS_DIR`, usually `~/Videos`). `unrestricted` lifts the limit (not recommended). See [docs/security.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/security.md) |
 | `KDENLIVE_MCP_MAX_RENDERS` | Concurrent background renders (default 1, max 4) |
+| `KDENLIVE_MCP_FLATPAK` | `off` disables the detection of a Flatpak Kdenlive |
 
-Flatpak and Snap builds of Kdenlive do not expose `kdenlive`, `melt` or `ffprobe` on `PATH`.
-Point the variables above to executables or wrapper scripts.
+A Flathub (Flatpak) Kdenlive is detected automatically when Kdenlive is not on `PATH`; keep
+projects, media and outputs under your home folder, which the sandbox can see
+(`KDENLIVE_MCP_FLATPAK=off` disables this). Snap builds do not expose `kdenlive`, `melt` or
+`ffprobe` on `PATH`: point the variables above to executables or wrapper scripts.
 
 ## Start the server
 

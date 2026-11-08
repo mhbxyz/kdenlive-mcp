@@ -36,6 +36,8 @@ DISABLE_ENV = "KDENLIVE_MCP_FLATPAK"  # "off" disables Flatpak detection
 WRAPPER = """#!/bin/sh
 # Written by kdenlive-mcp (#65): runs {tool} from the Flatpak {app} ({where} installation).
 # Arguments are passed through unchanged. Private folders are forwarded only for isolated renders.
+# flatpak finds its helper (bwrap) on PATH: make sure the usual folders are there.
+PATH="${{PATH:+$PATH:}}{flatpak_dir}:/usr/bin:/bin"; export PATH
 if [ "${{KDENLIVE_MCP_PRIVATE_DIRS:-}}" = 1 ]; then
   exec {flatpak} run --{where} --command={tool} --env=TMPDIR="$TMPDIR" \\
     --env=XDG_CONFIG_HOME="$XDG_CONFIG_HOME" --env=XDG_CACHE_HOME="$XDG_CACHE_HOME" \\
@@ -68,6 +70,21 @@ def installation(env: Mapping[str, str] | None = None) -> str | None:
     return None
 
 
+def files_dir(env: Mapping[str, str] | None = None) -> Path | None:
+    """The app's /app folder as seen from the host (MLT profiles, render presets)."""
+    source = os.environ if env is None else env
+    where = installation(source)
+    if where == "user":
+        data_home = Path(source.get("XDG_DATA_HOME") or _home(source) / ".local" / "share")
+        base = data_home / "flatpak"
+    elif where == "system":
+        base = Path("/var/lib/flatpak")
+    else:
+        return None
+    path = base / "app" / APP / "current" / "active" / "files"
+    return path if path.is_dir() else None
+
+
 def wrapper(tool: str, env: Mapping[str, str] | None = None) -> str | None:
     """Path of the launcher for `tool` inside the Flatpak, written if needed; None if absent."""
     where = installation(env)
@@ -76,7 +93,9 @@ def wrapper(tool: str, env: Mapping[str, str] | None = None) -> str | None:
     directory = cache_dir(env) / "flatpak-bin"
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = directory / tool
-    text = WRAPPER.format(tool=tool, app=APP, where=where, flatpak=FLATPAK)
+    text = WRAPPER.format(
+        tool=tool, app=APP, where=where, flatpak=FLATPAK, flatpak_dir=Path(FLATPAK).parent
+    )
     if not path.is_file() or path.read_text(encoding="utf-8") != text:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(text, encoding="utf-8")

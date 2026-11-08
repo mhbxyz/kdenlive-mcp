@@ -27,7 +27,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, media, policy, presence, project, safexml
+from mcp_kdenlive import flatpak, kdenlive_doc, media, policy, presence, project, safexml
 from mcp_kdenlive.environment import check_visible, locate, temporary_dir
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, run
@@ -78,6 +78,8 @@ def profiles_dir(env: Mapping[str, str] | None = None) -> Path | None:
             prefix / "share" / "mlt-7" / "profiles",
             prefix / "share" / "mlt" / "profiles",
         ]
+    if melt and flatpak.is_wrapper(melt) and (app_files := flatpak.files_dir(environ)):
+        candidates.append(app_files / "share" / "mlt-7" / "profiles")  # melt inside the Flatpak
     candidates += [Path("/usr/share/mlt-7/profiles"), Path("/usr/share/mlt/profiles")]
     return next((c for c in candidates if c.is_dir()), None)
 

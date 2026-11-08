@@ -107,6 +107,7 @@ def test_render_refuses_a_project_the_sandbox_cannot_see(fp, tmp_path, monkeypat
     monkeypatch.setenv("XDG_DATA_DIRS", str(tmp_path / "sys"))
     monkeypatch.setattr(flatpak, "HIDDEN", (str(tmp_path / "p"),))  # pretend it is /tmp
     shutil.copytree(FIX / "kd26", tmp_path / "p")
+    (tmp_path / "out").mkdir()
     from mcp_kdenlive import render
 
     monkeypatch.setattr(render, "supports_cli_render", lambda *_a, **_k: True)

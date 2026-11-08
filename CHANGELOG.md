@@ -9,9 +9,13 @@ migration notes in the same entry.
 
 ### Added
 
+- **Flatpak Kdenlive (#65):** when Kdenlive is not on `PATH`, a Flathub installation (`org.kde.kdenlive`, user or system) is detected and used, with its own melt and FFmpeg, MLT profiles and render presets. Paths the sandbox cannot see (`/tmp`, system folders) are refused with `[invalid_path]`. `KDENLIVE_MCP_FLATPAK=off` disables it. Tested with Flathub's 26.08.3.
+
 - **melt render engine (#42):** `render_project` and `start_render` take `engine` (`auto`, `kdenlive`, `melt`). `auto` renders with MLT's melt when Kdenlive has no `--render` (before 24.02, e.g. Ubuntu 24.04's 23.08) or when the project has subtitles (Kdenlive 26.08.2 crashes on them), using the preset's arguments filled with its defaults. Results report the `engine`; melt renders carry a warning that they are not Kdenlive's own render path.
 
 ### Changed
+
+- **Work folders (#65):** temporary folders for renders and MLT probes are created in `$XDG_CACHE_HOME/kdenlive-mcp/tmp` instead of the system temp folder.
 
 - **Rendering on Kdenlive 23.x (#42):** `render_project` no longer fails with `[unsupported_kdenlive]` there by default; it renders with melt. Pass `engine="kdenlive"` to require Kdenlive's own render path.
 

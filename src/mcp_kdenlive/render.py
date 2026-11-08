@@ -18,7 +18,6 @@ import html
 import os
 import re
 import shutil
-import tempfile
 import time
 import uuid
 from collections.abc import Mapping
@@ -28,8 +27,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, media, policy, project, safexml
-from mcp_kdenlive.environment import locate
+from mcp_kdenlive import flatpak, kdenlive_doc, media, policy, project, safexml
+from mcp_kdenlive.environment import check_visible, locate, work_dir
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, Running, run, start
 from mcp_kdenlive.timecode import FrameRate
@@ -90,7 +89,9 @@ def preset_files(env: Mapping[str, str] | None = None) -> list[tuple[Path, bool]
     candidates = [data_home / "kdenlive" / "export" / "profiles.xml"]
     candidates += [d / "kdenlive" / "export" / "profiles.xml" for d in data_dirs]
     exe = locate("kdenlive", environ)
-    if exe:  # relocatable installs (AppImage, /opt): <prefix>/bin/kdenlive -> <prefix>/share
+    if exe and flatpak.is_wrapper(exe) and (app_files := flatpak.files_dir(environ)):
+        candidates.append(app_files / "share" / "kdenlive" / "export" / "profiles.xml")
+    elif exe:  # relocatable installs (AppImage, /opt): <prefix>/bin/kdenlive -> <prefix>/share
         candidates.append(
             Path(exe).resolve().parent.parent / "share" / "kdenlive" / "export" / "profiles.xml"
         )
@@ -525,6 +526,12 @@ def prepare(
         )
     summary = project.summarize(doc)
     active = next((s for s in summary.sequences if s.active), None)
+    program = kdenlive_exe if engine == "kdenlive" else melt_exe
+    check_visible(doc.path, program, "Rendering a project")
+    check_visible(out.parent, program, "Render output")
+    for item in report.items:
+        if item.resolved_path and item.status is media.MediaStatus.OK:
+            check_visible(Path(item.resolved_path), program, "Rendering reads media")
     temp = out.with_name(f".{out.name}.kdenlive-mcp-{uuid.uuid4().hex[:8]}.partial{out.suffix}")
     consumer: list[str] = []
     if engine == "melt":
@@ -554,7 +561,8 @@ class RenderRun:
 
     def __init__(self, plan: RenderPlan, env: Mapping[str, str] | None = None) -> None:
         self.plan = plan
-        self.workdir = Path(tempfile.mkdtemp(prefix="kdenlive-mcp-render-"))
+        # In the server's cache, not /tmp: a Flatpak Kdenlive cannot see /tmp (#65).
+        self.workdir = work_dir("kdenlive-mcp-render-", env)
         environ = policy.child_env(env)
         environ.update(
             {
@@ -566,6 +574,8 @@ class RenderRun:
                 # talking to the user's open Kdenlive, and holds the temporary MLT scene list.
                 "TMPDIR": str(self.workdir / "tmp"),
                 "DBUS_SESSION_BUS_ADDRESS": f"unix:path={self.workdir / 'no-session-bus'}",
+                # Flatpak launchers forward the private folders above into the sandbox.
+                "KDENLIVE_MCP_PRIVATE_DIRS": "1",
             }
         )
         environ.pop("DISPLAY", None)

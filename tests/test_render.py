@@ -299,7 +299,9 @@ def test_real_render_end_to_end(tmp_path):
     assert result.validation and result.validation.video_streams == 1
     assert result.validation.duration_seconds == pytest.approx(2.002, abs=0.25)
     assert project.read_bytes() == before
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["media", "out é.mp4", "p.kdenlive"]
+    left = sorted(p.name for p in tmp_path.iterdir() if p.name != ".cache")  # test cache (conftest)
+    assert left == ["media", "out é.mp4", "p.kdenlive"]
+    assert list((tmp_path / ".cache" / "kdenlive-mcp" / "tmp").iterdir()) == []  # work dir removed
 
 
 # ------------------------------------------------------------------- jobs (#7) --------
