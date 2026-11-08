@@ -5,9 +5,9 @@
 Local-first, client-agnostic [MCP](https://modelcontextprotocol.io) server for
 [Kdenlive](https://kdenlive.org) on Linux.
 
-> **Status: early development.** The server only provides environment diagnostics so far.
-> Project inspection, rendering and editing are tracked in the
-> [roadmap](https://github.com/mhbxyz/kdenlive-mcp/issues/1).
+> **Status: early development.** Available tools: environment diagnostics and read-only
+> project/timeline inspection ([docs/tools.md](docs/tools.md)). Rendering and editing are
+> tracked in the [roadmap](https://github.com/mhbxyz/kdenlive-mcp/issues/1).
 
 The server talks MCP over **stdio** only. It never opens a network listener. Protocol
 messages go to stdout and diagnostics go to stderr.
