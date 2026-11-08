@@ -18,7 +18,6 @@ import html
 import os
 import re
 import shutil
-import tempfile
 import time
 import uuid
 from collections.abc import Mapping
@@ -28,8 +27,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, media, policy, project, safexml
-from mcp_kdenlive.environment import locate
+from mcp_kdenlive import flatpak, kdenlive_doc, media, policy, project, safexml
+from mcp_kdenlive.environment import check_visible, locate, work_dir
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, Running, run, start
 from mcp_kdenlive.timecode import FrameRate
@@ -87,10 +86,18 @@ def preset_files(env: Mapping[str, str] | None = None) -> list[tuple[Path, bool]
     environ = dict(os.environ if env is None else env)
     data_home, data_dirs = _data_dirs(environ)
     files: list[tuple[Path, bool]] = []
-    candidates = [data_home / "kdenlive" / "export" / "profiles.xml"]
-    candidates += [d / "kdenlive" / "export" / "profiles.xml" for d in data_dirs]
     exe = locate("kdenlive", environ)
-    if exe:  # relocatable installs (AppImage, /opt): <prefix>/bin/kdenlive -> <prefix>/share
+    candidates = []
+    if exe and flatpak.is_wrapper(exe, environ):
+        # The Flatpak reads its own presets and keeps user presets in ~/.var/app/<id>/data.
+        app_files = flatpak.files_dir(environ)
+        if app_files:
+            candidates.append(app_files / "share" / "kdenlive" / "export" / "profiles.xml")
+        data_home = flatpak.app_data_dir(environ)
+    candidates.append(data_home / "kdenlive" / "export" / "profiles.xml")
+    candidates += [d / "kdenlive" / "export" / "profiles.xml" for d in data_dirs]
+    if exe and not flatpak.is_wrapper(exe, environ):
+        # relocatable installs (AppImage, /opt): <prefix>/bin/kdenlive -> <prefix>/share
         candidates.append(
             Path(exe).resolve().parent.parent / "share" / "kdenlive" / "export" / "profiles.xml"
         )
@@ -460,6 +467,29 @@ def _choose_engine(
     return engine
 
 
+def _check_sandbox_paths(
+    doc: kdenlive_doc.KdenliveDocument,
+    out: Path,
+    report: media.MediaReport,
+    engine: str,
+    kdenlive_exe: str | None,
+    melt_exe: str | None,
+    environ: Mapping[str, str],
+) -> None:
+    """Every program that touches the files must see them (#65): the render engine, and
+    ffprobe for the validation of the output; each may come from the host or a Flatpak."""
+    programs = [kdenlive_exe if engine == "kdenlive" else melt_exe, locate("ffprobe", environ)]
+    for program in programs:
+        check_visible(doc.path, program, "Rendering a project", environ)
+        check_visible(out.parent, program, "Render output", environ)
+        for item in report.items:
+            if item.resolved_path and item.status is media.MediaStatus.OK:
+                check_visible(Path(item.resolved_path), program, "Rendering reads media", environ)
+        for asset in report.asset_files:
+            if asset.resolved_path:
+                check_visible(Path(asset.resolved_path), program, "Rendering reads", environ)
+
+
 def prepare(
     project_path: str,
     output: str,
@@ -525,6 +555,7 @@ def prepare(
         )
     summary = project.summarize(doc)
     active = next((s for s in summary.sequences if s.active), None)
+    _check_sandbox_paths(doc, out, report, engine, kdenlive_exe, melt_exe, environ)
     temp = out.with_name(f".{out.name}.kdenlive-mcp-{uuid.uuid4().hex[:8]}.partial{out.suffix}")
     consumer: list[str] = []
     if engine == "melt":
@@ -554,7 +585,8 @@ class RenderRun:
 
     def __init__(self, plan: RenderPlan, env: Mapping[str, str] | None = None) -> None:
         self.plan = plan
-        self.workdir = Path(tempfile.mkdtemp(prefix="kdenlive-mcp-render-"))
+        # In the server's cache, not /tmp: a Flatpak Kdenlive cannot see /tmp (#65).
+        self.workdir = work_dir("kdenlive-mcp-render-", env)
         environ = policy.child_env(env)
         environ.update(
             {
@@ -566,6 +598,8 @@ class RenderRun:
                 # talking to the user's open Kdenlive, and holds the temporary MLT scene list.
                 "TMPDIR": str(self.workdir / "tmp"),
                 "DBUS_SESSION_BUS_ADDRESS": f"unix:path={self.workdir / 'no-session-bus'}",
+                # Flatpak launchers forward the private folders above into the sandbox.
+                "KDENLIVE_MCP_PRIVATE_DIRS": "1",
             }
         )
         environ.pop("DISPLAY", None)

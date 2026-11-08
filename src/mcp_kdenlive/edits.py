@@ -16,14 +16,13 @@ from __future__ import annotations
 
 import json
 import re
-import tempfile
 import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import create, media
+from mcp_kdenlive import create, environment, media
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import props
 from mcp_kdenlive.media import _Resolver
@@ -143,8 +142,8 @@ def add_media(project: EditableProject, media_files: list[str]) -> list[MediaAdd
             existing[str(Path(resolved).resolve())] = p["kdenlive:id"]
     rate = project.doc.rate
     results: list[MediaAdded] = []
-    with tempfile.TemporaryDirectory(prefix="kdenlive-mcp-add-") as tmp:
-        profile_path = _profile_file(project, Path(tmp))
+    with environment.temporary_dir("kdenlive-mcp-add-") as tmp:
+        profile_path = _profile_file(project, tmp)
         for raw in media_files:
             checked = media.inspect_file(raw)
             if checked.status is not media.MediaStatus.OK:

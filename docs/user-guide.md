@@ -17,7 +17,8 @@ distribution:
 | Ubuntu 24.04 / Debian | `sudo apt install kdenlive melt ffmpeg` | tested in CI. Kdenlive 23.08 cannot render from the command line, so `render_project` refuses there. Use a newer Kdenlive (AppImage) for rendering. |
 | Fedora | `sudo dnf install kdenlive mlt ffmpeg` (or `ffmpeg-free`) | untested |
 | Kdenlive AppImage | download from kdenlive.org, `chmod +x`, then set `KDENLIVE_MCP_KDENLIVE=/path/to/kdenlive.AppImage` | untested |
-| Flatpak / Snap | the programs are not on `PATH`: write wrapper scripts and point the `KDENLIVE_MCP_*` variables at them | untested |
+| Flatpak (Flathub) | detected automatically when Kdenlive is not on `PATH`; melt and FFmpeg from the Flatpak are used too. Keep projects, media and outputs under your home folder: the sandbox cannot see `/tmp` or system folders. `KDENLIVE_MCP_FLATPAK=off` disables the detection | tested (26.08.3) |
+| Snap | the programs are not on `PATH`: write wrapper scripts and point the `KDENLIVE_MCP_*` variables at them | untested |
 
 Supported versions and their status: [docs/compatibility.md](compatibility.md).
 
@@ -74,6 +75,7 @@ because a model manipulated by a web page or a document could then reach any of 
 | `KDENLIVE_MCP_KDENLIVE`, `KDENLIVE_MCP_MELT`, `KDENLIVE_MCP_FFPROBE`, `KDENLIVE_MCP_FFMPEG` | executables that are not on `PATH` |
 | `KDENLIVE_MCP_PROBE_TIMEOUT` | seconds allowed per version probe (default 10) |
 | `KDENLIVE_MCP_MAX_RENDERS` | concurrent background renders (default 1, max 4) |
+| `KDENLIVE_MCP_FLATPAK` | `off` disables the detection of a Flatpak Kdenlive |
 
 ## 4. Working safely with Kdenlive
 

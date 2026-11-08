@@ -10,7 +10,8 @@ Statuses are defined in [docs/versioning.md](versioning.md#external-software-sup
 | MLT | 7.42.0, 7.22.0 | 7.x | — | — |
 | FFmpeg / ffprobe | n9.0.2, 6.1.1 | ≥ 6 | older | — |
 | Python | 3.11, 3.12, 3.13, 3.14 | — | 3.15+ | ≤ 3.10 |
-| Linux | CachyOS (rolling), Ubuntu 24.04 (CI) | other distributions | Flatpak/Snap Kdenlive through wrappers | — |
+| Linux | CachyOS (rolling), Ubuntu 24.04 (CI) | other distributions | Snap Kdenlive through wrappers; AppImage through `KDENLIVE_MCP_KDENLIVE` | — |
+| Flatpak (Flathub `org.kde.kdenlive`) | 26.08.3 (user installation, with its melt 7.43.0 and FFmpeg 9.0.2): detection, probing, creation, both render engines | system installation | — | files in `/tmp`, `/usr`, `/etc`… (the sandbox cannot see them; refused with `[invalid_path]`) |
 | macOS, Windows | — | — | — | not supported |
 | MCP clients | see [docs/clients.md](clients.md) | standard stdio MCP clients | desktop/IDE variants | cloud-only clients without a local bridge |
 

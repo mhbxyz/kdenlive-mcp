@@ -22,6 +22,10 @@ def _scoped_filesystem(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Never reach the developer's real session bus (a Kdenlive they have open, #62).
     monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", f"unix:path={tmp_path}/no-bus")
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "no-runtime"))
+    # The server's private work folders (and Flatpak launchers) go to the cache (#65).
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
+    # Never pick up a Flatpak Kdenlive installed on the developer's machine (tests opt in).
+    monkeypatch.setenv("KDENLIVE_MCP_FLATPAK", "off")
 
 
 @pytest.fixture
@@ -47,6 +51,7 @@ def stub_env(tmp_path: Path) -> dict[str, str]:
         "PATH": str(tmp_path / "bin"),
         "HOME": os.environ.get("HOME", str(tmp_path)),
         "KDENLIVE_MCP_ALLOWED_ROOTS": os.environ["KDENLIVE_MCP_ALLOWED_ROOTS"],
+        "KDENLIVE_MCP_FLATPAK": "off",
     }
 
 

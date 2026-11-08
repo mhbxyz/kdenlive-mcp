@@ -18,7 +18,6 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
-import tempfile
 import time
 import uuid
 import xml.etree.ElementTree as ET
@@ -28,8 +27,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, media, policy, presence, project, safexml
-from mcp_kdenlive.environment import locate
+from mcp_kdenlive import flatpak, kdenlive_doc, media, policy, presence, project, safexml
+from mcp_kdenlive.environment import check_visible, locate, temporary_dir
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, run
 from mcp_kdenlive.timecode import FrameRate, frames_to_clock
@@ -70,9 +69,12 @@ class ProfileInfo(BaseModel):
 def profiles_dir(env: Mapping[str, str] | None = None) -> Path | None:
     environ = os.environ if env is None else env
     candidates = []
+    melt = locate("melt", environ)
+    if melt and flatpak.is_wrapper(melt, environ) and (app_files := flatpak.files_dir(environ)):
+        # melt runs inside the Flatpak: its own profiles, not the host's MLT_PROFILES_PATH.
+        candidates.append(app_files / "share" / "mlt-7" / "profiles")
     if environ.get("MLT_PROFILES_PATH"):
         candidates.append(Path(environ["MLT_PROFILES_PATH"]))
-    melt = locate("melt", environ)
     if melt:
         prefix = Path(melt).resolve().parent.parent
         candidates += [
@@ -184,8 +186,10 @@ def melt_producer(path: Path, profile: str, env: Mapping[str, str] | None = None
             "melt (MLT) is not available.",
             "Run diagnose_environment, or set KDENLIVE_MCP_MELT.",
         )
-    with tempfile.TemporaryDirectory(prefix="kdenlive-mcp-melt-") as tmp:
-        out = Path(tmp) / "probe.mlt"
+    check_visible(path, melt, "Reading media", env)
+    check_visible(Path(profile), melt, "MLT profile", env)  # only checked when it is a file
+    with temporary_dir("kdenlive-mcp-melt-", env) as tmp:
+        out = tmp / "probe.mlt"
         # "avformat:<path>" stops melt from parsing '=' or a leading '-' in file names.
         args = [melt, "-quiet", "-profile", profile, f"avformat:{path}", "-consumer", f"xml:{out}"]
         try:

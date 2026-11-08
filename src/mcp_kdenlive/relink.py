@@ -18,14 +18,13 @@ Clips using a proxy, image sequences and generated clips are refused.
 
 from __future__ import annotations
 
-import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import create, media
+from mcp_kdenlive import create, environment, media
 from mcp_kdenlive.edits import _profile_file, _set_prop
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import props
@@ -238,8 +237,8 @@ def relink_media(edit: EditableProject, mapping: dict[str, str]) -> RelinkResult
         plan.append((clip, _check_clip(clip), _target(raw)))
     effective = Path(_Resolver(edit.doc).effective).resolve()
     results = []
-    with tempfile.TemporaryDirectory(prefix="kdenlive-mcp-relink-") as tmp:
-        profile_path = _profile_file(edit, Path(tmp))
+    with environment.temporary_dir("kdenlive-mcp-relink-") as tmp:
+        profile_path = _profile_file(edit, tmp)
         for clip, bin_copy, path in plan:
             new = props(create.melt_producer(path, str(profile_path)))
             old = props(bin_copy)
