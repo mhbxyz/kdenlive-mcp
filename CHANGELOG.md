@@ -7,6 +7,10 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Path to 1.0:** release criteria, release candidate procedure and feedback period (`docs/versioning.md`, `docs/releasing.md`, #64).
+
 ## [0.1.0] - 2026-11-08
 
 First public release.

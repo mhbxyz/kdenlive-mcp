@@ -50,6 +50,20 @@ tag vX.Y.Z[rcN] ─► build (once)
    - the GitHub release lists artifacts and checksums.
 8. **Back to development:** set `main` to the next `.devN` version.
 
+## Release candidates and the 1.0 feedback period
+
+`docs/versioning.md` (*Path to 1.0*) defines when 1.0 can be released. For release candidates:
+
+- **Rehearsals** (`0.y.zrcN`) stop after TestPyPI, as described in *Pipeline*.
+- **`1.0.0rcN`** must be installable by testers. Before tagging it, `release.yml` is changed
+  (#68) so that `rc` tags of a `1.0.0` release also go to **PyPI**, where installers ignore
+  pre-releases unless asked (`pipx install --pip-args=--pre mcp-kdenlive==1.0.0rc1`). They do
+  **not** go to the MCP Registry, so registry users keep the latest final version.
+- **Feedback log:** each real project used during the period (what was done, client, Kdenlive
+  version, problems) is recorded in #68. A breaking change or serious bug restarts the period
+  with the next `rcN` (at least 7 days).
+- **1.0.0** is tagged only when every criterion is met; the release notes link to the log.
+
 ## Mistakes and incidents
 
 - **Published versions are never replaced.** PyPI refuses re-uploads of a version, and so do we.
