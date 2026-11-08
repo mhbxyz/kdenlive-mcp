@@ -658,15 +658,13 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Overwrite = False,
         expected_sha256: ExpectedSha = None,
     ) -> EditResult:
-        try:
-            edit = writer.open_for_edit(path)
-            result = relink_mod.relink_media(edit, mapping)
-            saved = writer.save(
-                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
-            )
-            return EditResult(saved=saved, relink=result)
-        except ProjectError as exc:
-            raise _tool_error(exc) from exc
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: relink_mod.relink_media(e, mapping),
+        )
 
     @server.tool(
         name="add_track",
