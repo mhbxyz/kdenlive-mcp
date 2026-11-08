@@ -9,8 +9,8 @@
 > - the question, then the answer;
 > - the hull cutaway (2 s) one second into the answer and the tools cutaway (2 s) four seconds
 >   into it, over the picture, keeping Ana's voice;
-> - a name title for each person when they first appear ("Sam Lee / Interviewer",
->   "Ana Ruiz / Boat builder"), top left, since subtitles go at the bottom;
+> - a lower third for each person when they first appear ("Sam Lee / Interviewer",
+>   "Ana Ruiz / Boat builder"), bottom left but above the subtitles;
 > - the transcript as subtitles;
 > - make both voices about as loud as each other;
 > - guides at the question, the answer and each cutaway.

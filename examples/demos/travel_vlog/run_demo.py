@@ -15,16 +15,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import demolib as dl
 import make_media
 
-FPS = make_media.FPS
-SHOT = 3 * FPS  # 3 s kept from each 4 s shot (source 12-86: handles for the crossfades)
+FPS, SHOT, CHAPTER, VOICE_AT = (
+    make_media.FPS,
+    make_media.SHOT,
+    make_media.CHAPTER,
+    make_media.VOICE_AT,
+)
 MIX = 10
-CHAPTER = 4 * SHOT
-VOICE_AT = FPS  # each voice-over starts 1 s into its chapter
-
-
-def srt_time(frame: int) -> str:
-    ms = round(frame * 1000 / FPS)
-    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
 async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str], dict]:
@@ -56,11 +53,9 @@ async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str], dic
             placed = await ed.edit("insert_clip", bin_id=ids[f"voice-{c + 1}.wav"], track="A1",
                                    start=start)  # fmt: skip
             voices.append((start, placed["timeline"]["clips"][0]["end"]))
-        srt = work / "voice-over.srt"
-        srt.write_text("".join(
-            f"{i}\n{srt_time(a)} --> {srt_time(b)}\n{make_media.CHAPTERS[i - 1][2]}\n\n"
-            for i, (a, b) in enumerate(voices, 1)), encoding="utf-8")  # fmt: skip
-        await ed.edit("import_subtitles", subtitle_file=str(srt))
+        if voices != make_media.voice_spans(media):
+            failures.append(f"voice-overs at {voices}, not where the subtitles expect them")
+        await ed.edit("import_subtitles", subtitle_file=str(media["voice-over.srt"]))
         # 3. Music on A2 for the whole vlog, ducked under each voice-over, faded in and out.
         await ed.edit("insert_clip", bin_id=ids["music.wav"], track="A2", start=0)
         await ed.on_clip("trim_clip", "A2", 0, end=length)
@@ -75,22 +70,38 @@ async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str], dic
         last = len(await ed.clips("A2")) - 1
         await ed.on_clip("set_clip_fades", "A2", last, fade_out=2 * FPS)
         # 4. Intro and outro titles on V2.
+        # (top of the frame: the shots carry their own label in the middle)
         await ed.edit("add_title", text="Portugal\nSummer 2026", track="V2", start=0,
-                      duration=2 * FPS, font_size=110, outline=3)  # fmt: skip
+                      duration=2 * FPS, font_size=110, outline=3, vertical="top")  # fmt: skip
         await ed.edit("add_title", text="Thanks for watching", track="V2", start=length - 2 * FPS,
-                      duration=2 * FPS, font_size=90, outline=3)  # fmt: skip
+                      duration=2 * FPS, font_size=90, outline=3, vertical="top")  # fmt: skip
         # 5. Chapter guides.
         for c, (place, _, _) in enumerate(make_media.CHAPTERS):
             await ed.edit("add_marker", position=c * CHAPTER, comment=f"Day {c + 1}: {place}",
                           category=c)  # fmt: skip
         tl = await s.timeline(project)
-        audio = next(t for t in tl["tracks"] if t["label"] == "A2")["clips"]
-        if sorted({c["audio"]["level_db"] for c in audio}) != [-20.0, -8.0]:
-            failures.append(f"music levels {[c['audio'] for c in audio]}")
-        if len((await s.call("list_markers", path=str(project)))["guides"]) != 3:
-            failures.append("not 3 chapter guides")
+        guides = (await s.call("list_markers", path=str(project)))["guides"]
         await dl.render(s, project, out)
-    return out, failures, {"timeline": tl, "voices": voices}
+    return out, failures, {"timeline": tl, "voices": voices, "guides": guides, "shots": len(shots)}
+
+
+def check_timeline(at: dict) -> list[str]:
+    """The project as the server reads it back."""
+    failures: list[str] = []
+    tl, voices, guides, shots = at["timeline"], at["voices"], at["guides"], at["shots"]
+    music = next(t for t in tl["tracks"] if t["label"] == "A2")["clips"]
+    for clip in music:  # ducked exactly under the voices
+        under = any(a <= clip["start"] < b for a, b in voices)
+        if clip["audio"]["level_db"] != (-20.0 if under else -8.0):
+            failures.append(f"music {clip['start']}-{clip['end']}: {clip['audio']}")
+    if music[0]["audio"]["fade_in"] == 0 or music[-1]["audio"]["fade_out"] != 2 * FPS:
+        failures.append("music fades missing")
+    v1 = next(t for t in tl["tracks"] if t["label"] == "V1")
+    if len(v1["mixes"]) != shots - 1:
+        failures.append(f"{len(v1['mixes'])} crossfades, not {shots - 1}")
+    if [(g["position"], g["category"]) for g in guides] != [(c * CHAPTER, c) for c in range(3)]:
+        failures.append(f"chapter guides {guides}")
+    return failures
 
 
 def check(out: Path, at: dict) -> list[str]:
@@ -106,10 +117,12 @@ def check(out: Path, at: dict) -> list[str]:
         t = (c * CHAPTER + 2.5 * SHOT) / FPS
         if dl.dominant(dl.region_rgb(out, t, side)) != colour:
             failures.append(f"chapter {c + 1} not {colour} at {t:.1f}s")
-    middle = (0.2, 0.3, 0.6, 0.4)
-    if dl.bright_box(out, 1.0, 200, middle) is None:
+    top = (0.0, 0.0, 1.0, 0.3)  # titles; the shots' labels are in the middle
+    if dl.bright_box(out, 1.0, 200, top) is None:
         failures.append("no intro title")
-    if dl.bright_box(out, end - 1.0, 200, middle) is None:
+    if dl.bright_box(out, 4.0, 200, top) is not None:
+        failures.append("intro title still visible at 4 s")
+    if dl.bright_box(out, end - 1.0, 200, top) is None:
         failures.append("no outro title")
     bottom = (0.1, 0.8, 0.8, 0.2)
     a, b = voices[1]
@@ -125,7 +138,7 @@ def check(out: Path, at: dict) -> list[str]:
 def run(work: Path) -> tuple[Path, list[str]]:
     work.mkdir(parents=True, exist_ok=True)
     out, failures, at = anyio.run(play, work, make_media.make(work))
-    return out, failures + check(out, at)
+    return out, failures + check_timeline(at) + check(out, at)
 
 
 if __name__ == "__main__":

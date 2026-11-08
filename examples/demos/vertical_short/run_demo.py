@@ -52,11 +52,12 @@ async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str]]:
             "add_title", text="Summer\nin 3 shots", track="V3", start=0, duration=2 * FPS,
             vertical="top", font_size=120, outline=3,
         )  # fmt: skip
+        length = (await s.timeline(project))["duration_frames"]  # before the (longer) music
         await ed.edit("insert_clip", bin_id=ids["music.wav"], track="A2", start=0)
-        length = (await s.timeline(project))["duration_frames"]  # the mixes shortened it
         await ed.on_clip("trim_clip", "A2", 0, end=length)
         await ed.on_clip("set_clip_volume", "A2", 0, level_db=-8)
         await ed.on_clip("set_clip_fades", "A2", 0, fade_in=10, fade_out=45)
+        await ed.on_clip("set_clip_fades", "A1", 2, fade_out=45)  # the last shot's own sound
         tl = await s.timeline(project)
         await dl.render(s, project, out)
     return out, check(out, tl)
@@ -68,7 +69,10 @@ def check(out: Path, timeline: dict) -> list[str]:
     width, height = dl.video_size(out)
     if (width, height) != (1080, 1920):
         failures.append(f"frame is {width}x{height}, not 1080x1920")
-    expected = timeline["duration_frames"] / FPS
+    v1 = next(t for t in timeline["tracks"] if t["label"] == "V1")["clips"]
+    expected = max(c["end"] for c in v1) / FPS  # the picture, not a longer audio track
+    if timeline["duration_frames"] != max(c["end"] for c in v1):
+        failures.append(f"timeline longer than the shots: {timeline['duration_frames']} frames")
     if abs(dl.duration(out) - expected) > 0.2:
         failures.append(f"duration {dl.duration(out):.2f}s, expected {expected:.2f}s")
     if dl.is_black(dl.region_rgb(out, 1.0, (0.3, 0.02, 0.4, 0.06))):  # cropped, not letterboxed
@@ -80,7 +84,9 @@ def check(out: Path, timeline: dict) -> list[str]:
         failures.append("no title in the top of the frame at 0.5s")
     if dl.bright_box(out, 3.0, 200, top) is not None:
         failures.append("title still visible after its 2 seconds")
-    night = dl.region_rgb(out, dl.duration(out) - 1.2, (0.3, 0.6, 0.4, 0.1))
+    night = dl.region_rgb(out, expected - 0.5, (0.3, 0.6, 0.4, 0.1))
+    if dl.is_black(night):
+        failures.append("black picture at the end of the night shot")
     city = dl.region_rgb(out, 5.0, (0.3, 0.6, 0.4, 0.1))
     if not (sum(night) < sum(city)):
         failures.append(f"graded night shot {night} is not darker than the city shot {city}")

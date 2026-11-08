@@ -5,7 +5,7 @@ assistant:
 
 1. builds the edit: the question then the answer on V1/A1 (`create_project`, `add_media_to_bin`, `insert_clip`);
 2. puts two **cutaways** (the hull, the tools) over the answer on V2, without their audio (`insert_clip … audio_track=null`);
-3. adds **name titles** for both speakers on a new top track, top left: the bottom of the frame is kept for the subtitles (`add_track`, `add_title`);
+3. adds **lower thirds** naming both speakers on a new top track, bottom left, placed with `x`/`y` just above the subtitle line (`add_track`, `add_title`);
 4. imports the **transcript** as subtitles (`import_subtitles`, SubRip);
 5. **harmonises the voices**: the question is raised by 14 dB (`set_clip_volume`);
 6. adds **guides** at the question, the answer and each cutaway (`add_marker`);
@@ -27,5 +27,5 @@ stand in (as in CI).
 
 - 3 subtitles imported, 4 guides, 4 media missing after the move and none after relinking;
 - render as long as the timeline; the question (grey), the hull cutaway (green) and the tools cutaway (blue) at their times;
-- Ana's name title during her first 2 seconds only; a subtitle under the question;
+- lower thirds for Sam and for Ana (Ana's during her first 2 seconds only); a subtitle under the question;
 - question and answer within 4 dB of each other (they were 14 dB apart).

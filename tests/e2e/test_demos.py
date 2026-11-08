@@ -13,18 +13,19 @@ NAMES = ["travel_vlog", "interview", "rescue_project", "vertical_short"]
 
 
 def load(name: str):  # type: ignore[no-untyped-def]
+    """Import a demo's run_demo.py; each demo has its own `make_media`, so the module cache and
+    sys.path are restored afterwards."""
     folder = DEMOS / name
-    sys.path.insert(0, str(folder))  # its make_media module
+    saved_path = list(sys.path)
+    sys.modules.pop("make_media", None)
     try:
-        for module in ("make_media", "run_demo"):
-            sys.modules.pop(module, None)
         spec = importlib.util.spec_from_file_location(f"demo_{name}", folder / "run_demo.py")
         assert spec and spec.loader
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        spec.loader.exec_module(module)  # inserts its folder and examples/demos into sys.path
         return module
     finally:
-        sys.path.remove(str(folder))
+        sys.path[:] = saved_path
 
 
 @pytest.mark.timeout(900)

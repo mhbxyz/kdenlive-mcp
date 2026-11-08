@@ -8,8 +8,8 @@
 >
 > - the 12 shots in order, 3 seconds each, with short crossfades between them;
 > - each day's voice-over starting one second into that day;
-> - subtitles for the voice-overs (the texts: "Day one. Lisbon, its hills and its yellow
->   trams.", "Day two. Porto and the river.", "Day three. The beaches of the Algarve.");
+> - the subtitles in `WORKDIR/voice-over.srt` (timed for voice-overs placed one second into
+>   each day);
 > - the music under the whole vlog, quiet, and even quieter while someone speaks; a short fade-in
 >   and a 2-second fade-out;
 > - an intro title "Portugal / Summer 2026" and a closing "Thanks for watching";

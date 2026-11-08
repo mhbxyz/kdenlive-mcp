@@ -11,8 +11,8 @@
 > - a short crossfade between consecutive shots;
 > - make the night shot darker;
 > - a title "Summer / in 3 shots" (two lines) at the top during the first two seconds;
-> - the music under the whole edit, quieter than the shots, fading in briefly and fading out at
->   the end;
+> - the music under the whole edit, quieter than the shots, fading in briefly;
+> - all the sound fading out over the last second and a half;
 >
 > then render it to `WORKDIR/short.mp4` and tell me what you checked.
 

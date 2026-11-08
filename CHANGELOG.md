@@ -28,12 +28,15 @@ migration notes in the same entry.
 ### Fixed
 
 - **Crossfades moved later clips (found by the demos, #92):** `add_mix` extended the left clip before taking the right one off its layer, which pushed every later clip of that layer by the crossfade's second half.
-- **Crossfade into a clip already on the other layer:** in Kdenlive's own layout (clips alternating between the two layers), a crossfade into a clip that also ends in the next crossfade was refused; it is now made without moving the clip. Chains A→B→C work.
+- **Crossfade into a clip already on the other layer:** in Kdenlive's own layout (clips alternating between the two layers), a crossfade into a clip that also ends in the next crossfade was refused; it is now made without moving the clip. A crossfade that would run into a neighbouring clip or crossfade on either layer is refused (`[overlap]`).
+- **`kdenlive --render` taken for an open project (found by a real-client run, #92):** command-line renders running at the same time made edits warn that Kdenlive might have the project open; they are now ignored by the open-project check.
 - **Titles rendered thin by melt:** titles are written with Qt 6's font weight (`400` = normal) instead of Qt 5's `50`, which melt 7.42 drew as *Thin* (Kdenlive's own render was fine). MLT 7.22 draws both the same.
 
 - **melt engine without a display (#90):** with MLT 7.22 (Ubuntu 24.04), titles rendered as MLT's *INVALID* placeholder and video tracks were not composited, yet the render succeeded: MLT's Qt module needs an X display there. The melt engine now passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` (Qt still draws offscreen) and fails with an explanation (display, `xvfb-run`, newer MLT) when the module cannot load.
 
 ### Changed
+
+- **Chained crossfades (#92):** crossfades can follow each other (A→B→C) as in Kdenlive, clips alternating between the track's two layers; only a next clip on the *same* layer that is already in another crossfade is refused.
 
 - **Unknown arguments are refused (#15):** every tool now answers `[invalid_argument]` naming the unknown arguments and listing the accepted ones, instead of silently ignoring them (e.g. `bold` on `add_title`). Input schemas declare `additionalProperties: false`. **Migration:** drop arguments a tool does not list.
 

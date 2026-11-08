@@ -7,7 +7,7 @@ A social-media short made from three **landscape** shots (beach, city, night):
 3. **crossfades** between the shots (`add_mix`, 20 frames), with 15-frame handles left on each shot;
 4. the night shot **graded darker** (`gamma 0.6`);
 5. a two-line **title** at the top for the first two seconds, on a new video track (`add_track`, `add_title`);
-6. a **music bed** on A2, cut to the length of the edit, lowered by 8 dB, faded in and **faded out** (`set_clip_volume`, `set_clip_fades`);
+6. a **music bed** on A2, cut to the length of the edit, lowered by 8 dB, faded in and **faded out**, together with the last shot's own sound (`set_clip_volume`, `set_clip_fades`);
 7. a **render** with the default preset (MP4-H264/AAC).
 
 ## Files
@@ -24,6 +24,7 @@ A social-media short made from three **landscape** shots (beach, city, night):
 - the top of the frame is not black (cropped, not letterboxed); the first shot is visible;
 - a title in the top 30 % of the frame at 0.5 s, gone at 3 s;
 - the graded night shot is darker than the city shot;
-- the music fades out (the last 0.25 s is at least 6 dB quieter than the middle).
+- the sound fades out (the last 0.25 s is at least 6 dB quieter than the middle);
+- the timeline is as long as the shots (the 12 s music was cut to the edit) and the night shot is still visible half a second before the end.
 
 `tests/e2e/test_demos.py` runs this script in the CI integration job.

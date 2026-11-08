@@ -21,6 +21,7 @@ import demolib as dl
 import make_media
 
 FPS = make_media.FPS
+LOWER_THIRD_Y = 740  # two 60 px lines end near 900 px, above the subtitles (about 1000-1050)
 
 
 async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str], dict]:
@@ -48,13 +49,13 @@ async def play(work: Path, media: dict[str, Path]) -> tuple[Path, list[str], dic
                       source_out=2 * FPS - 1, audio_track=None)  # fmt: skip
         await ed.edit("insert_clip", bin_id=ids["cutaway_tools.mp4"], track="V2", start=tools,
                       source_out=2 * FPS - 1, audio_track=None)  # fmt: skip
-        # Name titles on a new top track (V3), top left: the bottom is for the subtitles.
-        await ed.edit("add_track", kind="video", name="Names")
+        # Lower thirds on a new top track (V3): bottom left, placed above the subtitle line.
+        await ed.edit("add_track", kind="video", name="Lower thirds")
         await ed.edit("add_title", text="Sam Lee\nInterviewer", track="V3", start=0,
-                      duration=min(q, 3 * FPS), align="left", vertical="top", font_size=60,
-                      outline=2)  # fmt: skip
+                      duration=min(q, 3 * FPS), align="left", x=96, y=LOWER_THIRD_Y,
+                      font_size=60, outline=2)  # fmt: skip
         await ed.edit("add_title", text="Ana Ruiz\nBoat builder", track="V3", start=q,
-                      duration=2 * FPS, align="left", vertical="top", font_size=60,
+                      duration=2 * FPS, align="left", x=96, y=LOWER_THIRD_Y, font_size=60,
                       outline=2)  # fmt: skip
         # The transcript, bottom centre (Kdenlive's default subtitle style).
         imported = await ed.edit("import_subtitles", subtitle_file=str(media["interview.srt"]))
@@ -102,12 +103,14 @@ def check(out: Path, at: dict) -> list[str]:
         got = dl.dominant(dl.region_rgb(out, frame / FPS, side))
         if got != colour:
             failures.append(f"{what} at {frame / FPS:.1f}s: {got}")
-    top_left = (0.0, 0.0, 0.45, 0.3)
-    if dl.bright_box(out, (q + FPS) / FPS, 200, top_left) is None:
+    lower_third = (0.0, 0.66, 0.45, 0.2)  # bottom left, above the subtitles
+    if dl.bright_box(out, (q // 2) / FPS, 200, lower_third) is None:
+        failures.append("no lower third for Sam")
+    if dl.bright_box(out, (q + FPS) / FPS, 200, lower_third) is None:
         failures.append("no lower third for Ana")
-    if dl.bright_box(out, (q + 3 * FPS) / FPS, 200, top_left) is not None:
+    if dl.bright_box(out, (q + 3 * FPS) / FPS, 200, lower_third) is not None:
         failures.append("Ana's lower third still visible after 2 s")
-    bottom = (0.1, 0.75, 0.8, 0.25)
+    bottom = (0.1, 0.88, 0.8, 0.12)
     if dl.bright_box(out, (q // 2) / FPS, 200, bottom) is None:
         failures.append("no subtitle under the question")
     question = dl.mean_volume(out, 0.5, q / FPS - 1.0)

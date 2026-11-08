@@ -1031,15 +1031,27 @@ def _plan_mix(tl: Timeline, t: Track, left: Item, frames: int) -> tuple[Item, in
     before = min(frames // 2, head)
     after = min(frames - before, tail)
     before = min(frames - after, head)
-    if right.layer != left.layer and any(
-        c.layer == right.layer
-        and c.element is not right.element
-        and c.end > right.start - before
-        and c.start < right.start
-        for c in tl.clips(t)
+    # Room on both layers: the left clip grows by `after` on its layer, the right one starts
+    # `before` earlier on the other layer (#92 review: never into a neighbour or its mix).
+    others = [c for c in tl.clips(t) if c.element not in (left.element, right.element)]
+    if any(
+        c.layer == left.layer and c.start < left.end + after and c.end > left.end for c in others
     ):
         raise ProjectError(
-            "overlap", f"The clip before the next one on {t.label} leaves no room for the mix."
+            "overlap",
+            f"On {t.label}, the clip before the cut cannot be extended by {after} frames: "
+            "another clip follows it on the same layer.",
+            "Use a shorter crossfade.",
+        )
+    if any(
+        c.layer == 1 - left.layer and c.start < right.end and c.end > right.start - before
+        for c in others
+    ):
+        raise ProjectError(
+            "overlap",
+            f"On {t.label}, the clip after the cut cannot start {before} frames earlier on the "
+            "other layer: a clip is already there.",
+            "Use a shorter crossfade.",
         )
     if before + after < frames:
         raise ProjectError(

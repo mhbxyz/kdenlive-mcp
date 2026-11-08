@@ -4,7 +4,8 @@ Not part of CI. Usage:
 
     python examples/demos/real_client.py DEMO WORKDIR [--model MODEL]
 
-The client only gets the `kdenlive-mcp` server (`--strict-mcp-config`, only its tools allowed),
+The client only gets the `kdenlive-mcp` server (`--strict-mcp-config`): its tools are allowed;
+Bash, Write, Edit and web tools are disallowed (reading files stays possible),
 started from this checkout with KDENLIVE_MCP_ALLOWED_ROOTS limited to WORKDIR. The media are
 generated first (the demo's make_media.py). The summary (client version, model, tool calls,
 errors, cost, final answer, and objective facts read back from the project and the render) is
@@ -30,6 +31,25 @@ sys.path.insert(0, str(HERE))
 import demolib as dl  # noqa: E402 - after the path setup
 
 SERVER = Path(sys.executable).with_name("kdenlive-mcp")
+# What `claude` (and through it the MCP server) receives: what it needs to run and log in, not
+# the caller's tokens or KDENLIVE_MCP_* settings.
+CLIENT_ENV = (
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "PATH",
+    "LANG",
+    "TERM",
+    "TMPDIR",
+    "XDG_RUNTIME_DIR",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_DATA_DIRS",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+)
 
 
 def make_media(demo: str, work: Path) -> None:
@@ -64,8 +84,11 @@ def claude(text: str, work: Path, model: str | None, resume: str | None = None) 
     config.write_text(
         json.dumps({"mcpServers": {"kdenlive": {"command": str(SERVER), "args": [], "env": env}}})
     )
+    client = shutil.which("claude")
+    if client is None or not SERVER.is_file():
+        raise SystemExit(f"needs `claude` on PATH and {SERVER}")
     args = [
-        shutil.which("claude") or "claude",
+        client,
         "-p",
         text,
         "--mcp-config",
@@ -84,7 +107,13 @@ def claude(text: str, work: Path, model: str | None, resume: str | None = None) 
     if resume:
         args += ["--resume", resume]
     done = subprocess.run(  # noqa: S603 - argument list, no shell
-        args, cwd=work, capture_output=True, text=True, timeout=3600, check=False
+        args,
+        cwd=work,
+        env={k: v for k, v in os.environ.items() if k in CLIENT_ENV or k.startswith("LC_")},
+        capture_output=True,
+        text=True,
+        timeout=3600,
+        check=False,
     )
     stream = work / f"claude-{'resume' if resume else 'first'}.jsonl"
     stream.write_text(done.stdout, encoding="utf-8")  # kept for the record
@@ -195,14 +224,14 @@ def main() -> None:
     first = summarise(claude(prompt(opts.demo, work), work, opts.model))
     runs = [first]
     if opts.between and opts.between.startswith("move:"):
-        _, src, dst = opts.between.split(":")
+        _, src, dst = opts.between.split(":", 2)
         (work / dst).parent.mkdir(parents=True, exist_ok=True)
         shutil.move(work / src, work / dst)
     if opts.then:
         runs.append(
             summarise(
                 claude(
-                    opts.then.replace("WORKDIR", str(work)),
+                    prompt(opts.demo, work, 1),
                     work,
                     opts.model,
                     resume=first["session"],

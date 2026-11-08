@@ -79,9 +79,12 @@ def kdenlive_processes() -> dict[int, list[str]]:
             args = (entry / "cmdline").read_bytes().split(b"\0")
         except OSError:
             continue
-        # The Kdenlive program itself, not helpers such as kdenlive_render.
+        # The Kdenlive program itself, not helpers such as kdenlive_render, nor command-line
+        # renders (`kdenlive --render`), which never hold a project open for editing (#92).
         if args and Path(args[0].decode(errors="replace")).name == "kdenlive":
-            found[int(entry.name)] = [a.decode(errors="replace") for a in args[1:] if a]
+            rest = [a.decode(errors="replace") for a in args[1:] if a]
+            if "--render" not in rest:
+                found[int(entry.name)] = rest
     return found
 
 
