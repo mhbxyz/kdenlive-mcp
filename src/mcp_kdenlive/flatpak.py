@@ -25,8 +25,13 @@ TOOLS = ("kdenlive", "melt", "ffprobe", "ffmpeg")
 FLATPAK = shutil.which("flatpak") or "/usr/bin/flatpak"
 # Host folders the sandbox does not see even with filesystems=host (Flatpak documentation:
 # reserved paths), checked after resolving symlinks.
-HIDDEN = ("/tmp", "/var/tmp", "/usr", "/lib", "/lib32", "/lib64", "/bin", "/sbin", "/etc",
-          "/proc", "/sys", "/dev", "/run", "/app", "/boot")  # fmt: skip
+HIDDEN = (
+    "/tmp",  # noqa: S108 - a path the sandbox cannot see, not a temporary file
+    "/var/tmp",  # noqa: S108
+    "/usr", "/lib", "/lib32", "/lib64", "/bin", "/sbin", "/etc", "/proc", "/sys", "/dev", "/run",
+    "/app", "/boot",
+)  # fmt: skip
+DISABLE_ENV = "KDENLIVE_MCP_FLATPAK"  # "off" disables Flatpak detection
 
 WRAPPER = """#!/bin/sh
 # Written by kdenlive-mcp (#65): runs {tool} from the Flatpak {app} ({where} installation).
@@ -53,6 +58,8 @@ def cache_dir(env: Mapping[str, str] | None = None) -> Path:
 def installation(env: Mapping[str, str] | None = None) -> str | None:
     """'user' or 'system' when a Flatpak Kdenlive is installed, else None."""
     source = os.environ if env is None else env
+    if source.get(DISABLE_ENV, "").strip().lower() in ("off", "0", "no", "false"):
+        return None
     data_home = Path(source.get("XDG_DATA_HOME") or _home(source) / ".local" / "share")
     if (data_home / "flatpak" / "exports" / "bin" / APP).exists():
         return "user"

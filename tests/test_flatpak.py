@@ -41,6 +41,8 @@ def fp(tmp_path, make_stub, stub_env, monkeypatch):
         ' *--command=ffmpeg*) echo "ffmpeg version 9.0.2 Copyright";; esac',
     )
     env = dict(stub_env, HOME=str(home), XDG_CACHE_HOME=str(tmp_path / "cache"))
+    env.pop("KDENLIVE_MCP_FLATPAK", None)
+    monkeypatch.delenv("KDENLIVE_MCP_FLATPAK", raising=False)
     monkeypatch.setattr(flatpak, "FLATPAK", str(stub))
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -71,12 +73,12 @@ def test_wrappers_pass_arguments_verbatim_and_private_dirs_on_request(fp, tmp_pa
     import subprocess
 
     hostile = "a b;$(touch pwned)'\"`.mp4"
-    subprocess.run([str(melt), "-quiet", hostile], env=dict(env), check=True)  # noqa: S603
+    subprocess.run([str(melt), "-quiet", hostile], env=dict(env), check=True)
     args = record.read_text().splitlines()
     assert args[:3] == ["run", "--user", "--command=melt"] and hostile in args
     assert not any(a.startswith("--env=") for a in args)
     private = dict(env, KDENLIVE_MCP_PRIVATE_DIRS="1", TMPDIR=str(tmp_path / "t"))
-    subprocess.run([str(melt), "x"], env=private, check=True)  # noqa: S603
+    subprocess.run([str(melt), "x"], env=private, check=True)
     assert f"--env=TMPDIR={tmp_path / 't'}" in record.read_text().splitlines()
     assert not (tmp_path / "pwned").exists()
 
@@ -129,3 +131,8 @@ def test_private_work_dirs_live_in_the_cache(tmp_path, monkeypatch):
     work = environment.work_dir("kdenlive-mcp-test-")
     assert work.parent == tmp_path / "c" / "kdenlive-mcp" / "tmp"
     assert oct(work.stat().st_mode & 0o777) == "0o700"
+
+
+def test_detection_can_be_disabled(fp):
+    env, _ = fp
+    assert flatpak.installation(dict(env, KDENLIVE_MCP_FLATPAK="off")) is None

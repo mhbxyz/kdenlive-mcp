@@ -12,7 +12,8 @@ import re
 import shutil
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -238,13 +239,9 @@ def _resolve(
                 ),
             )
         return str(candidate), "override", None
-    for name in spec.candidates:
-        found = shutil.which(name, path=env.get("PATH"))
-        if found:
-            return found, "path", None
-    launcher = flatpak.wrapper(spec.name, env)
-    if launcher is not None:
-        return launcher, "flatpak", None
+    found, source = _search(spec, env)
+    if found is not None:
+        return found, source, None
     return (
         None,
         None,
@@ -255,6 +252,16 @@ def _resolve(
             hint=spec.install_hint,
         ),
     )
+
+
+def _search(spec: ToolSpec, env: Mapping[str, str]) -> tuple[str | None, str | None]:
+    """PATH first, then a launcher into a Flatpak Kdenlive (#65)."""
+    for name in spec.candidates:
+        found = shutil.which(name, path=env.get("PATH"))
+        if found:
+            return found, "path"
+    launcher = flatpak.wrapper(spec.name, env)
+    return (launcher, "flatpak") if launcher is not None else (None, None)
 
 
 def _report(spec: ToolSpec, status: ToolStatus, **fields: str | None) -> ToolReport:
@@ -327,6 +334,16 @@ def work_dir(prefix: str, env: Mapping[str, str] | None = None) -> Path:
     return Path(tempfile.mkdtemp(prefix=prefix, dir=base))
 
 
+@contextmanager
+def temporary_dir(prefix: str, env: Mapping[str, str] | None = None) -> Iterator[Path]:
+    """work_dir() as a context manager that removes the folder afterwards."""
+    path = work_dir(prefix, env)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def check_visible(path: Path, program: str | None, what: str) -> None:
     """Refuse a path that a Flatpak program (launcher) cannot see."""
     if flatpak.is_wrapper(program) and flatpak.hidden(path):
@@ -381,8 +398,10 @@ def diagnose(env: Mapping[str, str] | None = None) -> EnvironmentReport:
         )
     if any(t.name == "kdenlive" and t.status is ToolStatus.MISSING for t in tools):
         notes.append(
-            "Snap installations of Kdenlive do not expose kdenlive, melt or ffprobe on PATH; "
-            "point the KDENLIVE_MCP_* variables to executables or wrapper scripts."
+            "Kdenlive was not found on PATH nor as a Flatpak (org.kde.kdenlive, detected "
+            "automatically unless KDENLIVE_MCP_FLATPAK=off). Snap installations do not expose "
+            "kdenlive, melt or ffprobe on PATH; point the KDENLIVE_MCP_* variables to executables "
+            "or wrapper scripts."
         )
     return EnvironmentReport(
         server_version=__version__,
