@@ -2,24 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import demolib as dl
 import pytest
 
 pytestmark = pytest.mark.anyio
-
-
-async def render(s: dl.Session, project: Path, output: Path) -> str:
-    """Render through the server; fall back to melt where `kdenlive --render` is missing."""
-    try:
-        await s.call("render_project", path=str(project), output=str(output))
-        return "server"
-    except dl.ToolFailed as err:
-        if err.code not in {"unsupported_kdenlive", "dependency_missing"}:
-            raise
-    dl.melt_render(project, output)
-    return "melt"
 
 
 async def test_cut_and_close_the_gap(tmp_path, media_tools):
@@ -60,7 +46,7 @@ async def test_cut_and_close_the_gap(tmp_path, media_tools):
         assert [(c["start"], c["end"]) for c in audio["clips"]] == [(0, 45)]
 
         out = tmp_path / "out.mp4"
-        await render(s, proj, out)
+        await dl.render(s, proj, out)
 
     assert dl.stream_kinds(out).count("video") == 1
     assert abs(dl.duration(out) - 105 / 29.97) < 0.2

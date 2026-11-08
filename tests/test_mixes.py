@@ -93,12 +93,22 @@ def test_trim_the_free_side_of_mixed_clips(m):
     expected = [(10, 60, 10, 59, "4"), (30, 90, 0, 59, "4"), (70, 120, 0, 49, "4")]
     assert m.clips() == {"V1": expected, "A1": expected}
     assert mixes(m) == {"V1": MIXES, "A1": MIXES}
-    assert sorted(m.groups()) == [["1:10:-1", "2:10:-1"], ["1:30:-1", "2:30:-1"], ["1:70:-1", "2:70:-1"]]
+    assert sorted(m.groups()) == [
+        ["1:10:-1", "2:10:-1"],
+        ["1:30:-1", "2:30:-1"],
+        ["1:70:-1", "2:70:-1"],
+    ]
 
 
 @pytest.mark.parametrize(
     ("start", "kwargs"),
-    [(0, {"end": 55}), (70, {"start": 75}), (30, {"start": 35}), (30, {"end": 85}), (0, {"start": 35})],
+    [
+        (0, {"end": 55}),
+        (70, {"start": 75}),
+        (30, {"start": 35}),
+        (30, {"end": 85}),
+        (0, {"start": 35}),
+    ],
 )
 def test_trims_that_would_break_a_mix_are_refused(m, start, kwargs):
     assert code(m, te.trim_clip, m.ref("V1", start), m.rev(), **kwargs) in {

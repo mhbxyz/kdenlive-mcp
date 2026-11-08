@@ -3,7 +3,7 @@
 Usage: uv run python research/lab/verify_roundtrip.py PROJECT.kdenlive [...]
 Exit status 0 only if, for every project: Kdenlive shows no dialog while loading, the copy is
 written, and the timeline read back from Kdenlive's copy equals the original (tracks, clip
-positions, source in/out, resources). Requires the lab prerequisites (see README.md).
+positions, source in/out, resources, groups, same-track mixes and clip layers). Requires the lab prerequisites (see README.md).
 """
 
 from __future__ import annotations
@@ -44,7 +44,10 @@ def clips(path: Path) -> list[tuple]:
         tuple(sorted(leaf["data"] for leaf in g.get("children", [])))
         for g in (json.loads(raw) if raw else [])
     )
-    return [tracks, timeline, bin_media, internal, groups]
+    # same-track mixes (crossfades, #61): bounds, cut and service per track
+    mixes = sorted((t.label, m.service, m.start, m.end, m.cut) for t in tl.tracks for m in t.mixes)
+    layers = sorted((t.label, c.start, c.layer) for t in tl.tracks for c in t.clips)
+    return [tracks, timeline, bin_media, internal, groups, mixes, layers]
 
 
 def verify(path: Path) -> bool:

@@ -37,6 +37,7 @@ Kdenlive's own *Save As*, tracks, clips, bin media, internal transitions and gro
 | Copy moved to another folder (`save_project_copy`) | ✅ | ✅ | ✅ |
 | Media and named tracks added (`add_media_to_bin`, `add_track`) | ✅ | — | ✅ |
 | Montage: insert, split, grouped move, trim, remove | ✅ | ✅ | ✅ |
+| Kdenlive-made crossfades, then trims, splits, removals and moves around them (#61) | ✅ | ✅ (e2e) | ✅ (e2e) |
 | Kdenlive-made project with subtitles | ✅ | ❌ Kdenlive crashes (SIGSEGV), reproduced without this server (#16) | ✅ |
 
 ## Fixture corpus
@@ -53,6 +54,7 @@ expected reading of each fixture is in `tests/fixtures/compat.json`.
 | Subtitles (ASS) | `kd26/kd26-subtitle` |
 | Effects, keyframes | `upstream/test-keyframes*`, `upstream/test-nesting-effects*` |
 | Multiple and nested sequences | `upstream/test-nesting*` |
+| Same-track mixes (crossfades) made by Kdenlive 26.08.2, video and audio | `kd26/kd26-mixes` |
 | Same-track mixes, document 1.04 | `upstream/test-mix`, `upstream/av` |
 | Missing effect asset (LUT), missing proxy | `upstream/test-missing`, `upstream/missing-proxy` |
 | Empty timeline | `kd26/kd26-ntsc` |

@@ -71,6 +71,25 @@ class Session:
         return track_data["clips"][index], tl["file"]["sha256"]
 
 
+async def render(session: Session, project: Path, output: Path, **args: Any) -> str:
+    """Render through the server; fall back to melt where `kdenlive --render` is missing.
+
+    Returns "server" or "melt" (Kdenlive 23.08 has no command-line rendering, until #42).
+    """
+    try:
+        await session.call("render_project", path=str(project), output=str(output), **args)
+        return "server"
+    except ToolFailed as err:
+        if err.code not in {"unsupported_kdenlive", "dependency_missing"}:
+            raise
+    melt_render(project, output)
+    return "melt"
+
+
+def is_black(rgb: tuple[int, int, int]) -> bool:
+    return max(rgb) < 40
+
+
 @asynccontextmanager
 async def connect(env: Mapping[str, str]) -> AsyncIterator[Session]:
     params = StdioServerParameters(

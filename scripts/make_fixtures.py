@@ -152,7 +152,12 @@ def make_mixes() -> None:
             )
             env = dict(os.environ, KD_ARGS=str(base), KD_THEME="kde")
             subprocess.run(
-                [str(ROOT / "research" / "lab" / "kdgui.sh"), str(lab), str(script), str(lab / "o")],
+                [
+                    str(ROOT / "research" / "lab" / "kdgui.sh"),
+                    str(lab),
+                    str(script),
+                    str(lab / "o"),
+                ],
                 env=env,
                 timeout=240,
                 check=False,

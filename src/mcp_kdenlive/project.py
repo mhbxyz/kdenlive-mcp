@@ -110,9 +110,16 @@ class MixInfo(BaseModel):
     service: str | None
     kdenlive_id: str | None
     start: int | None
-    end: int | None = Field(description="Exclusive end frame.")
+    end: int | None = Field(
+        description="Exclusive end frame: where the left clip ends (Kdenlive stores it as `out`)."
+    )
     cut_offset: int | None = Field(
-        description="kdenlive:mixcut: frames between mix start and the cut."
+        description="kdenlive:mixcut: frames between the original cut and the end of the mix."
+    )
+    cut: int | None = Field(
+        default=None,
+        description="Timeline frame of the original cut (end - cut_offset): where the clips "
+        "would meet without the mix.",
     )
 
 
@@ -351,13 +358,19 @@ class _SequenceView:
 
     def _mix(self, transition: ET.Element) -> MixInfo:
         p = props(transition)
-        start, end = self._range(transition, "mix")
+        start, _ = self._range(transition, "mix")
+        # Kdenlive writes a mix's `out` as the frame where the left clip ends (exclusive),
+        # unlike other MLT ranges: verified on mixes made by Kdenlive 26.08.2 (#61).
+        out = self.doc.time(transition.get("out"), default=-1, what="mix out")
+        end = out if out >= 0 else None
+        offset = _int_or_none(p.get("kdenlive:mixcut"))
         return MixInfo(
             service=p.get("mlt_service"),
             kdenlive_id=p.get("kdenlive_id"),
             start=start,
             end=end,
-            cut_offset=_int_or_none(p.get("kdenlive:mixcut")),
+            cut_offset=offset,
+            cut=end - offset if end is not None and offset is not None else None,
         )
 
     @property
