@@ -549,6 +549,35 @@ def _drop_fades(entry: ET.Element, kdenlive_ids: tuple[str, ...]) -> None:
             entry.remove(flt)
 
 
+GENERATED_VIDEO = ("kdenlivetitle", "color")
+
+
+def _generated(producer: ET.Element) -> bool:
+    """Titles and colors: Kdenlive plays them from the bin producer itself, never a copy."""
+    return props(producer).get("mlt_service") in GENERATED_VIDEO
+
+
+def _timeline_copy(tl: Timeline, t: Track, bin_chain: ET.Element, av: bool) -> ET.Element:
+    """Media: Kdenlive gives each track its own copy of the bin chain."""
+    chain = copy.deepcopy(bin_chain)
+    chain.set("id", _next_id(tl.edit.root, chain.tag))
+    chain.attrib.pop("in", None)
+    for p in list(chain.findall("property")):
+        if p.get("name") in ("set.test_audio", "set.test_image", "kdenlive:monitorPosition"):
+            chain.remove(p)
+    if av:
+        ET.SubElement(chain, "property", {"name": "set.test_audio"}).text = (
+            "0" if t.kind == "audio" else "1"
+        )
+        ET.SubElement(chain, "property", {"name": "set.test_image"}).text = (
+            "1" if t.kind == "audio" else "0"
+        )
+    chain.tail = "\n "
+    tl.edit.root.insert(list(tl.edit.root).index(t.playlist), chain)
+    tl.doc.by_id[chain.get("id", "")] = chain
+    return chain
+
+
 def _bin_clip(tl: Timeline, bin_id: str) -> tuple[ET.Element, int, bool, bool]:
     bin_chain = next(
         (
@@ -563,11 +592,12 @@ def _bin_clip(tl: Timeline, bin_id: str) -> tuple[ET.Element, int, bool, bool]:
     if bin_chain is None:
         raise ProjectError("clip_not_found", f"No bin clip with id {bin_id!r}.")
     bp = props(bin_chain)
+    generated = _generated(bin_chain)  # no streams: picture only
     return (
         bin_chain,
         int(bp.get("length", "0") or 0),
-        int(bp.get("video_index", "-1") or -1) >= 0,
-        int(bp.get("audio_index", "-1") or -1) >= 0,
+        generated or int(bp.get("video_index", "-1") or -1) >= 0,
+        not generated and int(bp.get("audio_index", "-1") or -1) >= 0,
     )
 
 
@@ -635,22 +665,11 @@ def insert_clip(
     rate = tl.doc.rate
     placements, leaves = [], []
     for t in targets:
-        chain = copy.deepcopy(bin_chain)
-        chain.set("id", _next_id(edit.root, "chain"))
-        chain.attrib.pop("in", None)
-        for p in list(chain.findall("property")):
-            if p.get("name") in ("set.test_audio", "set.test_image", "kdenlive:monitorPosition"):
-                chain.remove(p)
-        if has_audio and has_video:
-            ET.SubElement(chain, "property", {"name": "set.test_audio"}).text = (
-                "0" if t.kind == "audio" else "1"
-            )
-            ET.SubElement(chain, "property", {"name": "set.test_image"}).text = (
-                "1" if t.kind == "audio" else "0"
-            )
-        chain.tail = "\n "
-        edit.root.insert(list(edit.root).index(t.playlist), chain)
-        tl.doc.by_id[chain.get("id", "")] = chain
+        chain = (
+            bin_chain
+            if _generated(bin_chain)
+            else _timeline_copy(tl, t, bin_chain, has_audio and has_video)
+        )
         entry = ET.Element(
             "entry",
             {
@@ -887,7 +906,7 @@ def split_clip(
         cut = source_in + (at - i.start)
         right = copy.deepcopy(i.element)
         chain = tl.doc.by_id.get(i.element.get("producer") or "")
-        if chain is not None:
+        if chain is not None and not _generated(chain):
             new_chain = copy.deepcopy(chain)
             new_chain.set("id", _next_id(edit.root, "chain"))
             edit.root.insert(list(edit.root).index(chain) + 1, new_chain)

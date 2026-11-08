@@ -52,6 +52,11 @@ Projects *saved* by 24.x/25.x need Kdenlive's GUI: in the headless lab these App
 register on neither the accessibility bus nor the session D-Bus, so the files are produced by
 hand (#86).
 
+Titles (#15): the 25.04.3 AppImage renders the server's titles (centred, lower third, positioned).
+The 24.12.3 AppImage renders **no title at all** on this machine, also from the file saved by
+Kdenlive 26.08.2: its bundled fontconfig rejects the host's `/etc/fonts` configuration (warnings in
+the render log), so it has no font to draw with. This was not reproduced elsewhere.
+
 ## Headless rendering with MLT 7.22 (#90)
 
 MLT 7.22's Qt module (`kdenlivetitle`, `qtblend`) needs an X11 display, even with
@@ -86,6 +91,7 @@ Kdenlive's own *Save As*, tracks, clips, bin media, internal transitions and gro
 | Montage: insert, split, grouped move, trim, remove | ✅ | ✅ | ✅ |
 | Kdenlive-made crossfades, then trims, splits, removals and moves around them (#61) | ✅ | ✅ (e2e) | ✅ (e2e) |
 | Effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) and crossfades added, updated and removed by the server (#14) | ✅ (values compared; Kdenlive rewrites keyframe positions as timecodes) | ✅ (e2e) | ✅ |
+| Titles (centred, lower third, positioned; then trimmed, split, moved) added by the server (#15) | ✅ (text and style compared) | ✅ | ✅ (e2e) |
 | Kdenlive-made project with subtitles | ✅ | ❌ Kdenlive crashes (SIGSEGV), reproduced without this server (#16) | ✅ |
 
 ## Fixture corpus

@@ -82,7 +82,29 @@ def clips(path: Path) -> list[tuple]:
         for f in e.findall("filter")
         if (pid := kdenlive_doc.props(f).get("kdenlive_id", "")) in SPECS
     )
-    return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects, marks, params]
+    # titles (#15): text and the style the server writes, read from each title's xmldata
+    from mcp_kdenlive import safexml
+
+    titles = []
+    for el in doc.root:
+        p = kdenlive_doc.props(el)
+        if el.tag != "producer" or p.get("mlt_service") != "kdenlivetitle" or not p.get("xmldata"):
+            continue
+        title = safexml.parse_bytes(p["xmldata"].encode())
+        for item in title.findall("item"):
+            c, pos = item.find("content"), item.find("position")
+            if c is None or pos is None:
+                continue
+            titles.append((
+                p.get("kdenlive:id"), c.text,
+                tuple(c.get(k) for k in ("font", "font-pixel-size", "font-color", "font-italic",
+                                         "font-outline", "font-outline-color", "alignment")),
+                (float(pos.get("x", "0")), float(pos.get("y", "0"))),
+                (title.get("width"), title.get("height"), title.get("duration")),
+            ))
+    titles.sort(key=repr)
+    return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects, marks, params,
+            titles]
 
 
 def verify(path: Path) -> bool:

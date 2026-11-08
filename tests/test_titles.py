@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 from test_timeline_edit import Session
 
-from mcp_kdenlive import edits, titles, writer
+from mcp_kdenlive import edits, safexml, titles, writer
 from mcp_kdenlive import timeline_edit as te
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import props
@@ -44,7 +44,7 @@ FONTS = {"Noto Sans", "DejaVu Sans", "Liberation Serif"}
 def s(tmp_path, monkeypatch) -> Session:
     monkeypatch.setattr(titles, "installed_fonts", lambda: FONTS)
     shutil.copytree(FIX / "kd26", tmp_path / "p")
-    session = Session(tmp_path / "p")  # kd26-ntsc-timeline: 1920x1080 29.97, AV clip [0,60)
+    session = Session(tmp_path / "p")  # kd26-ntsc-timeline: 1280x720 29.97, AV clip [0,60)
     session.apply(edits.add_track, "video")  # V2, above the footage
     return session
 
@@ -61,7 +61,7 @@ def title_producer(s: Session, bin_id: str) -> ET.Element:
 
 
 def document(s: Session, bin_id: str) -> ET.Element:
-    return ET.fromstring(props(title_producer(s, bin_id))["xmldata"])
+    return safexml.parse_bytes(props(title_producer(s, bin_id))["xmldata"].encode())
 
 
 def code(s: Session, *args, **kwargs) -> str:  # type: ignore[no-untyped-def]
@@ -78,13 +78,13 @@ def test_title_in_kdenlive_format(s):
             "eof", "kdenlive:folderid", "meta.media.width", "meta.media.height")} == {
         "mlt_service": "kdenlivetitle", "kdenlive:clip_type": "2", "resource": "",
         "length": "90", "eof": "pause", "kdenlive:folderid": "-1",
-        "meta.media.width": "1920", "meta.media.height": "1080",
+        "meta.media.width": "1280", "meta.media.height": "720",
     }  # fmt: skip
     assert p["kdenlive:clipname"] == "Bonjour"
     assert p["kdenlive:duration"] == "00:00:03:00"
     doc = document(s, r.bin_id)
     assert (doc.get("width"), doc.get("height"), doc.get("duration"), doc.get("out")) == (
-        "1920", "1080", "90", "89",
+        "1280", "720", "90", "89",
     )  # fmt: skip
     (item,) = doc.findall("item")
     assert item.get("type") == "QGraphicsTextItem"
@@ -123,12 +123,12 @@ def test_style(s):
 @pytest.mark.parametrize(
     ("options", "alignment", "x", "y", "width"),
     [
-        # presets: a box inside 5 % margins (96 px, 54 px); one line of 80 px is 109 px high
-        ({}, "4", 96, 485, 1728),  # centred
-        ({"vertical": "bottom"}, "4", 96, 917, 1728),  # 1080 - 54 - 109
-        ({"vertical": "top", "align": "left"}, "1", 96, 54, 1728),
-        ({"align": "right"}, "2", 96, 485, 1728),
-        ({"x": 300, "y": 200, "align": "left"}, "1", 300, 200, 1620),  # box to the right edge
+        # presets: a box inside 5 % margins (64 px, 36 px); one line of 80 px is 109 px high
+        ({}, "4", 64, 305, 1152),  # centred
+        ({"vertical": "bottom"}, "4", 64, 575, 1152),  # 720 - 36 - 109
+        ({"vertical": "top", "align": "left"}, "1", 64, 36, 1152),
+        ({"align": "right"}, "2", 64, 305, 1152),
+        ({"x": 300, "y": 200, "align": "left"}, "1", 300, 200, 980),  # box to the right edge
     ],
 )
 def test_position(s, options, alignment, x, y, width):
@@ -203,3 +203,51 @@ def test_titles_can_be_inserted_again_from_the_bin(s):
     s.apply(te.insert_clip, r.bin_id, "V2", 100, audio_track=None)
     v2 = next(t for t in s.timeline().tracks if t.label == "V2")
     assert [(c.start, c.end) for c in v2.clips] == [(0, 30), (100, 130)]
+
+
+def test_timeline_uses_the_bin_producer_like_kdenlive(s):
+    """Kdenlive 26.08.2 plays a title from its bin producer (no per-track copy, unlike media)."""
+    r = s.apply(titles.add_title, "Hi", "V2", 0, duration=60)
+    s.apply(te.split_clip, "V2@0", s.rev(), 30)
+    s.apply(te.insert_clip, r.bin_id, "V2", 100, audio_track=None)
+    edit = writer.open_for_edit(str(s.current))
+    titles_found = [
+        el for el in edit.root if el.tag == "producer" and props(el).get("kdenlive:id") == r.bin_id
+    ]
+    assert len(titles_found) == 1
+    v2 = next(t for t in s.timeline().tracks if t.label == "V2")
+    assert {c.producer_id for c in v2.clips} == {titles_found[0].get("id")}
+
+
+def test_removing_the_clip_keeps_the_bin_title(s):
+    r = s.apply(titles.add_title, "Hi", "V2", 0, duration=30)
+    s.apply(te.remove_clip, "V2@0", s.rev())
+    assert props(title_producer(s, r.bin_id))["kdenlive:clipname"] == "Hi"
+
+
+def test_title_is_defined_before_the_tracks_that_play_it(s):
+    """MLT only resolves producers defined earlier in the document (Kdenlive puts them first)."""
+    r = s.apply(titles.add_title, "Hi", "V2", 0, duration=30)
+    root = writer.open_for_edit(str(s.current)).root
+    order = [el.get("id") for el in root]
+    title = title_producer(s, r.bin_id).get("id")
+    users = [
+        pl.get("id") for pl in root.iter("playlist")
+        if any(e.get("producer") == title for e in pl.findall("entry"))
+    ]  # fmt: skip
+    assert all(order.index(title) < order.index(u) for u in users)
+
+
+def test_emoji_are_reported(s):
+    """MLT's title producer (7.42, Kdenlive 26.08.2) renders CJK by font fallback, not emoji."""
+    r = s.apply(titles.add_title, "Fin 🎬 東京", "V2", 0)
+    assert any("emoji" in w and "🎬" in w for w in r.warnings)
+    assert s.apply(titles.add_title, "東京 ★", "V2", 200).warnings == []
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(shutil.which("fc-list") is None, reason="needs fontconfig")
+def test_installed_fonts_reads_fontconfig(monkeypatch):
+    monkeypatch.undo()  # the real fc-list, not the fixture's list
+    fonts = titles.installed_fonts()
+    assert fonts and all(isinstance(f, str) and f.strip() == f and f for f in fonts)

@@ -19,6 +19,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 | `set_clip_volume` / `set_clip_fades` | no (writes a file) | Constant audio level (dB) and audio fade-in/fade-out of a clip |
 | `list_effects` | yes | Verified effects with parameters, units, ranges and availability in the installed MLT |
 | `add_effect` / `update_effect` / `remove_effect` | no (writes a file) | Video effects on a clip: crop, brightness, greyscale, sepia, gamma, fades from/to black |
+| `add_title` | no (writes a file) | Editable text title (Kdenlive title clip) placed on a video track |
 | `add_mix` / `remove_mix` | no (writes a file) | Crossfade between two touching clips of a track (Kdenlive's *Mix Clips*) |
 | `list_markers` | yes | Timeline guides, clip markers and marker categories |
 | `add_marker` / `update_marker` / `remove_marker` | no (writes a file) | Timeline guides (chapters) and clip markers |
@@ -504,6 +505,46 @@ after    V1  [ A ............ ]                          layer 0, extended by `a
 - **Verified:** mixes added and removed by the server, with effects around them, reopen in Kdenlive
   26.08.2 and survive its save unchanged; renders by Kdenlive 24.12.3, 25.04.3 and 26.08.2 show the
   blend. E2E: the frame in the middle of a 30-frame mix is a blend of both clips, with no audio gap.
+
+## Titles: `add_title(path, text, track, start, destination, …)`
+
+Creates a title clip in the bin, exactly as Kdenlive 26.08.2's title editor does (*Add as new
+Title*), and places it on a video track. It stays an **editable title** for Kdenlive's title
+editor (manual check on #15); nothing is turned into an image.
+
+| Parameter | Meaning |
+|---|---|
+| `text` | Unicode, up to 5000 characters; `\n` starts a new line (`\r\n` is normalised). Control characters are refused. |
+| `track`, `start` | A video track (usually one above the footage: `add_track`) and a timeline frame; the frames must be free (`[overlap]`). |
+| `duration` | Frames, default 5 seconds. |
+| `font`, `font_size` | An installed family (checked with fontconfig, case-insensitive; default: the first installed of Noto Sans, DejaVu Sans, Liberation Sans, Cantarell, Arial); pixels, default 1/12 of the frame height. |
+| `color`, `outline`, `outline_color`, `italic` | `#RRGGBB` or `#RRGGBBAA`; outline width 0–50 px. |
+| `align`, `vertical` | `left`/`center`/`right` × `top`/`center`/`bottom`, inside 5 % margins. |
+| `x`, `y` | Instead of `vertical`: top-left of the text box in pixels (both or neither); the box then reaches the right edge and `align` applies inside it. |
+
+- **Result** (`title`): `bin_id` (use `insert_clip` to place the same title again), `font`
+  actually used, `font_checked`, `box` (`x`, `y`, `width`, estimated `height`), `clips`
+  (placements) and `warnings`.
+- **Format:** a `kdenlivetitle` producer with an empty `resource`, `kdenlive:clip_type` 2 and
+  the title document in `xmldata` (one `QGraphicsTextItem`, transparent background, Kdenlive's
+  own defaults for the other attributes). Like Kdenlive, the timeline plays the bin producer
+  itself (no per-track copy), and it is defined before the tracks.
+- **Afterwards:** a title is an ordinary video clip for `move_clip`, `trim_clip` (within its
+  duration), `split_clip`, `remove_clip` and effects.
+- **Missing fonts:** an unknown family is refused (`[dependency_missing]`) with close matches;
+  without `fc-list` the font is not checked and a warning says so (MLT then substitutes a font).
+  A Flatpak Kdenlive sees the fonts of its runtime and of the host (`/run/host/fonts`).
+- **Vertical position is estimated:** the box height is `lines × font_size × 1.3625` (measured
+  on Kdenlive's own titles with Noto Sans); other fonts may sit a few pixels higher or lower.
+- **Not supported:** bold, underline, shadows, gradients, images, scrolling, typewriter and
+  several text items per title; edit them in Kdenlive's title editor.
+- **Emoji** (U+1F000 and above) are not drawn by MLT's title renderer (seen with MLT 7.42): the
+  result carries a warning. CJK text renders through font fallback.
+- **Verified:** titles centred, lower-third (left, bottom, italic, coloured, outlined) and placed
+  with `x`/`y`, then trimmed, split and moved, reopen in Kdenlive 26.08.2 without dialogs and
+  survive its save (text, font, size, colours, alignment, position and duration compared);
+  `kdenlive --render` and melt draw them. E2E: a two-line Unicode title is centred in the render
+  (within 3 % horizontally) and appears only during its frames.
 
 ## Guides and clip markers: `list_markers`, `add_marker`, `update_marker`, `remove_marker`
 

@@ -13,6 +13,8 @@ migration notes in the same entry.
 
 ### Added
 
+- **Titles (#15):** `add_title` creates an editable Kdenlive title clip (text with Unicode and several lines, font checked with fontconfig, size, colour, outline, italic, preset or pixel position, duration) and places it on a video track. `EditResult` gains `title`. `insert_clip` accepts title and colour clips from the bin, which the timeline plays from the bin producer like Kdenlive.
+
 - **Effects and crossfades (#14):** `list_effects` lists a verified set of video effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) with parameters, units, ranges, availability in the installed MLT and the tested versions; fades from/to black use the brightness form so they render with Kdenlive 24.12–26.08 and MLT 7.22. `add_effect`, `update_effect` and `remove_effect` edit them on a clip, keeping other effects, their order and keyframes (animated values are not overwritten). `add_mix` and `remove_mix` add or remove a crossfade between two touching clips, in Kdenlive's own format, with the matching audio mix for grouped clips. `EditResult` gains `effects`.
 
 - **Flatpak Kdenlive (#65):** when Kdenlive is not on `PATH`, a Flathub installation (`org.kde.kdenlive`, user or system) is detected and used, with its own melt and FFmpeg, MLT profiles and render presets. Paths the sandbox cannot see (`/tmp`, system folders) are refused with `[invalid_path]`. `KDENLIVE_MCP_FLATPAK=off` disables it. Tested with Flathub's 26.08.3.

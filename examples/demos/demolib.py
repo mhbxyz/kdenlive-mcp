@@ -248,6 +248,25 @@ def region_rgb(
     return r, g, b
 
 
+def bright_box(path: Path, t: float, threshold: int = 200) -> tuple[int, int, int, int] | None:
+    """(left, top, right, bottom) of the pixels brighter than `threshold` at time t, or None."""
+    width, height = video_size(path)
+    proc = _exec(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", str(t),
+            "-i", f"file:{path}", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-",
+        ],
+        timeout=120,
+        text=False,
+    )  # fmt: skip
+    data = proc.stdout[: width * height]
+    rows = [y for y in range(height) if max(data[y * width : (y + 1) * width]) > threshold]
+    if not rows:
+        return None
+    cols = [x for x in range(width) if any(data[y * width + x] > threshold for y in rows)]
+    return cols[0], rows[0], cols[-1], rows[-1]
+
+
 def dominant(rgb: tuple[int, int, int]) -> str:
     """'red', 'green', 'blue', 'black', 'white' or 'mixed' for a solid-ish color."""
     r, g, b = rgb
