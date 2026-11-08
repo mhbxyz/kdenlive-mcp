@@ -14,6 +14,7 @@ Evidence behind the design (docs/research/integration-surfaces.md §2.3, issue #
 
 from __future__ import annotations
 
+import html
 import os
 import re
 import shutil
@@ -54,8 +55,7 @@ MELT_PROGRESS = re.compile(r"Current Frame:\s*(\d+), percentage:\s*(\d+)")
 MELT_NOTE = (
     "Rendered with MLT's melt, not Kdenlive's own render path: proxy clips, render zones and "
     "Kdenlive-specific render options are ignored, and the preset's defaults are used for "
-    "quality and bitrate. Recent projects may need a recent MLT: an old melt (7.22) rendered a "
-    "Kdenlive 26.08 project without its audio in our tests."
+    "quality, bitrate and speed."
 )
 
 
@@ -160,6 +160,21 @@ def preset_definitions(paths: list[Path]) -> dict[str, dict[str, str]]:
 
 
 PLACEHOLDER = re.compile(r"%([a-z_]+)")
+SAFE_KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:+-]*")
+# Properties that would change what melt reads or where it writes.
+FORBIDDEN_KEYS = {"target", "resource", "consumer", "producer", "mlt_service", "real_time"}
+IMAGE_SEQUENCE_EXTENSIONS = {
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "tga",
+    "tif",
+    "tiff",
+    "exr",
+    "dpx",
+    "bmp",
+}
 SUFFIX = re.compile(r"(\S*?)\+'([^']*)'")
 
 
@@ -202,18 +217,30 @@ def melt_consumer_args(attrs: dict[str, str], rate: FrameRate) -> list[str]:
             )
         return value
 
+    if (attrs.get("extension") or "").lower() in IMAGE_SEQUENCE_EXTENSIONS:
+        raise ProjectError(
+            "unknown_preset",
+            f"Preset {attrs.get('name')!r} writes an image sequence; the melt engine does not.",
+            "Use engine='kdenlive' (Kdenlive 24.02+) or a video preset.",
+        )
     text = PLACEHOLDER.sub(fill, attrs.get("args", ""))
     text = SUFFIX.sub(lambda m: m.group(1) + m.group(2), text)
     args = text.split()
+    for token in args:
+        key, sep, value = token.partition("=")
+        if not sep or not SAFE_KEY.fullmatch(key) or key in FORBIDDEN_KEYS or "://" in value:
+            raise ProjectError(
+                "unknown_preset",
+                f"Preset {attrs.get('name')!r} has an argument the melt engine refuses: {token!r}.",
+                "Only key=value encoder settings are passed to melt; outputs, inputs and URLs "
+                "are not.",
+            )
     speeds = [s for s in attrs.get("speeds", "").split(";")]
     if speeds and any(speeds):
         index = attrs.get("defaultspeedindex")
-        chosen = (
-            speeds[int(index)]
-            if index and index.isdigit() and int(index) < len(speeds)
-            else speeds[0]
-        )
-        args += chosen.split()
+        # Without a default, Kdenlive uses the middle entry (observed with 26.08.2).
+        position = int(index) if index and index.isdigit() else len(speeds) // 2
+        args += speeds[min(position, len(speeds) - 1)].split()
     return args
 
 
@@ -272,7 +299,7 @@ class RenderResult(BaseModel):
     )
     exit_code: int | None = None
     elapsed_seconds: float | None = None
-    process_completed: bool = Field(description="Kdenlive's render process exited with status 0.")
+    process_completed: bool = Field(description="The render process exited with status 0.")
     validation: OutputValidation | None = Field(
         default=None, description="ffprobe check of the produced file (separate from completion)."
     )
@@ -319,6 +346,7 @@ class RenderPlan:
     engine: str = "kdenlive"
     melt: str | None = None
     consumer_args: list[str] = field(default_factory=list)
+    effective_root: Path | None = None
 
 
 def _bounded_tail(text: str) -> list[str]:
@@ -516,6 +544,7 @@ def prepare(
         engine=engine,
         melt=melt_exe,
         consumer_args=consumer,
+        effective_root=Path(media._Resolver(doc).effective),
     )
 
 
@@ -549,13 +578,17 @@ class RenderRun:
 
     def start(self) -> None:
         if self.plan.engine == "melt":
+            scene = self._scene_with_root()
             args = [
                 self.plan.melt or "melt",
-                str(self.plan.project_path),
+                str(scene),
                 "-progress",
                 "-consumer",
                 f"avformat:{self.plan.temp_output}",
                 *self.plan.consumer_args,
+                # Kdenlive's own consumer defaults (captured from its render scene).
+                "rescale=bilinear",
+                "deinterlacer=onefield",
                 "real_time=-1",
             ]
             self.running = start(
@@ -571,6 +604,22 @@ class RenderRun:
             str(self.plan.temp_output),
         ]
         self.running = start(args, log_path=str(self.log_path), env=self.env, cwd=str(self.workdir))
+
+    def _scene_with_root(self) -> Path:
+        """A copy of the project whose `root` is the folder Kdenlive would use.
+
+        Kdenlive (and this server) treat a stored root that no longer exists as a moved project
+        and resolve relative media against the project's folder; melt does not, and renders a
+        blank, silent picture (found in the #42 review).
+        """
+        text = self.plan.project_path.read_text(encoding="utf-8")
+        root = html.escape(str(self.plan.effective_root), quote=True)
+        text, count = re.subn(r'(<mlt\b[^>]*?\sroot=)"[^"]*"', rf'\1"{root}"', text, count=1)
+        if not count:
+            text = re.sub(r"<mlt\b", f'<mlt root="{root}"', text, count=1)
+        scene = self.workdir / "scene.kdenlive"
+        scene.write_text(text, encoding="utf-8")
+        return scene
 
     def log_tail(self) -> list[str]:
         try:
@@ -639,7 +688,8 @@ class RenderRun:
                 )
                 return result
             if exit_code != 0:
-                result.error = f"Kdenlive exited with status {exit_code}."
+                program = "melt" if plan.engine == "melt" else "Kdenlive"
+                result.error = f"{program} exited with status {exit_code}."
                 return result
             temp = plan.temp_output
             if not temp.is_file() or temp.stat().st_size == 0:
@@ -702,7 +752,9 @@ def render(
     except OSError as exc:
         run.cleanup()
         raise ProjectError(
-            "render_failed", f"Cannot start Kdenlive: {exc.strerror or exc}."
+            "render_failed",
+            f"Cannot start {'melt' if plan.engine == 'melt' else 'Kdenlive'}: "
+            f"{exc.strerror or exc}.",
         ) from exc
     assert run.running is not None  # noqa: S101 - set by start()
     try:

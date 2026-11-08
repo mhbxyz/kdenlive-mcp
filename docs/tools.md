@@ -135,10 +135,21 @@ appended. A preset with another placeholder is refused (`[unknown_preset]`). The
 `engine` says which one ran, and a melt render carries a warning: it is **not Kdenlive's own
 render path** (proxy clips, render zones and Kdenlive-specific render options are ignored).
 
-Verified: CI renders the fixtures with the melt engine on Ubuntu's Kdenlive 23.08 / MLT 7.22;
-locally, melt and Kdenlive 26.08.2 renders of a project with crossfades have the same streams
-and duration. Known difference: MLT 7.22 rendered a project saved by Kdenlive 26.08 without
-its audio (projects made by this server render with sound there).
+Safety: the melt engine only passes `key=value` encoder settings from a preset. A preset whose
+arguments name an output or input (`target=`, `resource=`, a bare path, `-consumer`…), contain a
+URL, or write an image sequence is refused (`[unknown_preset]`): presets can come from user or
+downloaded files, and the server's output checks must not be bypassed.
+
+Like Kdenlive, melt reads the project with its media resolved from the folder Kdenlive would use:
+when the stored `root` no longer exists (a moved project), melt renders a copy whose `root` is
+the project's folder (without it, melt rendered a blank, silent picture). Kdenlive's consumer
+defaults `rescale=bilinear` and `deinterlacer=onefield` are added; with no default speed, the
+middle speed entry is used, as Kdenlive does.
+
+Verified: CI renders the fixtures with the melt engine on Ubuntu's Kdenlive 23.08 / MLT 7.22
+and checks picture and sound; locally, melt and Kdenlive 26.08.2 renders of a project with
+crossfades have the same streams and duration, frame colours within 12/255 and mean audio level
+within 1.5 dB. Known differences: no proxies or render zones, Kdenlive's `in`/`out` not set.
 
 ### Kdenlive engine checks
 
