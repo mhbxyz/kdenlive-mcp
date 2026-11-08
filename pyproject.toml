@@ -8,10 +8,33 @@ version = "0.1.0.dev0"
 description = "Local-first MCP server to inspect, edit and render Kdenlive projects."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Manoah BERNIER" }]
+keywords = ["mcp", "model-context-protocol", "kdenlive", "mlt", "video-editing", "llm"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video :: Non-Linear Editor",
+    "Typing :: Typed",
+]
 dependencies = [
     "mcp>=2.3,<3",
     "pydantic>=2.11,<3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mhbxyz/kdenlive-mcp"
+Issues = "https://github.com/mhbxyz/kdenlive-mcp/issues"
+Source = "https://github.com/mhbxyz/kdenlive-mcp"
 
 [project.scripts]
 kdenlive-mcp = "mcp_kdenlive.cli:main"
@@ -24,6 +47,16 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_kdenlive"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
