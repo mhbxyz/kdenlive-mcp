@@ -27,6 +27,7 @@ migration notes in the same entry.
 
 ### Fixed
 
+- **Release: TestPyPI visibility (#82):** the release waits up to 15 minutes, with backoff, for TestPyPI to list the new version, says how long it waited and fails clearly (`scripts/wait_for_index.py`); what is verified is unchanged.
 - **Crossfades moved later clips (found by the demos, #92):** `add_mix` extended the left clip before taking the right one off its layer, which pushed every later clip of that layer by the crossfade's second half.
 - **Crossfade into a clip already on the other layer:** in Kdenlive's own layout (clips alternating between the two layers), a crossfade into a clip that also ends in the next crossfade was refused; it is now made without moving the clip. A crossfade that would run into a neighbouring clip or crossfade on either layer is refused (`[overlap]`).
 - **`kdenlive --render` taken for an open project (found by a real-client run, #92):** command-line renders running at the same time made edits warn that Kdenlive might have the project open; they are now ignored by the open-project check.
