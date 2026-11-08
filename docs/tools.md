@@ -10,6 +10,8 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 | `get_timeline` | yes | Tracks, clips, mixes, compositions and guides of one sequence |
 | `list_project_media` | yes | Bin media with resolved paths and status, effect/transition asset files, optional ffprobe data |
 | `probe_media` | yes | ffprobe metadata for one local file |
+| `list_profiles` | yes | MLT video profiles usable for new projects |
+| `create_project` | no (creates a file) | New Kdenlive project with one media clip on the timeline |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 | `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
@@ -157,3 +159,46 @@ returns a job immediately.
 - **Progress:** Kdenlive's command-line render does not report progress reliably. `progress` is filled only when `kdenlive_render` has written a progress line. Otherwise it is `null`, and `progress_note` explains why.
 - **Lifetime:** jobs are in memory and belong to one server process. When the server exits (the client closes the stdio session), running renders are stopped and cleaned up. Nothing persists across restarts: an unknown job id returns `[unknown_job]`. The 50 most recent finished jobs are kept.
 - **Abrupt exit:** if the server is killed with SIGKILL, it cannot stop its renders. Kdenlive keeps running until it finishes, and its partial `.<name>.kdenlive-mcp-*.partial.*` file stays next to the output.
+
+## `create_project(output, media_path, profile="auto", overwrite=False)`
+
+Creates a new `.kdenlive` file. The media clip is in the bin and at frame 0 of
+"Sequence 1":
+
+- **Audio and video media:** video on V1, audio on A1, grouped like Kdenlive's own insertion (`AVSplit`).
+- **Audio-only media:** A1.
+- **Video-only media:** V1.
+
+### How the file is built
+
+- **Skeleton:** an empty project saved by Kdenlive 26.08.2 (`templates/kdenlive-26.08-empty.kdenlive`). It provides the four default tracks, the internal mixing and compositing, the bin folders and the document properties. It gets new document and sequence uuids and a new document id.
+- **Profile:** `profile` is an MLT profile name (`list_profiles`). With `auto`, it is the standard progressive profile whose resolution and rational frame rate match the media; if none matches, the call returns `[profile_required]`.
+- **Clip data:** length at the project frame rate, stream indexes and `meta.media.*` are computed by MLT (`melt -profile <p> avformat:<file> -consumer xml`), the same data Kdenlive gets from MLT.
+- **Kdenlive metadata:** bin id, control uuid, `kdenlive:file_size` and `kdenlive:file_hash`. The hash uses Kdenlive's algorithm: MD5 of the file, or of its first and last MB above 2 MB. It is checked against a hash stored by Kdenlive 26.08.2.
+- **Media path:** relative to the project directory when the media is inside it; otherwise absolute, with a warning that moving the media breaks the project.
+
+### Safety
+
+- **Overwrite:** an existing file is refused unless `overwrite=true`.
+- **No partial files:** the file is written to a temporary name, synced, then linked into place. Without `overwrite`, the link never replaces a file that appeared meanwhile. A failed creation leaves nothing behind.
+- **Media untouched:** media files are never modified.
+- **Read-back check:** the written file is read back with the inspection parser and must describe the clip that was built.
+
+### Verification against Kdenlive
+
+`research/lab/verify_roundtrip.py` opens a project in a headless Kdenlive 26.08.2, saves a copy
+through *Save As* and compares the timelines. On 2026-11-08 it passed for three generated projects:
+
+- 29.97 fps with audio and video;
+- 25 fps with audio and video and a Unicode file name;
+- 25 fps audio only.
+
+For each: no dialog while loading, and an identical timeline after Kdenlive's save. Melt and
+`kdenlive --render` render generated projects (integration tests).
+
+### Limits
+
+- **Media types:** audio and video files only. Images, titles, colors and image sequences come later (#10, #15).
+- **Profiles:** custom Kdenlive profiles from `~/.local/share/kdenlive/profiles` are not offered, only MLT's standard profiles.
+- **Metadata refresh:** Kdenlive adds a few `meta.media.*` properties (decoded size, frame rate) when it opens the file. They are recomputed by Kdenlive and not required.
+- **Manual checks:** interactive GUI editing of a generated project still needs manual checks (see #8).
