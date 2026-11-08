@@ -39,10 +39,10 @@ pointed to by `KDENLIVE_MCP_KDENLIVE`:
 | 24.12.3 (AppImage) | ✅ version, `--render` detected | ✅ montage, crossfades, AV pair: picture and sound | pending (#86) |
 | 25.04.3 (AppImage) | ✅ version, `--render` detected | ✅ same | pending (#86) |
 
-Effects and crossfades written by the server (#14) render the same with both releases, except
-that **24.12.3 renders the fades from/to black as if absent** (the same happens with the file saved
-by Kdenlive 26.08.2, and the effect definition is unchanged in 24.12.3, so it is the release, not the
-file). `list_effects` says so in each fade's `notes`.
+Effects and crossfades written by the server (#14) render the same with both releases. Finding:
+Kdenlive's *default* fade from/to black (an alpha fade) renders as no fade with 24.12.3 (and with
+MLT 7.22's melt), even in a file saved by Kdenlive 26.08.2; the server therefore writes the
+brightness form (*Fade to Black* checked), which renders with 24.12.3, 25.04.3, 26.08.2 and melt.
 
 `tests/test_compat.py::test_other_kdenlive_releases_render_fixtures` repeats the rendering checks with any
 binaries listed in `KDENLIVE_MCP_TEST_KDENLIVE` (`:`-separated; skipped when unset). AppImages are

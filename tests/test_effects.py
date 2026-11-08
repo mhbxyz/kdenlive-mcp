@@ -62,9 +62,6 @@ def test_catalog_lists_verified_effects_with_parameters():
     assert (crop["top"].unit, crop["top"].minimum, crop["top"].default) == ("pixels", 0, 0)
     assert catalog["brightness"].target == "video"
     assert catalog["crop"].verified_with.startswith("Kdenlive 26.08.2 with MLT")
-    # #14: Kdenlive 24.12.3 renders these files without the black fades (25.04.3 and later do)
-    assert "24.12" in catalog["fade_to_black"].notes and "25.04" in catalog["fade_from_black"].notes
-    assert catalog["crop"].notes == ""
 
 
 # ------------------------------------------------------------------ add / update -------
@@ -135,12 +132,15 @@ def test_video_fades_follow_the_clip(s):
     s.apply(effects.add_effect, "V1@0", s.rev(), "fade_from_black", {"duration": 15})
     s.apply(effects.add_effect, "V1@0", s.rev(), "fade_to_black", {"duration": 10})
     fade_in, fade_out = filters(s, "V1")
-    assert (fade_in["mlt_service"], fade_in["alpha"], fade_in["level"]) == (
+    # Kdenlive's "Fade from/to Black" checked: the brightness fades, so the picture really goes
+    # black whatever is below (the unchecked default fades the alpha, which Kdenlive 24.12.3 and
+    # MLT 7.22 render as no fade at all on a single track)
+    assert (fade_in["mlt_service"], fade_in["level"], fade_in["alpha"]) == (
         "brightness",
         "0=0;-1=1",
         "1",
     )
-    assert fade_out["alpha"] == "0=1;-1=0"
+    assert (fade_out["level"], fade_out["alpha"]) == ("0=1;-1=0", "1")
     s.apply(te.trim_clip, "V1@0", s.rev(), start=5)  # edge fades do not block start trims
     fade_in, _ = filters(s, "V1")
     assert fade_in["in"] == "00:00:00.167"

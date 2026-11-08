@@ -421,7 +421,7 @@ audio clip is changed (the video is not), and a video-only clip is refused
 Only effects whose format was checked against Kdenlive 26.08.2 are offered; `list_effects` gives
 each one's `id`, `target`, `mlt_service`, parameters (`type`, `unit`, `minimum`, `maximum`,
 `default`), `available` (the installed MLT has the service, `null` if `melt` was not found),
-`verified_with` and compatibility `notes`.
+`verified_with`, plus catalog-wide `notes` and the `transitions`.
 
 | `id` | Parameters | Stored as (Kdenlive 26.08.2) |
 |---|---|---|
@@ -430,7 +430,7 @@ each one's `id`, `target`, `mlt_service`, parameters (`type`, `unit`, `minimum`,
 | `greyscale` | — | `greyscale` |
 | `sepia` | `u` (0–255, default 75), `v` (0–255, default 150) | `sepia`, `u="0=<v>"`, `v="0=<v>"` |
 | `gamma` | `gamma` (0.01–3, 1 = unchanged) | `gamma`, `gamma="0=<v>"` |
-| `fade_from_black` / `fade_to_black` | `duration` (frames, default 30) | `brightness` with `alpha="0=0;-1=1"` / `"0=1;-1=0"`, filter `in`/`out` at the clip's first/last frames (source frames) |
+| `fade_from_black` / `fade_to_black` | `duration` (frames, default 30) | `brightness` with `level="0=0;-1=1"` / `"0=1;-1=0"` and `alpha=1` (Kdenlive's *Fade from/to Black* box checked), filter `in`/`out` at the clip's first/last frames (source frames) |
 
 - **Target:** every effect above is a video effect; on an audio/video pair it goes on the video
   clip, and an audio-only clip is refused (`[incompatible_track]`). Audio level and fades are
@@ -455,9 +455,11 @@ each one's `id`, `target`, `mlt_service`, parameters (`type`, `unit`, `minimum`,
   reopen in Kdenlive 26.08.2 without dialogs; Kdenlive's own save keeps the ids, order and values
   (it rewrites keyframe positions as timecodes, `0=1.5` → `00:00:00.000=1.5`, which the server
   reads and edits). E2E: greyscale (R≈G≈B), crop (black side), fade to black, rendered.
-  Renders of the same project by the official 24.12.3 and 25.04.3 AppImages match, except that
-  **24.12.3 ignores the fades from/to black** (also in files saved by Kdenlive 26.08.2); see the
-  effect `notes`.
+  Renders of the same project by the official 24.12.3 and 25.04.3 AppImages match.
+- **Fades from/to black, two forms:** Kdenlive's default (box unchecked) fades the *alpha*, which
+  shows what is below and renders as no fade at all with Kdenlive 24.12.3 and MLT 7.22 on a
+  single track; the server writes the checked form, which fades the brightness and goes black
+  with every release tested. Fades of either form made in Kdenlive are read, kept and re-anchored.
 
 ## Crossfades: `add_mix(clip, revision, duration=None)`, `remove_mix(clip, revision)`
 

@@ -68,12 +68,6 @@ class Spec:
     params: tuple[Param, ...] = ()
     fixed: tuple[tuple[str, str], ...] = ()
     edge: str | None = None  # "start" or "end": an edge fade with in/out
-    notes: str = ""
-
-
-_BLACK_FADE_NOTE = (
-    "Rendered by Kdenlive 25.04.3 and later; Kdenlive 24.12.3 renders the clip without the fade."
-)
 
 
 def _pixels(name: str) -> Param:
@@ -139,9 +133,8 @@ SPECS: dict[str, Spec] = {
             "brightness",
             "video",
             (Param("duration", "int", 1, 100000, 30, "frames", "Length of the fade."),),
-            (("start", "1"), ("level", "1"), ("alpha", "0=0;-1=1")),
+            (("start", "1"), ("level", "0=0;-1=1"), ("alpha", "1")),
             edge="start",
-            notes=_BLACK_FADE_NOTE,
         ),
         Spec(
             "fade_to_black",
@@ -149,9 +142,8 @@ SPECS: dict[str, Spec] = {
             "brightness",
             "video",
             (Param("duration", "int", 1, 100000, 30, "frames", "Length of the fade."),),
-            (("start", "1"), ("level", "1"), ("alpha", "0=1;-1=0")),
+            (("start", "1"), ("level", "0=1;-1=0"), ("alpha", "1")),
             edge="end",
-            notes=_BLACK_FADE_NOTE,
         ),
     )
 }
@@ -176,7 +168,6 @@ class EffectInfo(BaseModel):
     available: bool | None = Field(description="MLT has the service; null if not checked.")
     parameters: list[ParamInfo]
     verified_with: str
-    notes: str = Field(description="Compatibility notes; empty when there are none.")
 
 
 class TransitionInfo(BaseModel):
@@ -255,7 +246,6 @@ def catalog(env: Mapping[str, str] | None = None) -> EffectCatalog:
                     for p in s.params
                 ],
                 verified_with=VERIFIED_WITH,
-                notes=s.notes,
             )
             for s in SPECS.values()
         ],
