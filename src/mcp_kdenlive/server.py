@@ -20,6 +20,7 @@ from mcp_kdenlive import (
     edits,
     jobs,
     kdenlive_doc,
+    markers,
     media,
     project,
     render,
@@ -66,6 +67,7 @@ ProjectPath = Annotated[
 
 class EditResult(BaseModel):
     saved: writer.SaveResult
+    marker: markers.MarkerEditResult | None = None
     media: list[edits.MediaAdded] | None = None
     track: edits.TrackAdded | None = None
     timeline: timeline_edit.TimelineEditResult | None = None
@@ -94,6 +96,136 @@ def _tool_error(exc: ProjectError) -> ToolError:
     return ToolError(str(exc))
 
 
+BinId = Annotated[
+    str | None,
+    Field(description="Bin clip id for a clip marker; omit for a timeline guide."),
+]
+
+
+def _register_markers(server: MCPServer) -> None:
+    def _marker_edit(
+        path: str,
+        destination: str,
+        overwrite: bool,
+        expected_sha256: str | None,
+        operation: Callable[[writer.EditableProject], markers.MarkerEditResult],
+    ) -> EditResult:
+        try:
+            edit = writer.open_for_edit(path)
+            result = operation(edit)
+            saved = writer.save(
+                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
+            )
+            return EditResult(saved=saved, marker=result)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    marker_target = (
+        " Without `bin_id` the marker is a timeline **guide** (position in timeline frames); with "
+        "`bin_id` it is a **clip marker** on that bin clip (position in the clip's source frames, "
+        "shown on every instance). Kdenlive keeps one marker per position. The result is written "
+        "to `destination` with the save_project_copy rules."
+    )
+
+    @server.tool(
+        name="list_markers",
+        title="List guides and clip markers",
+        annotations=READ_ONLY,
+        description=(
+            "List the timeline guides of a sequence, the clip markers of every bin clip, and the "
+            "marker categories (index, name, color). Positions are frames: timeline frames for "
+            "guides, source frames for clip markers. Read-only."
+        ),
+    )
+    def list_markers(path: ProjectPath, sequence: Sequence = None) -> markers.MarkerList:
+        try:
+            return markers.list_markers(kdenlive_doc.load(path), sequence)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="add_marker",
+        title="Add guide or clip marker",
+        annotations=EDIT,
+        description="Add a guide or a clip marker with a comment, a category and an optional "
+        "duration in frames (0 = point marker)." + marker_target,
+    )
+    def add_marker(
+        path: ProjectPath,
+        position: Annotated[int, Field(ge=0)],
+        destination: Destination,
+        comment: str = "",
+        category: Annotated[int, Field(ge=0)] = 0,
+        duration: Annotated[int, Field(ge=0)] = 0,
+        bin_id: BinId = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _marker_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: markers.add_marker(
+                e, position, comment, category, duration, bin_id, sequence
+            ),
+        )
+
+    @server.tool(
+        name="update_marker",
+        title="Update guide or clip marker",
+        annotations=EDIT,
+        description="Change the marker at `position`: move it (`new_position`), or change its "
+        "comment, category or duration; omitted fields are kept." + marker_target,
+    )
+    def update_marker(
+        path: ProjectPath,
+        position: Annotated[int, Field(ge=0)],
+        destination: Destination,
+        new_position: Annotated[int, Field(ge=0)] | None = None,
+        comment: str | None = None,
+        category: Annotated[int, Field(ge=0)] | None = None,
+        duration: Annotated[int, Field(ge=0)] | None = None,
+        bin_id: BinId = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _marker_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: markers.update_marker(
+                e, position, bin_id, new_position, comment, category, duration, sequence
+            ),
+        )
+
+    @server.tool(
+        name="remove_marker",
+        title="Remove guide or clip marker",
+        annotations=EDIT,
+        description="Remove the marker at `position`." + marker_target,
+    )
+    def remove_marker(
+        path: ProjectPath,
+        position: Annotated[int, Field(ge=0)],
+        destination: Destination,
+        bin_id: BinId = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _marker_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: markers.remove_marker(e, position, bin_id, sequence),
+        )
+
+
 def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     """Create the MCP server with every tool registered."""
     manager_holder: list[jobs.JobManager] = [job_manager] if job_manager else []
@@ -115,6 +247,7 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     _register_inspection(server)
     _register_rendering(server, manager)
     _register_editing(server)
+    _register_markers(server)
     return server
 
 

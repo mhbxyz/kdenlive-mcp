@@ -1,4 +1,24 @@
 {
+ "add_marker": {
+  "params": [
+   "bin_id",
+   "category",
+   "comment",
+   "destination",
+   "duration",
+   "expected_sha256",
+   "overwrite",
+   "path",
+   "position",
+   "sequence"
+  ],
+  "required": [
+   "destination",
+   "path",
+   "position"
+  ],
+  "read_only": false
+ },
  "add_media_to_bin": {
   "params": [
    "destination",
@@ -110,6 +130,16 @@
   ],
   "read_only": true
  },
+ "list_markers": {
+  "params": [
+   "path",
+   "sequence"
+  ],
+  "required": [
+   "path"
+  ],
+  "read_only": true
+ },
  "list_profiles": {
   "params": [],
   "required": [],
@@ -181,6 +211,23 @@
    "destination",
    "path",
    "revision"
+  ],
+  "read_only": false
+ },
+ "remove_marker": {
+  "params": [
+   "bin_id",
+   "destination",
+   "expected_sha256",
+   "overwrite",
+   "path",
+   "position",
+   "sequence"
+  ],
+  "required": [
+   "destination",
+   "path",
+   "position"
   ],
   "read_only": false
  },
@@ -304,6 +351,27 @@
    "destination",
    "path",
    "revision"
+  ],
+  "read_only": false
+ },
+ "update_marker": {
+  "params": [
+   "bin_id",
+   "category",
+   "comment",
+   "destination",
+   "duration",
+   "expected_sha256",
+   "new_position",
+   "overwrite",
+   "path",
+   "position",
+   "sequence"
+  ],
+  "required": [
+   "destination",
+   "path",
+   "position"
   ],
   "read_only": false
  }
