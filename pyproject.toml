@@ -47,6 +47,7 @@ dev = [
     "ruff>=0.14",
     "mypy>=1.18",
     "pytest-timeout>=2.4",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -68,6 +69,7 @@ addopts = "-ra --strict-markers"
 timeout = 120
 markers = [
     "integration: needs real Kdenlive/MLT/FFmpeg installations (skipped when unavailable)",
+    "e2e: real server over stdio driven by an MCP client, renders checked objectively (tests/e2e)",
 ]
 
 [tool.ruff]
@@ -93,3 +95,13 @@ ignore = [
 python_version = "3.11"
 strict = true
 files = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["mcp_kdenlive"]
+# Measure the server and CLI when tests start them as subprocesses (stdio, e2e).
+patch = ["subprocess"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
