@@ -90,6 +90,7 @@ def test_import_srt_in_kdenlive_format(s, ws):
     assert "PlayResX: 1280" in text and "PlayResY: 720" in text
     assert "Style: Default,Arial,40.00," in text  # Kdenlive's default style
     assert "MaxLayer: 1" in text  # the overlapping cue went to layer 1
+    # nearest centisecond of the frame's start, half up: 150 frames = 5.005 s -> 05.01
     assert "Dialogue: 0,00:00:01.00,00:00:03.50,Default,,0,0,0,,Bonjour à tous\\NDeuxième" in text
     assert "Dialogue: 1,00:00:03.00,00:00:05.01,Default,,0,0,0,,Chevauchement" in text
     assert "{\\i1}Italique{\\i0} et {\\b1}gras{\\b0}" in text
@@ -222,3 +223,28 @@ def test_save_writes_the_subtitle_file_with_the_project(ws, tmp_path):
     assert saved.side_files == [str(out.parent / "copy é.kdenlive.ass")]
     assert (out.parent / "copy é.kdenlive.ass").is_file()
     assert report(out).tracks[0].status == "ok"
+
+
+def test_events_are_written_like_kdenlive_and_listed_by_time(s, ws):
+    """Kdenlive 26.08.2 writes events layer by layer (seen when it re-saves an import)."""
+    s.apply(subtitles.import_subtitles, str(write(ws, "in.srt", SRT)))
+    dialogues = [
+        line.split(",")[0]
+        for line in (ws / "step1.kdenlive.ass").read_text(encoding="utf-8").splitlines()
+        if line.startswith("Dialogue:")
+    ]
+    assert dialogues == ["Dialogue: 0", "Dialogue: 0", "Dialogue: 1"]
+    events = report(s.current).tracks[0].events
+    assert [(e.start, e.layer) for e in events] == [(30, 0), (90, 1), (181, 0)]
+
+
+@pytest.mark.parametrize("fps", [(24, 1), (25, 1), (30000, 1001), (50, 1), (60000, 1001), (60, 1)])
+def test_written_times_read_back_as_the_same_frame(fps):
+    from mcp_kdenlive.timecode import FrameRate
+
+    rate = FrameRate(*fps)
+    for frame in range(0, 20000, 7):
+        text = subtitles._ass_time(frame, rate)
+        hh, mm, rest = text.split(":")
+        seconds = (int(hh) * 60 + int(mm)) * 60 + float(rest)
+        assert round(seconds * rate.num / rate.den) == frame, text  # read back by rounding

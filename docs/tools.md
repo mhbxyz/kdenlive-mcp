@@ -25,6 +25,8 @@ tool does not declare are refused with `[invalid_argument]` (input schemas say
 | `add_mix` / `remove_mix` | no (writes a file) | Crossfade between two touching clips of a track (Kdenlive's *Mix Clips*) |
 | `list_markers` | yes | Timeline guides, clip markers and marker categories |
 | `add_marker` / `update_marker` / `remove_marker` | no (writes a file) | Timeline guides (chapters) and clip markers |
+| `list_subtitles` | yes | A sequence's subtitles: file, styles, events with frames, layers and text |
+| `import_subtitles` | no (writes files) | Import an SRT or WebVTT file as the main sequence's subtitles |
 | `relink_media` | no (writes a file) | Point bin clips at moved or replacement media files |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
@@ -276,6 +278,7 @@ it writes a verified copy without changing anything.
 | Source changed since it was read | `[conflict]`, nothing written. The source is re-hashed just before writing. |
 | Destination appears open in Kdenlive | `[open_in_kdenlive]`, with the evidence (#62): a `kdenlive` process started with that file; a Kdenlive autosave lock of unsaved changes; or a running Kdenlive whose **window title** names a project with the same file name (read-only, over the session D-Bus, see [security.md](security.md), *Open projects*). This last signal also catches a project opened from Kdenlive's *Open* dialog without changes. |
 | Kdenlive runs but could not be checked | Written, with a warning in `saved.warnings` telling the user to close or reload the project in Kdenlive. This happens without `busctl` (systemd) or a session bus, or with a Kdenlive that is not on the session bus. |
+| The edit adds a file next to the project (subtitles, #16) | Named after the destination (`<name>.kdenlive.ass`) and written atomically just before the project, under the same rules: an existing one is `[output_exists]` unless `overwrite=true` (then backed up as `<name>.ass.backup-<UTC timestamp>`); if the project cannot be written, the new file is removed. Listed in `saved.side_files`. |
 | Kdenlive 20.08–22.12 document (version 1.0x) | `[unsupported_structure]`. Save it once in a recent Kdenlive first. |
 
 ### Why the open-project rule matters (observed, Kdenlive 26.08.2)
@@ -556,6 +559,44 @@ editor (manual check on #15); nothing is turned into an image.
   survive its save (text, font, size, colours, alignment, position and duration compared);
   `kdenlive --render` and melt draw them. E2E: a two-line Unicode title is centred in the render
   (within 3 % horizontally) and appears only during its frames.
+
+## Subtitles: `list_subtitles(path, sequence=None, max_events=500)`, `import_subtitles(path, subtitle_file, destination, offset=0, replace=False, …)`
+
+Kdenlive 26.08.2 keeps a sequence's subtitles in an **ASS file next to the project**
+(`<project file>.ass`, e.g. `trip.kdenlive.ass`), referenced by an internal `avfilter.subtitles`
+filter on the sequence (`av.filename`, relative) and listed in
+`kdenlive:sequenceproperties.subtitlesList`.
+
+**Reading:** `list_subtitles` reports each subtitle track: `file` (resolved), `reference` (as
+stored), `status` (`ok`, `missing`, `unreadable`), `styles` and `events` (`start`, exclusive
+`end` in frames, `start_timecode`, `layer`, `style`, `text` with `\n` between lines; ASS style
+codes such as `{\i1}` are kept), sorted by start; `max_events` bounds the list (`truncated`).
+
+**Importing:**
+
+| Topic | Rule |
+|---|---|
+| Formats | SubRip `.srt` and WebVTT `.vtt`. Others (ASS, SBV…) are refused with a conversion hint. |
+| Encodings | UTF-8 (with or without BOM) and UTF-16 with a BOM. Anything else is refused (`[invalid_argument]`, with an `iconv` hint): it cannot be detected reliably. |
+| Timing | Cue times are rounded to the nearest frame, then written to the nearest centisecond (ASS precision), so a subtitle edge can render up to one frame early or late. A cue shorter than a frame lasts one frame (warning). `offset` adds frames to every cue; a cue starting before frame 0 is `[invalid_range]`. Cues ending after 100 hours are `[invalid_range]`. |
+| Overlaps | Kept: an overlapping cue goes to the next free ASS layer (`layers` in the result), as Kdenlive stores overlapping subtitles. |
+| Text | Unicode kept; several lines kept (`\N`); `<i>`, `<b>`, `<u>` become ASS style codes; `<font>` and WebVTT voice/class tags and cue settings are dropped (warnings); `{` `}` become `(` `)` because ASS would hide the text between them (warning). |
+| Style | Kdenlive's default style (Arial 40, white, outline 1, bottom centre), the frame size from the project profile. Styles are not imported. |
+| File | `<destination file name>.ass` next to the saved project, written with it (`saved.side_files`), like Kdenlive's *Save As*. An existing file there is refused (`[output_exists]`) unless `overwrite`, which backs it up first. |
+| Existing subtitles | Refused (`[subtitles_exist]`, with the number of events) unless `replace=true`; the **old ASS file is never modified** (the copy gets its own file). Several subtitle tracks cannot be replaced (`[unsupported_structure]`). |
+| Sequences | Only the project's main sequence (the one whose uuid is the document's): Kdenlive names other sequences' files differently, not verified yet (`[unsupported_structure]`). |
+| Malformed input | Empty files, files without cues, timing lines that do not parse (with the line number), cues ending before they start, a `.vtt` without `WEBVTT`: `[invalid_argument]`. |
+
+- **Rendering:** projects with subtitles render with the melt engine under `auto` (Kdenlive
+  26.08.2's `kdenlive --render` crashes on them, #16), which burns them in with libass using the
+  ASS style. Requested `engine="kdenlive"` warns first.
+- **Verified:** an imported SRT (Unicode, two lines, an overlap on layer 1, italics, braces) and a
+  replacement with an offset of the subtitles of a Kdenlive-made project reopen in Kdenlive 26.08.2
+  without dialogs; after its own save, the events read back identical (frames, layers, text). Its
+  re-saved ASS differs from the server's only by Kdenlive's own `DefaultStyles: Default,Default`
+  and, for some cues, one centisecond (Kdenlive re-writes times it parsed with float
+  truncation; the frames are unchanged). The source project's ASS file stays byte-identical. E2E:
+  subtitles appear in the lower part of the rendered frame during their cues only.
 
 ## Guides and clip markers: `list_markers`, `add_marker`, `update_marker`, `remove_marker`
 

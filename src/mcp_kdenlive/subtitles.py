@@ -10,6 +10,7 @@ next to the saved project (writer.save names it after the destination, like Kden
 from __future__ import annotations
 
 import json
+import math
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
@@ -90,8 +91,9 @@ def _frames(ms: int, rate: FrameRate) -> int:
 
 
 def _ass_time(frame: int, rate: FrameRate) -> str:
-    centis = Fraction(frame) / rate.fps * 100
-    cs = int(centis + Fraction(1, 2))  # half up, like Kdenlive (frame 210 at 29.97 -> 07.01)
+    """The frame's start rounded to the nearest centisecond, half up (Kdenlive wrote frame 210
+    at 29.97 fps as 07.01): read back by rounding, it is the same frame up to 60 fps."""
+    cs = math.floor(Fraction(frame * 100) / rate.fps + Fraction(1, 2))
     seconds, cc = divmod(cs, 100)
     minutes, ss = divmod(seconds, 60)
     hh, mm = divmod(minutes, 60)
@@ -166,6 +168,7 @@ def _read_ass(text: str, rate: FrameRate) -> tuple[list[str], list[SubtitleEvent
                     text=row.get("text", "").replace("\\N", "\n").replace("\\n", "\n"),
                 )
             )
+    events.sort(key=lambda e: (e.start, e.layer, e.end))
     return styles, events
 
 
@@ -492,9 +495,12 @@ def import_subtitles(
     rate = edit.doc.rate
     spans = _place(cues, rate, offset, path.name, warnings)
     layers = _layers([(start, end) for start, end, _ in spans])
+    placed = sorted(  # Kdenlive writes the events layer by layer
+        zip(layers, spans, strict=True), key=lambda item: (item[0], item[1][0], item[1][1])
+    )
     rows = [
         (layer, _ass_time(start, rate), _ass_time(end, rate), _ass_text(cue, warnings))
-        for layer, (start, end, cue) in zip(layers, spans, strict=True)
+        for layer, (start, end, cue) in placed
     ]
     existing, replaced = _existing(edit, seq, replace)
     profile = edit.root.find("profile")

@@ -133,6 +133,17 @@ BinId = Annotated[
 ]
 
 
+# Which EditResult field holds each operation's result (timeline edits otherwise).
+RESULT_FIELDS: dict[type, str] = {
+    audio_mod.AudioEditResult: "audio",
+    MarkerEditResult: "markers",
+    relink_mod.RelinkResult: "relink",
+    effects_mod.EffectEditResult: "effects",
+    titles_mod.TitleResult: "title",
+    subtitles_mod.SubtitleImport: "subtitles",
+}
+
+
 def _project_edit(
     path: str,
     destination: str,
@@ -157,19 +168,8 @@ def _project_edit(
         # In place, the revision the refs were read from is the expected source version.
         expected = expected_sha256 or revision
         saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected)
-        if isinstance(result, audio_mod.AudioEditResult):
-            return EditResult(saved=saved, audio=result)
-        if isinstance(result, MarkerEditResult):
-            return EditResult(saved=saved, markers=result)
-        if isinstance(result, relink_mod.RelinkResult):
-            return EditResult(saved=saved, relink=result)
-        if isinstance(result, subtitles_mod.SubtitleImport):
-            return EditResult(saved=saved, subtitles=result)
-        if isinstance(result, titles_mod.TitleResult):
-            return EditResult(saved=saved, title=result)
-        if isinstance(result, effects_mod.EffectEditResult):
-            return EditResult(saved=saved, effects=result)
-        return EditResult(saved=saved, timeline=result)
+        field = RESULT_FIELDS.get(type(result), "timeline")
+        return EditResult.model_validate({"saved": saved, field: result})
     except ProjectError as exc:
         raise _tool_error(exc) from exc
 

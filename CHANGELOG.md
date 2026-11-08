@@ -13,6 +13,8 @@ migration notes in the same entry.
 
 ### Added
 
+- **Subtitles (#16):** `list_subtitles` reads a sequence's subtitles (file, styles, events with frames, layers and text). `import_subtitles` imports a SubRip or WebVTT file (UTF-8, or UTF-16 with a BOM) as the main sequence's subtitles in Kdenlive's own format: an ASS file named after the saved project, written with it (`saved.side_files`). Overlapping cues go to separate layers; existing subtitles are only replaced with `replace=true`, and their file is never modified. New error code `subtitles_exist`. `EditResult` gains `subtitles`; `SaveResult` gains `side_files`.
+
 - **Titles (#15):** `add_title` creates an editable Kdenlive title clip (text with Unicode and several lines, font checked with fontconfig, size, colour, outline, italic, preset or pixel position, duration) and places it on a video track. `EditResult` gains `title`. `insert_clip` accepts title clips from the bin, which the timeline plays from the bin producer like Kdenlive.
 
 - **Effects and crossfades (#14):** `list_effects` lists a verified set of video effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) with parameters, units, ranges, availability in the installed MLT and the tested versions; fades from/to black use the brightness form so they render with Kdenlive 24.12–26.08 and MLT 7.22. `add_effect`, `update_effect` and `remove_effect` edit them on a clip, keeping other effects, their order and keyframes (animated values are not overwritten). `add_mix` and `remove_mix` add or remove a crossfade between two touching clips, in Kdenlive's own format, with the matching audio mix for grouped clips. `EditResult` gains `effects`.
