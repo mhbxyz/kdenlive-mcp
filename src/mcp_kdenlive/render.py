@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from mcp_kdenlive import kdenlive_doc, media, project, safexml
 from mcp_kdenlive.environment import locate
 from mcp_kdenlive.kdenlive_doc import ProjectError
-from mcp_kdenlive.process import Running, start
+from mcp_kdenlive.process import ProcessTimeout, Running, run, start
 
 DEFAULT_PRESET = "MP4-H264/AAC"
 DEFAULT_TIMEOUT = 3600.0
@@ -194,6 +194,27 @@ class RenderResult(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------- capability ---------
+_CLI_SUPPORT: dict[tuple[str, int], bool] = {}
+
+
+def supports_cli_render(kdenlive: str, env: Mapping[str, str] | None = None) -> bool:
+    """True if Kdenlive accepts --render/--render-preset (absent in 23.08, present in 26.08)."""
+    try:
+        key = (kdenlive, Path(kdenlive).stat().st_mtime_ns)
+    except OSError:
+        return False
+    if key not in _CLI_SUPPORT:
+        environ = dict(os.environ if env is None else env, QT_QPA_PLATFORM="offscreen")
+        try:
+            done = run([kdenlive, "--help"], timeout=30, env=environ)
+            text = done.stdout + done.stderr
+            _CLI_SUPPORT[key] = "--render-preset" in text and "--render" in text
+        except (OSError, ProcessTimeout):
+            return False
+    return _CLI_SUPPORT[key]
+
+
 # ---------------------------------------------------------------- preflight ----------
 @dataclass
 class RenderPlan:
@@ -212,6 +233,27 @@ class RenderPlan:
 def _bounded_tail(text: str) -> list[str]:
     lines = [ln for ln in text.splitlines() if ln.strip() and not any(n in ln for n in _NOISE)]
     return [ln[:300] for ln in lines[-LOG_TAIL_LINES:]]
+
+
+def _check_output(output: str, project_path: Path, *, overwrite: bool) -> Path:
+    out = Path(output).expanduser()
+    if not output or not out.is_absolute():
+        raise ProjectError("invalid_output", f"{output!r} is not an absolute output path.")
+    if out.resolve() == project_path.resolve():
+        raise ProjectError("invalid_output", "The output path is the project file itself.")
+    if out.exists() and out.is_dir():
+        raise ProjectError("invalid_output", f"{out} is a directory.")
+    if out.exists() and not overwrite:
+        raise ProjectError(
+            "output_exists",
+            f"{out} already exists.",
+            "Choose another path, or pass overwrite=true to replace it.",
+        )
+    if not out.parent.is_dir():
+        raise ProjectError("invalid_output", f"The output directory {out.parent} does not exist.")
+    if not os.access(out.parent, os.W_OK | os.X_OK):
+        raise ProjectError("permission_denied", f"Cannot write into {out.parent}.")
+    return out
 
 
 def prepare(
@@ -233,6 +275,13 @@ def prepare(
             "Kdenlive is not available.",
             "Run diagnose_environment, or set KDENLIVE_MCP_KDENLIVE.",
         )
+    if not supports_cli_render(kdenlive_exe, environ):
+        raise ProjectError(
+            "unsupported_kdenlive",
+            f"{kdenlive_exe} does not support command-line rendering (--render/--render-preset).",
+            "This option exists in Kdenlive 26.08 but not in 23.08 (Ubuntu 24.04). Install a "
+            "newer Kdenlive (for example the AppImage) and set KDENLIVE_MCP_KDENLIVE to it.",
+        )
     presets = {p.name: p for p in list_presets(environ).presets}
     chosen = presets.get(preset)
     if chosen is None:
@@ -242,23 +291,7 @@ def prepare(
             f"Kdenlive has no render preset named {preset!r}.",
             f"Similar presets: {close}" if close else "Call list_render_presets for valid names.",
         )
-    out = Path(output).expanduser()
-    if not output or not out.is_absolute():
-        raise ProjectError("invalid_output", f"{output!r} is not an absolute output path.")
-    if out.resolve() == doc.path.resolve():
-        raise ProjectError("invalid_output", "The output path is the project file itself.")
-    if out.exists() and out.is_dir():
-        raise ProjectError("invalid_output", f"{out} is a directory.")
-    if out.exists() and not overwrite:
-        raise ProjectError(
-            "output_exists",
-            f"{out} already exists.",
-            "Choose another path, or pass overwrite=true to replace it.",
-        )
-    if not out.parent.is_dir():
-        raise ProjectError("invalid_output", f"The output directory {out.parent} does not exist.")
-    if not os.access(out.parent, os.W_OK | os.X_OK):
-        raise ProjectError("permission_denied", f"Cannot write into {out.parent}.")
+    out = _check_output(output, doc.path, overwrite=overwrite)
     report = media.media_report(doc, max_items=media.MAX_ITEMS_LIMIT)
     media_paths = {i.resolved_path for i in report.items if i.resolved_path}
     if str(out) in media_paths or str(out.resolve()) in media_paths:

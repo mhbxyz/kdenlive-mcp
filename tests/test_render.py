@@ -40,7 +40,7 @@ def env(tmp_path, make_stub, stub_env):
     (sysdata / "kdenlive" / "export" / "profiles.xml").write_text(PRESETS_XML)
     userdata = tmp_path / "userdata"
     (userdata / "kdenlive" / "export").mkdir(parents=True)
-    make_stub("kdenlive", 'echo "kdenlive 26.08.2"')
+    make_stub("kdenlive", HELP_STUB)
     e = dict(stub_env, XDG_DATA_DIRS=str(sysdata), XDG_DATA_HOME=str(userdata))
     for key, value in e.items():
         os.environ[key] = value  # render.render() reads os.environ for the child
@@ -76,9 +76,13 @@ def fake_probe(monkeypatch):
     return probe
 
 
+# Answers --help like Kdenlive 26.08 so the capability check passes, then runs `body`.
+HELP_STUB = 'if [ "$1" = --help ]; then echo "  --render  --render-preset <p>"; exit 0; fi'
+
+
 def kdenlive_stub(make_stub, body: str) -> None:
     # Arguments: --render --render-preset NAME PROJECT OUTPUT
-    make_stub("kdenlive", body)
+    make_stub("kdenlive", HELP_STUB + "\n" + body)
 
 
 # ------------------------------------------------------------------- presets ----------
@@ -147,6 +151,13 @@ def test_missing_media_is_refused_unless_allowed(env, tmp_path):
     assert err.value.code == "missing_media"
     plan = render.prepare(str(project), str(tmp_path / "o.mp4"), allow_missing_media=True, env=env)
     assert any("missing" in w for w in plan.warnings)
+
+
+def test_old_kdenlive_without_cli_render(env, tmp_path, make_stub):
+    make_stub("kdenlive", 'echo "Usage: kdenlive [options] file"; exit 0')  # like 23.08
+    with pytest.raises(ProjectError) as err:
+        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=env)
+    assert err.value.code == "unsupported_kdenlive"
 
 
 def test_kdenlive_missing(stub_env, tmp_path):
@@ -273,6 +284,12 @@ def test_real_render_end_to_end(tmp_path):
     shutil.copytree(PROJECT.parent / "media", tmp_path / "media")
     before = project.read_bytes()
     out = tmp_path / "out é.mp4"
+    if not render.supports_cli_render(shutil.which("kdenlive") or ""):
+        # e.g. Kdenlive 23.08 in CI: the server must refuse cleanly instead of failing later.
+        with pytest.raises(ProjectError) as err:
+            render.prepare(str(project), str(out))
+        assert err.value.code == "unsupported_kdenlive"
+        return
     result = render.render(render.prepare(str(project), str(out)), timeout=300)
     assert result.state is RenderState.SUCCEEDED, (result.error, result.log_tail)
     assert result.validation and result.validation.video_streams == 1
