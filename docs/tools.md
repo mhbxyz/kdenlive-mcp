@@ -436,16 +436,21 @@ each one's `id`, `target`, `mlt_service`, parameters (`type`, `unit`, `minimum`,
   clip, and an audio-only clip is refused (`[incompatible_track]`). Audio level and fades are
   `set_clip_volume` / `set_clip_fades`.
 - **Order:** `add_effect` appends; `index` in `update_effect` / `remove_effect` is the position in
-  the clip's `effects` from `get_timeline` (all effects, including ones this server does not
-  write). `remove_effect` removes any effect; `update_effect` only verified ones.
+  the `effects` of the clip named by `clip`, as `get_timeline` lists them (all effects, including
+  ones this server does not write). On an audio/video pair, use the video clip's ref for video
+  effects: the audio clip's list holds its own (volume, audio fades). `remove_effect` removes any
+  effect; `update_effect` only verified ones, and needs at least one parameter.
 - **Values:** omitted parameters take their defaults; unknown names, out-of-range or wrongly typed
   values are refused (`[invalid_argument]`). `update_effect` changes only the given parameters and
   refuses an animated one (several keyframes, `[unsupported_structure]`), so keyframes made in
   Kdenlive are never flattened.
+- **Fades:** a fade from black and a fade to black must fit in the clip together, like
+  `set_clip_fades` (`[invalid_range]`); a second fade of the same kind is refused (use
+  `update_effect` to change its `duration`).
 - **Unavailable plugin:** when MLT lacks the service, `add_effect` is refused
   (`[dependency_missing]`).
-- **Edits afterwards:** fades from/to black stay at the clip's edges and shrink to fit after trims
-  and splits, like audio fades; constant effects do not block trims and splits.
+- **Edits afterwards:** fades from/to black stay at the clip's edges and shrink to fit after trims,
+  splits, `add_mix` and `remove_mix`, like audio fades; constant effects do not block them.
 - **Verified:** every effect above, with non-default values, and updates of crop parameters,
   reopen in Kdenlive 26.08.2 without dialogs; Kdenlive's own save keeps the ids, order and values
   (it rewrites keyframe positions as timecodes, `0=1.5` → `00:00:00.000=1.5`, which the server
@@ -474,7 +479,15 @@ after    V1  [ A ............ ]                          layer 0, extended by `a
 - **Format:** Kdenlive 26.08.2's own: the second clip moves to the track's other layer, and a
   transition inside the track tractor with `kdenlive:mixcut` records where the original cut is.
   `get_timeline` reports it in the track's `mixes`.
-- `remove_mix` removes the mix at the end of `clip` and puts both clips back to the cut.
+- **Refused:** a clip that already ends in a mix (use `remove_mix` first), a next clip that is
+  already in another mix (chains are not supported yet), or that has animated effects (their
+  keyframes would shift), and grouped clips whose next clips are not grouped together
+  (`[unsupported_structure]`). Nothing is written when a check fails.
+- **Edge fades** (audio and black fades) stay at both clips' edges.
+- `remove_mix` removes the mix at the end of `clip` and puts both clips back to the cut; a track of
+  the group without a mix (e.g. a video-only mix made in Kdenlive) is left as it is.
+- `list_effects` → `transitions` describes the crossfade: tools, targets, MLT services, minimum
+  and default duration, constraints.
 - **Verified:** mixes added and removed by the server, with effects around them, reopen in Kdenlive
   26.08.2 and survive its save unchanged; renders by Kdenlive 24.12.3, 25.04.3 and 26.08.2 show the
   blend. E2E: the frame in the middle of a 30-frame mix is a blend of both clips, with no audio gap.

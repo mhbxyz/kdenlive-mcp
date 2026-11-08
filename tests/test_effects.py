@@ -61,7 +61,7 @@ def test_catalog_lists_verified_effects_with_parameters():
     crop = {p.name: p for p in catalog["crop"].parameters}
     assert (crop["top"].unit, crop["top"].minimum, crop["top"].default) == ("pixels", 0, 0)
     assert catalog["brightness"].target == "video"
-    assert catalog["crop"].verified_with == "Kdenlive 26.08.2"
+    assert catalog["crop"].verified_with.startswith("Kdenlive 26.08.2 with MLT")
     # #14: Kdenlive 24.12.3 renders these files without the black fades (25.04.3 and later do)
     assert "24.12" in catalog["fade_to_black"].notes and "25.04" in catalog["fade_from_black"].notes
     assert catalog["crop"].notes == ""
@@ -150,7 +150,7 @@ def test_video_fades_follow_the_clip(s):
 def test_add_and_remove_a_crossfade(s):
     s.apply(te.trim_clip, "V1@0", s.rev(), end=40)  # [0,40) src 0..39
     s.apply(te.insert_clip, "4", "V1", 40, 10, 49)  # [40,80) src 10..49
-    r = s.apply(effects.add_mix, "V1@0", s.rev(), 20)
+    r = s.apply(te.add_mix, "V1@0", s.rev(), 20)
     expected = [("V1@0", 0, 50), ("V1@30", 30, 80), ("A1@0", 0, 50), ("A1@30", 30, 80)]
     assert [(c.ref, c.start, c.end) for c in r.clips] == expected
     for label, service in (("V1", "luma"), ("A1", "mix")):
@@ -158,10 +158,10 @@ def test_add_and_remove_a_crossfade(s):
         assert [(m.service, m.start, m.end, m.cut) for m in track.mixes] == [(service, 30, 50, 40)]
         assert [c.layer for c in track.clips] == [0, 1]
     with pytest.raises(ProjectError) as again:
-        s.apply(effects.add_mix, "V1@0", s.rev(), 20)  # already mixed: say so, not "move"
+        s.apply(te.add_mix, "V1@0", s.rev(), 20)  # already mixed: say so, not "move"
     assert again.value.code == "invalid_argument"
     assert "already" in str(again.value) and "remove_mix" in str(again.value)
-    s.apply(effects.remove_mix, "V1@0", s.rev())
+    s.apply(te.remove_mix, "V1@0", s.rev())
     v1 = next(t for t in s.timeline().tracks if t.label == "V1")
     assert v1.mixes == [] and [(c.start, c.end) for c in v1.clips] == [(0, 40), (40, 80)]
 
@@ -173,8 +173,100 @@ def test_add_and_remove_a_crossfade(s):
 def test_crossfade_limits(s, duration, expected):
     s.apply(te.trim_clip, "V1@0", s.rev(), end=40)
     s.apply(te.insert_clip, "4", "V1", 40, 10, 49)
-    assert code(s, effects.add_mix, "V1@0", s.rev(), duration) == expected
+    assert code(s, te.add_mix, "V1@0", s.rev(), duration) == expected
 
 
 def test_crossfade_needs_an_adjacent_clip(s):
-    assert code(s, effects.add_mix, "V1@0", s.rev(), 10) == "invalid_argument"
+    assert code(s, te.add_mix, "V1@0", s.rev(), 10) == "invalid_argument"
+
+
+# ------------------------------------------------------------------ review fixes ------
+def two_clips(s: Session) -> None:
+    s.apply(te.trim_clip, "V1@0", s.rev(), end=40)  # [0,40) src 0..39
+    s.apply(te.insert_clip, "4", "V1", 40, 10, 49)  # [40,80) src 10..49
+
+
+def edges(s: Session, label: str, index: int = 0) -> dict[str, tuple[int, int]]:
+    """Fade filters of a clip as (in, out) source frames, by kdenlive_id."""
+    edit = writer.open_for_edit(str(s.current))
+    frames = edit.doc.time
+    return {
+        str(f["kdenlive_id"]): (frames(f["in"] or "0"), frames(f["out"] or "0"))
+        for f in filters(s, label, index)
+        if str(f["kdenlive_id"]).startswith(("fade", "fadein", "fadeout"))
+    }
+
+
+def test_crossfades_keep_edge_fades_at_the_clip_edges(s):
+    two_clips(s)
+    s.apply(effects.add_effect, "V1@0", s.rev(), "fade_to_black", {"duration": 10})
+    s.apply(effects.add_effect, "V1@40", s.rev(), "fade_from_black", {"duration": 10})
+    assert edges(s, "V1", 0) == {"fade_to_black": (29, 39)}
+    assert edges(s, "V1", 1) == {"fade_from_black": (10, 20)}
+    s.apply(te.add_mix, "V1@0", s.rev(), 20)  # left src 0..49, right src 0..49 from 30
+    assert edges(s, "V1", 0) == {"fade_to_black": (39, 49)}
+    assert edges(s, "V1", 1) == {"fade_from_black": (0, 10)}
+    s.apply(te.remove_mix, "V1@0", s.rev())
+    assert edges(s, "V1", 0) == {"fade_to_black": (29, 39)}
+    assert edges(s, "V1", 1) == {"fade_from_black": (10, 20)}
+
+
+def test_crossfade_refuses_to_shift_animated_keyframes(s, tmp_path):
+    two_clips(s)
+    s.apply(effects.add_effect, "V1@40", s.rev(), "brightness", {"level": 1.2})
+    text = s.current.read_text(encoding="utf-8").replace(">0=1.2<", ">0=1;30=2<")
+    s.current = tmp_path / "animated.kdenlive"
+    s.current.write_text(text, encoding="utf-8")
+    assert code(s, te.add_mix, "V1@0", s.rev(), 20) == "unsupported_structure"
+
+
+def test_chained_crossfades_are_refused_without_changes(s):
+    two_clips(s)
+    s.apply(te.insert_clip, "4", "V1", 80, 10, 49)  # [80,120)
+    s.apply(te.add_mix, "V1@40", s.rev(), 10)  # the middle clip ends in a mix
+    before = s.current.read_bytes()
+    assert code(s, te.add_mix, "V1@0", s.rev(), 10) == "unsupported_structure"
+    assert s.current.read_bytes() == before
+
+
+def test_remove_mix_without_a_mix(s):
+    two_clips(s)
+    with pytest.raises(ProjectError) as err:
+        s.apply(te.remove_mix, "V1@0", s.rev())
+    assert err.value.code == "invalid_argument"
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "expected"),
+    [
+        (("fade_to_black", 500), None, "invalid_range"),
+        (("fade_from_black", 40), ("fade_to_black", 30), "invalid_range"),
+    ],
+)
+def test_fades_must_fit_in_the_clip(s, first, second, expected):  # V1@0 lasts 60 frames
+    if second is None:
+        assert (
+            code(s, effects.add_effect, "V1@0", s.rev(), first[0], {"duration": first[1]})
+            == expected
+        )
+        return
+    s.apply(effects.add_effect, "V1@0", s.rev(), first[0], {"duration": first[1]})
+    assert (
+        code(s, effects.add_effect, "V1@0", s.rev(), second[0], {"duration": second[1]}) == expected
+    )
+
+
+def test_update_a_fade(s):
+    s.apply(effects.add_effect, "V1@0", s.rev(), "fade_to_black", {"duration": 10})
+    assert code(s, effects.update_effect, "V1@0", s.rev(), 0, {}) == "invalid_argument"
+    assert code(s, effects.update_effect, "V1@0", s.rev(), 0, {"duration": 61}) == "invalid_range"
+    s.apply(effects.update_effect, "V1@0", s.rev(), 0, {"duration": 20})
+    assert edges(s, "V1") == {"fade_to_black": (39, 59)}
+
+
+def test_catalog_describes_the_crossfade_and_versions():
+    catalog = effects.catalog()
+    (mix,) = catalog.transitions
+    assert (mix.id, mix.tools, mix.min_frames) == ("crossfade", ["add_mix", "remove_mix"], 2)
+    assert mix.targets == ["video", "audio"]
+    assert "MLT 7.42.0" in catalog.effects[0].verified_with

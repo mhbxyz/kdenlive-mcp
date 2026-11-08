@@ -418,7 +418,7 @@ def _register_effects(server: MCPServer) -> None:
             destination,
             overwrite,
             expected_sha256,
-            lambda e: effects_mod.add_mix(e, clip, revision, duration, sequence),
+            lambda e: timeline_edit.add_mix(e, clip, revision, duration, sequence),
             revision=revision,
         )
 
@@ -443,7 +443,7 @@ def _register_effects(server: MCPServer) -> None:
             destination,
             overwrite,
             expected_sha256,
-            lambda e: effects_mod.remove_mix(e, clip, revision, sequence),
+            lambda e: timeline_edit.remove_mix(e, clip, revision, sequence),
             revision=revision,
         )
 

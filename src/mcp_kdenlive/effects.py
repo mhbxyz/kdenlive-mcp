@@ -23,7 +23,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive.clip_effects import keyframes
+from mcp_kdenlive.clip_effects import FADE_PAIRS, fade_length, keyframes
 from mcp_kdenlive.edits import _next_id
 from mcp_kdenlive.environment import locate
 from mcp_kdenlive.errors import ProjectError
@@ -35,15 +35,16 @@ from mcp_kdenlive.timeline_edit import (
     Timeline,
     Track,
     _open,
-    add_mix,
     anchor_fades,
-    remove_mix,
 )
 from mcp_kdenlive.writer import EditableProject
 
-__all__ = ["add_effect", "add_mix", "catalog", "remove_effect", "remove_mix", "update_effect"]
+__all__ = ["add_effect", "catalog", "remove_effect", "update_effect"]
 
-VERIFIED_WITH = "Kdenlive 26.08.2"
+VERIFIED_WITH = (
+    "Kdenlive 26.08.2 with MLT 7.42.0 (format and round trip); renders also checked with "
+    "Kdenlive 24.12.3 and 25.04.3"
+)
 
 
 @dataclass(frozen=True)
@@ -178,9 +179,39 @@ class EffectInfo(BaseModel):
     notes: str = Field(description="Compatibility notes; empty when there are none.")
 
 
+class TransitionInfo(BaseModel):
+    id: str
+    name: str
+    tools: list[str] = Field(description="Tools that add and remove it.")
+    targets: list[str] = Field(description="Track kinds it applies to.")
+    mlt_services: list[str]
+    min_frames: int
+    default_frames: str
+    constraints: list[str]
+    verified_with: str
+
+
+CROSSFADE = TransitionInfo(
+    id="crossfade",
+    name="Crossfade (Kdenlive's Mix Clips)",
+    tools=["add_mix", "remove_mix"],
+    targets=["video", "audio"],
+    mlt_services=["luma", "mix"],
+    min_frames=2,
+    default_frames="1 second",
+    constraints=[
+        "the two clips touch on the same track",
+        "their sources extend past the cut by `duration` frames in total (handles)",
+        "neither clip is already in another mix at that edge",
+        "grouped audio/video clips are crossfaded together",
+    ],
+    verified_with=VERIFIED_WITH,
+)
+
+
 class EffectCatalog(BaseModel):
     effects: list[EffectInfo]
-    transitions: list[str] = Field(description="Same-track transitions: add_mix / remove_mix.")
+    transitions: list[TransitionInfo] = Field(description="Same-track transitions.")
     notes: list[str]
 
 
@@ -228,7 +259,7 @@ def catalog(env: Mapping[str, str] | None = None) -> EffectCatalog:
             )
             for s in SPECS.values()
         ],
-        transitions=["crossfade (same-track mix): add_mix, remove_mix"],
+        transitions=[CROSSFADE],
         notes=[
             "Only these effects are offered: their formats were verified against Kdenlive. "
             "Audio level and fades have their own tools (set_clip_volume, set_clip_fades).",
@@ -342,6 +373,9 @@ def add_effect(
         raise ProjectError(
             "invalid_argument", f"The clip already has {spec.id}; use update_effect."
         )
+    duration = _fade_duration(spec, values) if spec.edge else 0
+    if spec.edge:
+        _check_fade(tl, item, spec, duration)
     flt = ET.SubElement(item.element, "filter", {"id": _next_id(edit.root, "filter")})
     ordered: list[tuple[str, str]] = []
     for param in spec.params:
@@ -355,34 +389,41 @@ def add_effect(
     for name, value in ordered:
         ET.SubElement(flt, "property", {"name": name}).text = value
     if spec.edge:
-        duration = int(float(values.get("duration", "30")))
         anchor_fades(tl, item.element, {spec.id: duration}, only={spec.id})
     index = _user_filters(item.element).index(flt)
     edit.changes.append(f"effects: added {spec.id} to {track.label}@{item.start}")
     return _result(tl, track, item, "add", index)
 
 
-def _filter_at(tl: Timeline, ref: str, index: int) -> tuple[Track, Item, ET.Element, Spec]:
-    track, item = tl.resolve_ref(ref)
-    for t, i in tl.partners(track, item):
-        found = _user_filters(i.element)
-        if t is track:
-            if not 0 <= index < len(found):
-                raise ProjectError(
-                    "invalid_argument",
-                    f"The clip has {len(found)} effect(s); index {index} is out of range.",
-                )
-            flt = found[index]
-            kdenlive_id = props(flt).get("kdenlive_id", "")
-            spec = SPECS.get(kdenlive_id)
-            if spec is None:
-                raise ProjectError(
-                    "unsupported_structure",
-                    f"Effect {index} ({kdenlive_id or props(flt).get('mlt_service')}) is not "
-                    "in the verified list; edit it in Kdenlive.",
-                )
-            return t, i, flt, spec
-    raise ProjectError("clip_not_found", f"No clip {ref!r}.")  # pragma: no cover - resolve_ref
+def _effect_at(item: Item, index: int) -> ET.Element:
+    """The clip's own effect at `index`, as listed in get_timeline's `effects`."""
+    found = _user_filters(item.element)
+    if not 0 <= index < len(found):
+        raise ProjectError(
+            "invalid_argument",
+            f"The clip has {len(found)} effect(s); index {index} is out of range.",
+            "Use the position in the clip's `effects` from get_timeline.",
+        )
+    return found[index]
+
+
+def _check_fade(tl: Timeline, item: Item, spec: Spec, duration: int) -> None:
+    """A fade, with the opposite one, must fit in the clip (like set_clip_fades)."""
+    source_in, source_out = tl._entry_bounds(item.element)
+    other = next((b if a == spec.id else a for a, b in FADE_PAIRS.items() if spec.id in (a, b)), "")
+    taken = fade_length(item.element, other, tl.doc.time) if other else 0
+    if duration + taken > source_out - source_in + 1:
+        raise ProjectError(
+            "invalid_range",
+            f"A {duration}-frame {spec.id} does not fit in the clip "
+            f"({source_out - source_in + 1} frames, {taken} used by {other or 'none'}).",
+            "Use a shorter fade, or shorten the opposite one.",
+        )
+
+
+def _fade_duration(spec: Spec, values: Mapping[str, str]) -> int:
+    default = next(p.default for p in spec.params if p.name == "duration")
+    return int(float(values.get("duration", default)))
 
 
 def update_effect(
@@ -395,11 +436,29 @@ def update_effect(
 ) -> EffectEditResult:
     """Change parameters of the effect at `index` (as listed by get_timeline)."""
     tl = _open(edit, revision, sequence, needs_revision=True)
-    track, item, flt, spec = _filter_at(tl, ref, index)
+    track, item = tl.resolve_ref(ref)
     tl.check_editable(track)
+    flt = _effect_at(item, index)
+    kdenlive_id = props(flt).get("kdenlive_id", "")
+    found_spec = SPECS.get(kdenlive_id)
+    if found_spec is None:
+        raise ProjectError(
+            "unsupported_structure",
+            f"Effect {index} ({kdenlive_id or props(flt).get('mlt_service')}) is not "
+            "in the verified list; edit it in Kdenlive.",
+        )
+    spec = found_spec
+    if not params:
+        raise ProjectError(
+            "invalid_argument",
+            "No parameter to change.",
+            f"Parameters of {spec.id}: {[p.name for p in spec.params] or 'none'}.",
+        )
     values = {name: _value(spec, name, raw) for name, raw in params.items()}
     if spec.edge:
-        anchor_fades(tl, item.element, {spec.id: int(float(values["duration"]))}, only={spec.id})
+        duration = _fade_duration(spec, values)
+        _check_fade(tl, item, spec, duration)
+        anchor_fades(tl, item.element, {spec.id: duration}, only={spec.id})
     else:
         current = {p.get("name"): p for p in flt.findall("property")}
         for name, value in values.items():
@@ -423,13 +482,8 @@ def remove_effect(
     tl = _open(edit, revision, sequence, needs_revision=True)
     track, item = tl.resolve_ref(ref)
     tl.check_editable(track)
-    found = _user_filters(item.element)
-    if not 0 <= index < len(found):
-        raise ProjectError(
-            "invalid_argument",
-            f"The clip has {len(found)} effect(s); index {index} is out of range.",
-        )
-    name = props(found[index]).get("kdenlive_id") or props(found[index]).get("mlt_service")
-    item.element.remove(found[index])
+    flt = _effect_at(item, index)
+    name = props(flt).get("kdenlive_id") or props(flt).get("mlt_service")
+    item.element.remove(flt)
     edit.changes.append(f"effects: removed {name} from {track.label}@{item.start}")
     return _result(tl, track, item, "remove", None)

@@ -824,7 +824,7 @@ def trim_clip(
                     "unsupported_structure",
                     f"The {'end' if at_end else 'start'} of the clip on {t.label} is in a "
                     f"{mix.describe(t.label)}; trimming that side would break the mix.",
-                    "Trim the other side, or remove the mix in Kdenlive first.",
+                    "Trim the other side, or remove the mix first (remove_mix).",
                 )
             # Keep at least one frame outside the mix so partners never share an edge.
             if (p_start >= mix.start) if at_end else (p_end <= mix.end):
@@ -973,6 +973,57 @@ def _mix_transition(
     return element
 
 
+def _plan_mix(tl: Timeline, t: Track, left: Item, frames: int) -> tuple[Item, int, int]:
+    """Check one track's side of a crossfade: (next clip, frames before, frames after the cut)."""
+    tl.check_editable(t)
+    existing = next((m for m in tl.mixes(t) if m.at_end_of(left)), None)
+    if existing is not None:
+        raise ProjectError(
+            "invalid_argument",
+            f"The clip on {t.label} already ends in a mix (frames "
+            f"{existing.start}-{existing.end}).",
+            "Use remove_mix first to change it.",
+        )
+    right = _next_clip(tl, t, left)
+    if right is None:
+        raise ProjectError(
+            "invalid_argument",
+            f"No clip starts where the clip on {t.label} ends (frame {left.end}).",
+            "Move the next clip so it touches this one; a crossfade joins two adjacent clips.",
+        )
+    if any(m.involves(right) for m in tl.mixes(t)):
+        raise ProjectError(
+            "unsupported_structure",
+            f"The next clip on {t.label} (at {right.start}) is already in a mix.",
+            "Remove that mix first (remove_mix), or crossfade other clips.",
+        )
+    if _has_keyframes(right.element):
+        raise ProjectError(
+            "unsupported_structure",
+            f"The next clip on {t.label} has animated effects; the crossfade would shift "
+            "their keyframes. Not supported yet.",
+        )
+    if 1 - left.layer >= len(t.layers):
+        raise ProjectError("unsupported_structure", f"Track {t.label} has no second layer.")
+    head = _handles(tl, right)[0]
+    tail = _handles(tl, left)[1]
+    before = min(frames // 2, head)
+    after = min(frames - before, tail)
+    before = min(frames - after, head)
+    if before + after < frames:
+        raise ProjectError(
+            "invalid_range",
+            f"The clips on {t.label} have only {before + after} frames of handles for the "
+            f"crossfade (need {frames}).",
+            "Use a shorter crossfade, or trim the clips so their sources extend past the cut.",
+        )
+    if left.end - before <= left.start or right.start + after >= right.end:
+        raise ProjectError(
+            "invalid_range", f"A {frames}-frame crossfade is longer than a clip on {t.label}."
+        )
+    return right, before, after
+
+
 def add_mix(
     edit: EditableProject,
     ref: str,
@@ -991,45 +1042,16 @@ def add_mix(
     frames = round(tl.doc.rate.num / tl.doc.rate.den) if duration is None else duration
     if frames < 2:
         raise ProjectError("invalid_argument", "A crossfade lasts at least 2 frames.")
-    plan = []
-    for t, left in tl.partners(track, item):
-        tl.check_editable(t)
-        existing = next((m for m in tl.mixes(t) if m.at_end_of(left)), None)
-        if existing is not None:
+    plan = [(t, left, *_plan_mix(tl, t, left, frames)) for t, left in tl.partners(track, item)]
+    if len(plan) > 1:  # grouped clips: the next clips must be grouped together too
+        t0, right0 = plan[0][0], plan[0][2]
+        group = {id(i.element) for _t, i in tl.partners(t0, right0)}
+        if any(id(right.element) not in group for _t, _l, right, _b, _a in plan):
             raise ProjectError(
-                "invalid_argument",
-                f"The clip on {t.label} already ends in a mix (frames "
-                f"{existing.start}-{existing.end}).",
-                "Use remove_mix first to change it.",
+                "unsupported_structure",
+                "The next clips on the grouped tracks are not grouped together.",
+                "Crossfade each track's clips in Kdenlive, or regroup them first.",
             )
-        right = _next_clip(tl, t, left)
-        if right is None:
-            raise ProjectError(
-                "invalid_argument",
-                f"No clip starts where the clip on {t.label} ends (frame {left.end}).",
-                "Move the next clip so it touches this one; a crossfade joins two adjacent clips.",
-            )
-        if any(m.right.element is right.element for m in tl.mixes(t)):
-            raise ProjectError(
-                "invalid_argument", f"There is already a mix at frame {left.end} on {t.label}."
-            )
-        head = _handles(tl, right)[0]
-        tail = _handles(tl, left)[1]
-        before = min(frames // 2, head)
-        after = min(frames - before, tail)
-        before = min(frames - after, head)
-        if before + after < frames:
-            raise ProjectError(
-                "invalid_range",
-                f"The clips on {t.label} have only {before + after} frames of handles for the "
-                f"crossfade (need {frames}).",
-                "Use a shorter crossfade, or trim the clips so their sources extend past the cut.",
-            )
-        if left.end - before <= left.start or right.start + after >= right.end:
-            raise ProjectError(
-                "invalid_range", f"A {frames}-frame crossfade is longer than a clip on {t.label}."
-            )
-        plan.append((t, left, right, before, after))
     moved: dict[tuple[int, int], int] = {}
     placements = []
     for t, left, right, before, after in plan:
@@ -1044,10 +1066,10 @@ def add_mix(
         )
         source_in, _ = tl._entry_bounds(right.element)
         right.element.set("in", frames_to_clock(source_in - before, tl.doc.rate))
-        if new_layer >= len(t.layers):
-            raise ProjectError("unsupported_structure", f"Track {t.label} has no second layer.")
         tl._rebuild(t, [*tl.placed(t, new_layer), (cut - before, right.element)], new_layer)
         _mix_transition(tl, t, left.layer, cut - before, cut + after, after)
+        anchor_fades(tl, left.element)
+        anchor_fades(tl, right.element)
         moved[(t.index, right.start)] = cut - before
         placements += [
             _placement(tl, t, left.start, left.element),
@@ -1069,19 +1091,33 @@ def remove_mix(
     track, item = tl.resolve_ref(ref)
     moved: dict[tuple[int, int], int] = {}
     placements = []
+    found = []
     for t, left in tl.partners(track, item):
         tl.check_editable(t)
         mix = next((m for m in tl.mixes(t) if m.at_end_of(left)), None)
         if mix is None:
+            continue  # e.g. a video-only mix made in Kdenlive: the audio is already cut
+        if _has_keyframes(mix.right.element):
             raise ProjectError(
-                "invalid_argument", f"No crossfade at the end of the clip on {t.label}."
+                "unsupported_structure",
+                f"The next clip on {t.label} has animated effects; removing the crossfade would "
+                "shift their keyframes. Not supported yet.",
             )
+        found.append((t, left, mix))
+    if not found:
+        raise ProjectError(
+            "invalid_argument",
+            f"No crossfade at the end of the clip on {track.label} at {item.start}.",
+        )
+    for t, left, mix in found:
         t.tractor.remove(mix.element)
         tl.set_bounds(t, left, left.start, mix.cut)
         right = next(c for c in tl.clips(t) if c.element is mix.right.element)
         tl.set_bounds(t, right, mix.cut, right.end)
         moved[(t.index, right.start)] = mix.cut
         tl.settle(t)
+        anchor_fades(tl, left.element)
+        anchor_fades(tl, right.element)
         placements += [
             _placement(tl, t, left.start, left.element),
             _placement(tl, t, mix.cut, right.element),
