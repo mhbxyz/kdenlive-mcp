@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from mcp import Client, StdioServerParameters
@@ -131,3 +132,36 @@ def test_invalid_json_does_not_corrupt_stdout(all_tools_stubbed):
     for line in proc.stdout.splitlines():
         if line.strip():
             assert json.loads(line)["jsonrpc"] == "2.0"
+
+
+FIXTURE = (Path(__file__).parent / "fixtures" / "kd26" / "kd26-ntsc-timeline.kdenlive").resolve()
+
+
+async def test_inspect_project_tool():
+    async with Client(build_server()) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        assert tools["inspect_project"].annotations.read_only_hint is True
+        result = await client.call_tool("inspect_project", {"path": str(FIXTURE)})
+    assert result.is_error is False
+    data = result.structured_content
+    assert data["profile"]["frame_rate"] == {"num": 30000, "den": 1001, "fps": 29.97003}
+    assert data["sequences"][0]["duration_frames"] == 60
+
+
+async def test_get_timeline_tool_and_bounds():
+    async with Client(build_server()) as client:
+        result = await client.call_tool("get_timeline", {"path": str(FIXTURE), "max_clips": 1})
+        bad = await client.call_tool("get_timeline", {"path": str(FIXTURE), "max_clips": 0})
+    assert result.is_error is False
+    assert result.structured_content["truncated"] is True
+    assert result.structured_content["returned_clips"] == 1
+    assert bad.is_error is True
+
+
+async def test_project_errors_are_actionable():
+    async with Client(build_server()) as client:
+        relative = await client.call_tool("inspect_project", {"path": "project.kdenlive"})
+        missing = await client.call_tool("inspect_project", {"path": "/nonexistent/x.kdenlive"})
+    assert relative.is_error and "[invalid_path]" in relative.content[0].text
+    assert "absolute path" in relative.content[0].text
+    assert missing.is_error and "[not_found]" in missing.content[0].text
