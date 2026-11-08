@@ -5,7 +5,8 @@ config/data/cache directories, a private session D-Bus (provided by ``kdgui.sh``
 private AT-SPI accessibility bus, then executes a small command script against it.
 
 Usage (normally through kdgui.sh):  kdgui.py LAB_DIR SCRIPT_FILE
-Kdenlive arguments come from the KD_ARGS environment variable (shell-split).
+Kdenlive arguments come from the KD_ARGS environment variable (shell-split); KD_BIN selects
+the Kdenlive executable (default: kdenlive on PATH).
 
 Script commands, one per line:
   sleep N                      wait N seconds
@@ -49,7 +50,10 @@ time.sleep(3)
 kenv = dict(wenv, WAYLAND_DISPLAY=sock, QT_QPA_PLATFORM="wayland", QT_LINUX_ACCESSIBILITY_ALWAYS_ON="1",
             QT_ACCESSIBILITY="1", QT_QPA_PLATFORMTHEME=os.environ.get("KD_THEME", "kde"), LANG="C.UTF-8", LANGUAGE="en", LC_ALL="C.UTF-8")
 kenv.pop("DISPLAY", None)
-kd = spawn(["kdenlive", "--no-welcome", *shlex.split(os.environ.get("KD_ARGS", ""))], kenv, "kdenlive")
+# KD_BIN: another Kdenlive (e.g. an AppImage of an older release, #66); default: kdenlive on PATH.
+# KD_FLAGS: startup options (default --no-welcome, which Kdenlive 24.x does not know).
+kd = spawn([os.environ.get("KD_BIN", "kdenlive"), *shlex.split(os.environ.get("KD_FLAGS", "--no-welcome")),
+            *shlex.split(os.environ.get("KD_ARGS", ""))], kenv, "kdenlive")
 
 def app():
     global _init
@@ -57,7 +61,7 @@ def app():
     d = Atspi.get_desktop(0)
     for i in range(d.get_child_count()):
         a = d.get_child_at_index(i)
-        if a and "kdenlive" in (a.get_name() or "").lower(): return a
+        if a and any(n in (a.get_name() or "").lower() for n in ("kdenlive", os.environ.get("KD_APPNAME", "kdenlive").lower())): return a
 def walk(node, depth, maxd, out):
     try:
         role, name = node.get_role_name(), node.get_name()
@@ -91,7 +95,7 @@ def qd(*a, t=20):
 def svc():
     return next((l.strip() for l in qd().splitlines() if "kdenlive" in l), None)
 
-for _ in range(60):
+for _ in range(int(os.environ.get("KD_WAIT", "60"))):  # AppImages start slower (#66)
     time.sleep(1)
     if app() and svc(): break
 time.sleep(5)
@@ -147,6 +151,9 @@ try:
             else: print("CLICK", target, "-> NOT FOUND", flush=True)
         elif cmd == "dbus":
             print("DBUS", line, "=>", qd(svc(), *p[1:])[:40000], flush=True)
+        elif cmd == "apps":
+            d = Atspi.get_desktop(0)
+            print("APPS", [d.get_child_at_index(i).get_name() for i in range(d.get_child_count())], flush=True)
         elif cmd == "run":
             r = subprocess.run(p[1:], capture_output=True, text=True, timeout=120, env=kenv)
             print("RUN", " ".join(p[1:]), "=>", r.returncode, r.stdout[-6000:], r.stderr[-2000:], flush=True)
