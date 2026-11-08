@@ -7,9 +7,12 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
-### Documentation
+## [0.3.0] - 2026-11-08
 
-- **Other Kdenlive releases (#66):** the official 24.12.3 and 25.04.3 AppImages, through `KDENLIVE_MCP_KDENLIVE`, are detected and render projects written by this server and by Kdenlive 26.08.2 (`docs/compatibility.md`; integration test with `KDENLIVE_MCP_TEST_KDENLIVE`). Projects *saved* by these releases are tracked in #86.
+Coverage and compatibility (milestone M7): effects and crossfades, titles, subtitles, the melt
+render engine, Flatpak Kdenlive, other Kdenlive releases, and four end-to-end demos.
+**Contains a breaking change**: unknown tool arguments are now refused (see *Changed*, with its
+migration).
 
 ### Added
 
@@ -17,33 +20,31 @@ migration notes in the same entry.
 
 - **Subtitles (#16):** `list_subtitles` reads a sequence's subtitles (file, styles, events with frames, layers and text). `import_subtitles` imports a SubRip or WebVTT file (UTF-8, or UTF-16 with a BOM) as the main sequence's subtitles in Kdenlive's own format: an ASS file named after the saved project, written with it (`saved.side_files`). Overlapping cues go to separate layers; existing subtitles are only replaced with `replace=true`, and their file is never modified. New error code `subtitles_exist`. `EditResult` gains `subtitles`; `SaveResult` gains `side_files`.
 
-- **Titles (#15):** `add_title` creates an editable Kdenlive title clip (text with Unicode and several lines, font checked with fontconfig, size, colour, outline, italic, preset or pixel position, duration) and places it on a video track. `EditResult` gains `title`. `insert_clip` accepts title clips from the bin, which the timeline plays from the bin producer like Kdenlive.
+- **Titles (#15):** `add_title` creates an editable Kdenlive title clip (text with Unicode and several lines, font checked with fontconfig, size, colour, outline, italic, preset or pixel position, duration) and places it on a video track. `EditResult` gains `title`. `insert_clip` accepts title clips from the bin, which the timeline plays from the bin producer like Kdenlive. Titles use Qt 6's font weight (`400` = normal), drawn alike by Kdenlive 26.08.2, its 25.04.3 AppImage, melt 7.42 and melt 7.22 (#92).
 
-- **Effects and crossfades (#14):** `list_effects` lists a verified set of video effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) with parameters, units, ranges, availability in the installed MLT and the tested versions; fades from/to black use the brightness form so they render with Kdenlive 24.12–26.08 and MLT 7.22. `add_effect`, `update_effect` and `remove_effect` edit them on a clip, keeping other effects, their order and keyframes (animated values are not overwritten). `add_mix` and `remove_mix` add or remove a crossfade between two touching clips, in Kdenlive's own format, with the matching audio mix for grouped clips. `EditResult` gains `effects`.
+- **Effects and crossfades (#14):** `list_effects` lists a verified set of video effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) with parameters, units, ranges, availability in the installed MLT and the tested versions; fades from/to black use the brightness form so they render with Kdenlive 24.12–26.08 and MLT 7.22. `add_effect`, `update_effect` and `remove_effect` edit them on a clip, keeping other effects, their order and keyframes (animated values are not overwritten). `add_mix` and `remove_mix` add or remove a crossfade between two touching clips, in Kdenlive's own format, with the matching audio mix for grouped clips. `EditResult` gains `effects`. Crossfades can follow each other (A→B→C) as in Kdenlive, clips alternating between the track's two layers; clips after a crossfade never move, and a crossfade that would run into a neighbouring clip or crossfade is refused (`[overlap]`) (#92).
 
 - **Flatpak Kdenlive (#65):** when Kdenlive is not on `PATH`, a Flathub installation (`org.kde.kdenlive`, user or system) is detected and used, with its own melt and FFmpeg, MLT profiles and render presets. Paths the sandbox cannot see (`/tmp`, system folders) are refused with `[invalid_path]`. `KDENLIVE_MCP_FLATPAK=off` disables it. Tested with Flathub's 26.08.3.
 
-- **melt render engine (#42):** `render_project` and `start_render` take `engine` (`auto`, `kdenlive`, `melt`). `auto` renders with MLT's melt when Kdenlive has no `--render` (before 24.02, e.g. Ubuntu 24.04's 23.08) or when the project has subtitles (Kdenlive 26.08.2 crashes on them), using the preset's arguments filled with its defaults. Results report the `engine`; melt renders carry a warning that they are not Kdenlive's own render path.
+- **melt render engine (#42):** `render_project` and `start_render` take `engine` (`auto`, `kdenlive`, `melt`). `auto` renders with MLT's melt when Kdenlive has no `--render` (before 24.02, e.g. Ubuntu 24.04's 23.08) or when the project has subtitles (Kdenlive 26.08.2 crashes on them), using the preset's arguments filled with its defaults. Results report the `engine`; melt renders carry a warning that they are not Kdenlive's own render path. With MLT 7.22 (Ubuntu 24.04), whose Qt module needs an X display even offscreen, the melt engine passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` and fails with an explanation (display, `xvfb-run`, newer MLT) when the module cannot load, instead of rendering titles as *INVALID* and dropping track compositing (#90).
 
 ### Fixed
 
 - **Release: TestPyPI visibility (#82):** the release waits up to 15 minutes, with backoff, for TestPyPI to list the new version, says how long it waited and fails clearly (`scripts/wait_for_index.py`); what is verified is unchanged.
-- **Crossfades moved later clips (found by the demos, #92):** `add_mix` extended the left clip before taking the right one off its layer, which pushed every later clip of that layer by the crossfade's second half.
-- **Crossfade into a clip already on the other layer:** in Kdenlive's own layout (clips alternating between the two layers), a crossfade into a clip that also ends in the next crossfade was refused; it is now made without moving the clip. A crossfade that would run into a neighbouring clip or crossfade on either layer is refused (`[overlap]`).
-- **`kdenlive --render` taken for an open project (found by a real-client run, #92):** command-line renders running at the same time made edits warn that Kdenlive might have the project open; they are now ignored by the open-project check.
-- **Titles rendered thin by melt:** titles are written with Qt 6's font weight (`400` = normal) instead of Qt 5's `50`, which melt 7.42 drew as *Thin* (Kdenlive's own render was fine). MLT 7.22 draws both the same.
 
-- **melt engine without a display (#90):** with MLT 7.22 (Ubuntu 24.04), titles rendered as MLT's *INVALID* placeholder and video tracks were not composited, yet the render succeeded: MLT's Qt module needs an X display there. The melt engine now passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` (Qt still draws offscreen) and fails with an explanation (display, `xvfb-run`, newer MLT) when the module cannot load.
+- **`kdenlive --render` taken for an open project (found by a real-client run, #92):** command-line renders running at the same time made edits warn that Kdenlive might have the project open; they are now ignored by the open-project check.
 
 ### Changed
 
-- **Chained crossfades (#92):** crossfades can follow each other (A→B→C) as in Kdenlive, clips alternating between the track's two layers; only a next clip on the *same* layer that is already in another crossfade is refused.
-
-- **Unknown arguments are refused (#15):** every tool now answers `[invalid_argument]` naming the unknown arguments and listing the accepted ones, instead of silently ignoring them (e.g. `bold` on `add_title`). Input schemas declare `additionalProperties: false`. **Migration:** drop arguments a tool does not list.
+- **Breaking — unknown arguments are refused (#15):** every tool now answers `[invalid_argument]` naming the unknown arguments and listing the accepted ones, instead of silently ignoring them (e.g. `bold` on `add_title`). Input schemas declare `additionalProperties: false`. **Migration:** drop arguments a tool does not list.
 
 - **Work folders (#65):** temporary folders for renders and MLT probes are created in `$XDG_CACHE_HOME/kdenlive-mcp/tmp` instead of the system temp folder.
 
 - **Rendering on Kdenlive 23.x (#42):** `render_project` no longer fails with `[unsupported_kdenlive]` there by default; it renders with melt. Pass `engine="kdenlive"` to require Kdenlive's own render path.
+
+### Documentation
+
+- **Other Kdenlive releases (#66):** the official 24.12.3 and 25.04.3 AppImages, through `KDENLIVE_MCP_KDENLIVE`, are detected and render projects written by this server and by Kdenlive 26.08.2 (`docs/compatibility.md`; integration test with `KDENLIVE_MCP_TEST_KDENLIVE`). Projects *saved* by these releases are tracked in #86.
 
 ## [0.2.0] - 2026-11-08
 
