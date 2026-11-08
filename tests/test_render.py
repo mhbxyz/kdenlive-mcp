@@ -296,3 +296,252 @@ def test_real_render_end_to_end(tmp_path):
     assert result.validation.duration_seconds == pytest.approx(2.002, abs=0.25)
     assert project.read_bytes() == before
     assert sorted(p.name for p in tmp_path.iterdir()) == ["media", "out é.mp4", "p.kdenlive"]
+
+
+# ------------------------------------------------------------------- jobs (#7) --------
+def _manager(n: int = 1):
+    from mcp_kdenlive.jobs import JobManager
+
+    return JobManager(max_concurrent=n)
+
+
+def _plan(env, out, **kw):
+    return render.prepare(str(PROJECT), str(out), env=env, **kw)
+
+
+def _pid_gone(pid: int, wait: float = 3.0) -> bool:
+    deadline = time.monotonic() + wait
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_job_succeeds_and_reports_result(env, tmp_path, make_stub, fake_probe):
+    kdenlive_stub(make_stub, 'echo x > "$5"')
+    mgr = _manager()
+    try:
+        info = mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=30)
+        assert info.job_id.startswith("r-") and info.state in (
+            RenderState.QUEUED,
+            RenderState.RUNNING,
+        )
+        done = mgr.wait(info.job_id, 20)
+        assert done.state is RenderState.SUCCEEDED and done.result and done.result.validation.ok
+        assert (tmp_path / "o.mp4").exists() and done.finished_at
+        assert [j.job_id for j in mgr.list().jobs] == [info.job_id]
+    finally:
+        mgr.shutdown()
+
+
+def test_queue_respects_concurrency(env, tmp_path, make_stub, fake_probe):
+    kdenlive_stub(make_stub, f'{SLEEP} 1; echo x > "$5"')
+    mgr = _manager(1)
+    try:
+        first = mgr.submit(_plan(env, tmp_path / "a.mp4"), timeout=30)
+        second = mgr.submit(_plan(env, tmp_path / "b.mp4"), timeout=30)
+        assert mgr.get(first.job_id).state is RenderState.RUNNING
+        queued = mgr.get(second.job_id)
+        assert queued.state is RenderState.QUEUED and queued.queue_position == 1
+        assert mgr.wait(second.job_id, 20).state is RenderState.SUCCEEDED
+        assert mgr.get(first.job_id).state is RenderState.SUCCEEDED
+    finally:
+        mgr.shutdown()
+
+
+def test_cancel_running_job_kills_group_and_removes_partial(env, tmp_path, make_stub, fake_probe):
+    pidfile = tmp_path / "child.pid"
+    kdenlive_stub(make_stub, f'echo partial > "$5"; {SLEEP} 60 & echo $! > "{pidfile}"; wait')
+    mgr = _manager()
+    try:
+        info = mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=60)
+        for _ in range(100):
+            if pidfile.exists() and pidfile.read_text().strip():
+                break
+            time.sleep(0.05)
+        requested = mgr.cancel(info.job_id)
+        assert requested.cancel_requested is True
+        final = mgr.wait(info.job_id, 15)
+        assert final.state is RenderState.CANCELLED
+        assert _pid_gone(int(pidfile.read_text()))
+        assert not (tmp_path / "o.mp4").exists() and list(tmp_path.glob(".*partial*")) == []
+        assert mgr.cancel(info.job_id).state is RenderState.CANCELLED  # already ended: no change
+    finally:
+        mgr.shutdown()
+
+
+def test_cancel_queued_job_never_starts(env, tmp_path, make_stub, fake_probe):
+    kdenlive_stub(make_stub, f'{SLEEP} 2; echo x > "$5"')
+    mgr = _manager(1)
+    try:
+        first = mgr.submit(_plan(env, tmp_path / "a.mp4"), timeout=30)
+        second = mgr.submit(_plan(env, tmp_path / "b.mp4"), timeout=30)
+        cancelled = mgr.cancel(second.job_id)
+        assert cancelled.state is RenderState.CANCELLED and cancelled.started_at is None
+        mgr.cancel(first.job_id)
+        mgr.wait(first.job_id, 15)
+        assert not (tmp_path / "b.mp4").exists()
+    finally:
+        mgr.shutdown()
+
+
+def test_job_timeout(env, tmp_path, make_stub, fake_probe):
+    kdenlive_stub(make_stub, f"{SLEEP} 60")
+    mgr = _manager()
+    try:
+        info = mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=1)
+        final = mgr.wait(info.job_id, 15)
+        assert final.state is RenderState.FAILED and "exceeded" in (final.result.error or "")
+    finally:
+        mgr.shutdown()
+
+
+def test_job_failure_keeps_diagnostics(env, tmp_path, make_stub, fake_probe):
+    kdenlive_stub(make_stub, 'echo "Error: no codec" >&2; exit 4')
+    mgr = _manager()
+    try:
+        final = mgr.wait(mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=30).job_id, 15)
+        assert final.state is RenderState.FAILED and final.result.exit_code == 4
+        assert any("no codec" in line for line in final.result.log_tail)
+    finally:
+        mgr.shutdown()
+
+
+def test_same_output_twice_and_unknown_job(env, tmp_path, make_stub, fake_probe):
+    kdenlive_stub(make_stub, f'{SLEEP} 2; echo x > "$5"')
+    mgr = _manager()
+    try:
+        mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=30)
+        with pytest.raises(ProjectError) as err:
+            mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=30)
+        assert err.value.code == "output_in_use"
+        with pytest.raises(ProjectError) as err:
+            mgr.get("r-doesnotexist")
+        assert err.value.code == "unknown_job"
+    finally:
+        mgr.shutdown()
+
+
+def test_concurrent_submissions(env, tmp_path, make_stub, fake_probe):
+    import threading
+
+    kdenlive_stub(make_stub, 'echo x > "$5"')
+    mgr = _manager(2)
+    ids: list[str] = []
+    lock = threading.Lock()
+
+    def submit(i):
+        info = mgr.submit(_plan(env, tmp_path / f"o{i}.mp4"), timeout=30)
+        with lock:
+            ids.append(info.job_id)
+
+    try:
+        threads = [threading.Thread(target=submit, args=(i,)) for i in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert len(set(ids)) == 6
+        assert sum(j.state is RenderState.RUNNING for j in mgr.list().jobs) <= 2
+        finals = [mgr.wait(i, 30).state for i in ids]
+        assert finals == [RenderState.SUCCEEDED] * 6
+    finally:
+        mgr.shutdown()
+
+
+def test_progress_when_reported_and_note_otherwise(env, tmp_path, make_stub, fake_probe):
+    kdenlive_stub(make_stub, f'printf "1\\t30\\t50\\n" > "$5.log"; {SLEEP} 60')
+    mgr = _manager()
+    try:
+        info = mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=60)
+        for _ in range(100):
+            current = mgr.get(info.job_id)
+            if current.progress:
+                break
+            time.sleep(0.05)
+        assert current.progress and (current.progress.percent, current.progress.frame) == (50, 30)
+    finally:
+        mgr.shutdown()
+    kdenlive_stub(make_stub, f"{SLEEP} 60")
+    mgr = _manager()
+    try:
+        info = mgr.submit(_plan(env, tmp_path / "p.mp4"), timeout=60)
+        time.sleep(0.3)
+        current = mgr.get(info.job_id)
+        assert current.progress is None and "progress" in (current.progress_note or "")
+    finally:
+        mgr.shutdown()
+
+
+def test_shutdown_stops_running_renders(env, tmp_path, make_stub, fake_probe):
+    pidfile = tmp_path / "child.pid"
+    kdenlive_stub(make_stub, f'echo p > "$5"; {SLEEP} 60 & echo $! > "{pidfile}"; wait')
+    mgr = _manager()
+    info = mgr.submit(_plan(env, tmp_path / "o.mp4"), timeout=60)
+    for _ in range(100):
+        if pidfile.exists() and pidfile.read_text().strip():
+            break
+        time.sleep(0.05)
+    mgr.shutdown()
+    assert mgr.get(info.job_id).state is RenderState.CANCELLED
+    assert _pid_gone(int(pidfile.read_text()))
+    assert list(tmp_path.glob(".*partial*")) == []
+
+
+@pytest.mark.anyio
+async def test_job_tools_over_mcp(env, tmp_path, make_stub, fake_probe):
+    from mcp import Client
+
+    from mcp_kdenlive.server import build_server
+
+    kdenlive_stub(make_stub, 'echo x > "$5"')
+    mgr = _manager()
+    try:
+        async with Client(build_server(mgr)) as client:
+            started = await client.call_tool(
+                "start_render", {"path": str(PROJECT), "output": str(tmp_path / "o.mp4")}
+            )
+            assert started.is_error is False
+            job_id = started.structured_content["job_id"]
+            mgr.wait(job_id, 20)
+            got = await client.call_tool("get_render_job", {"job_id": job_id})
+            listed = await client.call_tool("list_render_jobs", {})
+            unknown = await client.call_tool("cancel_render_job", {"job_id": "r-nope"})
+        assert got.structured_content["state"] == "succeeded"
+        assert got.structured_content["result"]["validation"]["ok"] is True
+        assert listed.structured_content["jobs"][0]["job_id"] == job_id
+        assert unknown.is_error and "[unknown_job]" in unknown.content[0].text
+    finally:
+        mgr.shutdown()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    shutil.which("kdenlive") is None or shutil.which("ffprobe") is None,
+    reason="Kdenlive and ffprobe are required",
+)
+def test_real_render_job_and_cancel(tmp_path):
+    if not render.supports_cli_render(shutil.which("kdenlive") or ""):
+        pytest.skip("this Kdenlive has no command-line rendering")
+    shutil.copytree(PROJECT.parent / "media", tmp_path / "media")
+    project = tmp_path / "p.kdenlive"
+    shutil.copy(PROJECT, project)
+    mgr = _manager()
+    try:
+        done = mgr.wait(
+            mgr.submit(render.prepare(str(project), str(tmp_path / "a.mp4")), 300).job_id, 120
+        )
+        assert done.state is RenderState.SUCCEEDED, done.result
+        info = mgr.submit(render.prepare(str(project), str(tmp_path / "b.mp4")), 300)
+        mgr.cancel(info.job_id)
+        final = mgr.wait(info.job_id, 60)
+        # A 2-second render may finish before the cancel lands; both outcomes are consistent.
+        assert final.state in (RenderState.CANCELLED, RenderState.SUCCEEDED)
+        if final.state is RenderState.CANCELLED:
+            assert not (tmp_path / "b.mp4").exists()
+        assert list(tmp_path.glob(".*partial*")) == []
+    finally:
+        mgr.shutdown()

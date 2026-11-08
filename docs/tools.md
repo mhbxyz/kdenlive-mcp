@@ -12,6 +12,9 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 | `probe_media` | yes | ffprobe metadata for one local file |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
+| `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
+| `get_render_job` / `list_render_jobs` | yes | Job state, progress when available, final result |
+| `cancel_render_job` | no | Cancel a queued or running job |
 
 ## `inspect_project(path)`
 
@@ -131,4 +134,26 @@ own behaviour drives the checks:
 - **No visual check:** subjective visual or audio correctness is not checked.
 - **Defaults:** rendering uses the preset's default quality and speed. Proxies, two-pass encoding, per-track audio and embedded subtitles are disabled, as in Kdenlive's command-line mode.
 - **Packaging:** Flatpak and Snap installs need `KDENLIVE_MCP_KDENLIVE` pointing to a wrapper; untested.
-- **Blocking:** the call blocks for the whole render. For long renders, use the job tools from #7.
+- **Blocking:** the call blocks for the whole render. For long renders, use the job tools below.
+- **Isolation from a running Kdenlive:** each render also gets a private `TMPDIR`. Otherwise `kdenlive_render` looks for running Kdenlive instances there and reports progress to them.
+
+## Render jobs: `start_render`, `get_render_job`, `list_render_jobs`, `cancel_render_job`
+
+`start_render` takes the same arguments and runs the same checks as `render_project`, but
+returns a job immediately.
+
+| State | Meaning |
+|---|---|
+| `queued` | Waiting for a free slot; `queue_position` 1 starts next. |
+| `running` | Kdenlive is rendering; `elapsed_seconds` counts from the start. |
+| `succeeded` | The process completed **and** the output passed validation; the file is in place. |
+| `failed` | Non-zero exit, no output, failed validation or timeout. See `result.error` and `result.log_tail`. |
+| `cancelled` | Stopped on request (or at server exit); partial output removed. |
+
+### Job behaviour
+
+- **Concurrency:** `KDENLIVE_MCP_MAX_RENDERS` renders run at once (default 1, maximum 4). Up to 20 more wait in a queue. Two active jobs cannot target the same output file.
+- **Two-step cancellation:** `cancel_render_job` returns at once with `cancel_requested: true`. The state becomes `cancelled` only after the whole process group (Kdenlive, `kdenlive_render`, melt) has exited, which takes SIGTERM then SIGKILL after 5 s, and the partial output has been deleted. Cancelling a finished job changes nothing. A job may finish before a late cancel lands; the final state says what actually happened.
+- **Progress:** Kdenlive's command-line render does not report progress reliably. `progress` is filled only when `kdenlive_render` has written a progress line. Otherwise it is `null`, and `progress_note` explains why.
+- **Lifetime:** jobs are in memory and belong to one server process. When the server exits (the client closes the stdio session), running renders are stopped and cleaned up. Nothing persists across restarts: an unknown job id returns `[unknown_job]`. The 50 most recent finished jobs are kept.
+- **Abrupt exit:** if the server is killed with SIGKILL, it cannot stop its renders. Kdenlive keeps running until it finishes, and its partial `.<name>.kdenlive-mcp-*.partial.*` file stays next to the output.

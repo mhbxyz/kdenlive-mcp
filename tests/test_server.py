@@ -16,11 +16,6 @@ from mcp_kdenlive.server import build_server
 pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
 async def test_tool_discovery_and_annotations():
     async with Client(build_server()) as client:
         tools = {t.name: t for t in (await client.list_tools()).tools}
