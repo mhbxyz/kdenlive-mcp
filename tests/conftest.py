@@ -18,6 +18,9 @@ def _scoped_filesystem(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tmp_path and read the repository fixtures, so those are the allowed roots unless a test
     sets its own policy."""
     monkeypatch.setenv("KDENLIVE_MCP_ALLOWED_ROOTS", f"{tmp_path}{os.pathsep}{FIXTURES.resolve()}")
+    # Never reach the developer's real session bus (a Kdenlive they have open, #62).
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", f"unix:path={tmp_path}/no-bus")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "no-runtime"))
 
 
 @pytest.fixture
