@@ -115,7 +115,7 @@ own behaviour drives the checks:
 | Missing media: exits 0 and renders gaps | Rejects (`missing_media`) unless `allow_missing_media=true`, which adds a warning |
 | Nonexistent project: crashes (exit 139) | The project is loaded and validated first |
 | Existing output: refuses (exit 1) | `output_exists`, unless `overwrite=true` |
-| `--render` / `--render-preset` unknown in Kdenlive 23.08 (Ubuntu 24.04) | `unsupported_kdenlive`, detected from `kdenlive --help`; a `melt` fallback is tracked in #41 |
+| `--render` / `--render-preset` unknown in Kdenlive 23.08 (Ubuntu 24.04) | `unsupported_kdenlive`, detected from `kdenlive --help`; a `melt` fallback is tracked in #42 |
 
 ### Execution
 
