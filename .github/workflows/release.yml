@@ -14,6 +14,9 @@ permissions: {}
 env:
   UV_VERSION: "0.9.26"
   MCP_PUBLISHER_VERSION: "v1.8.4"
+  # Managed Python and package downloads sometimes time out on GitHub runners (#74).
+  UV_HTTP_RETRIES: "8"
+  UV_HTTP_TIMEOUT: "120"
 
 jobs:
   build:

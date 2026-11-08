@@ -19,6 +19,9 @@ env:
   UV_VERSION: "0.9.26"
   UV_FROZEN: "1"
   FORCE_COLOR: "1"
+  # Managed Python and package downloads sometimes time out on GitHub runners (#74).
+  UV_HTTP_RETRIES: "8"
+  UV_HTTP_TIMEOUT: "120"
 
 jobs:
   lint:
