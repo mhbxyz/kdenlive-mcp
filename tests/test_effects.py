@@ -14,6 +14,7 @@ and the crossfade (same-track mix) from tests/fixtures/kd26/kd26-mixes.kdenlive 
 
 from __future__ import annotations
 
+import itertools
 import shutil
 from pathlib import Path
 
@@ -270,3 +271,99 @@ def test_catalog_describes_the_crossfade_and_versions():
     assert (mix.id, mix.tools, mix.min_frames) == ("crossfade", ["add_mix", "remove_mix"], 2)
     assert mix.targets == ["video", "audio"]
     assert "MLT 7.42.0" in catalog.effects[0].verified_with
+
+
+def test_crossfades_do_not_move_the_clips_after_them_and_can_chain(s):
+    """Found by the vertical-short demo (#92): extending the left clip pushed later clips."""
+    s.apply(te.trim_clip, "V1@0", s.rev(), end=40)  # A [0,40) src 0..39
+    s.apply(te.insert_clip, "4", "V1", 40, 10, 49)  # B [40,80) src 10..49
+    s.apply(te.insert_clip, "4", "V1", 80, 10, 49)  # C [80,120) src 10..49
+    s.apply(te.add_mix, "V1@0", s.rev(), 10)
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(c.start, c.end, c.layer) for c in v1.clips] == [(0, 45, 0), (35, 80, 1), (80, 120, 0)]
+    s.apply(te.add_mix, "V1@35", s.rev(), 10)  # B (layer 1) into C (back to layer 0)
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(c.start, c.end, c.layer) for c in v1.clips] == [(0, 45, 0), (35, 85, 1), (75, 120, 0)]
+    assert [(m.start, m.end, m.cut) for m in v1.mixes] == [(35, 45, 40), (75, 85, 80)]
+    s.apply(te.remove_mix, "V1@35", s.rev())
+    s.apply(te.remove_mix, "V1@0", s.rev())
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(c.start, c.end) for c in v1.clips] == [(0, 40), (40, 80), (80, 120)]
+    assert v1.mixes == []
+
+
+def test_crossfade_into_a_clip_already_on_the_other_layer(s, tmp_path):
+    """Found by the rescue demo (#92): in Kdenlive's own layout the middle clip sits on layer 1
+    and ends in the next crossfade; a new crossfade before it must not need to move it."""
+    s.current = s.ws / "kd26-mixes.kdenlive"
+    s.apply(te.remove_mix, "V1@0", s.rev())
+    s.apply(te.add_mix, "V1@0", s.rev(), 12)
+    v1 = next(t for t in s.timeline().tracks if t.label == "V1")
+    assert [(m.start, m.end) for m in v1.mixes] == [(34, 46), (70, 90)]  # cut back at 40
+    assert [(c.start, c.end, c.layer) for c in v1.clips] == [(0, 46, 0), (34, 90, 1), (70, 130, 0)]
+
+
+def consistent(s: Session, label: str = "V1") -> list[tuple[int, int, int]]:
+    """Clips of a track as (start, end, layer), after checking the track is coherent."""
+    track = next(t for t in s.timeline().tracks if t.label == label)
+    spans = [(c.start, c.end, c.layer) for c in track.clips]
+    for layer in (0, 1):
+        on = sorted((a, b) for a, b, la in spans if la == layer)
+        assert all(b <= c for (_, b), (c, _) in itertools.pairwise(on)), spans
+    ends = {(a, la) for a, _, la in spans} | {(b, la) for _, b, la in spans}
+    for m in track.mixes:
+        assert any(e == m.end for e, _ in ends) and any(e == m.start for e, _ in ends), track.mixes
+    mixes = sorted((m.start, m.end) for m in track.mixes)
+    assert all(b <= c for (_, b), (c, _) in itertools.pairwise(mixes)), mixes
+    return spans
+
+
+@pytest.mark.parametrize("duration", [20, 26, 30, 40, 60, 70])
+def test_long_crossfade_cannot_run_into_the_next_one(s, duration):
+    """Review of #92: the left clip must not grow into the next crossfade."""
+    s.current = s.ws / "kd26-mixes.kdenlive"
+    s.apply(te.remove_mix, "V1@0", s.rev())
+    try:
+        s.apply(te.add_mix, "V1@0", s.rev(), duration)
+    except ProjectError as err:
+        assert err.code in ("invalid_range", "overlap")
+        return
+    spans = consistent(s)
+    assert (70, 130, 0) in spans  # the last clip did not move
+
+
+@pytest.mark.parametrize("duration", [22, 28, 30, 32, 34])
+def test_crossfade_moving_across_never_overlaps_an_earlier_one(s, duration):
+    s.apply(te.trim_clip, "V1@0", s.rev(), end=40)
+    s.apply(te.insert_clip, "4", "V1", 40, 10, 49)
+    s.apply(te.insert_clip, "4", "V1", 80, 20, 39)  # C, short
+    s.apply(te.insert_clip, "4", "V1", 100, 25, 59)  # D
+    s.apply(te.add_mix, "V1@0", s.rev(), 10)
+    s.apply(te.add_mix, "V1@35", s.rev(), 10)
+    try:
+        s.apply(te.add_mix, "V1@75", s.rev(), duration)
+    except ProjectError as err:
+        assert err.code in ("invalid_range", "overlap")
+        return
+    spans = consistent(s)
+    assert max(b for _, b, _ in spans) == 135  # D keeps its end
+
+
+@pytest.mark.parametrize("duration", [20, 26, 30])
+def test_left_clip_cannot_grow_into_the_next_crossfade(s, duration):
+    """Review of #92: B sits on layer 1 and ends in a crossfade into C; A -> B must not extend A
+    over C's start."""
+    s.apply(te.trim_clip, "V1@0", s.rev(), end=40)
+    s.apply(te.insert_clip, "4", "V1", 40, 10, 29)  # B, short
+    s.apply(te.insert_clip, "4", "V1", 60, 10, 49)  # C
+    s.apply(te.add_mix, "V1@0", s.rev(), 4)
+    s.apply(te.add_mix, "V1@38", s.rev(), 10)
+    s.apply(te.remove_mix, "V1@0", s.rev())
+    before = consistent(s)
+    c = max(before, key=lambda span: span[0])
+    try:
+        s.apply(te.add_mix, "V1@0", s.rev(), duration)
+    except ProjectError as err:
+        assert err.code in ("invalid_range", "overlap")
+        return
+    assert c in consistent(s)  # C did not move

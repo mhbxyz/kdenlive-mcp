@@ -1010,7 +1010,9 @@ def _plan_mix(tl: Timeline, t: Track, left: Item, frames: int) -> tuple[Item, in
             f"No clip starts where the clip on {t.label} ends (frame {left.end}).",
             "Move the next clip so it touches this one; a crossfade joins two adjacent clips.",
         )
-    if any(m.involves(right) for m in tl.mixes(t)):
+    # Kdenlive's layout alternates layers: a next clip already on the other layer can stay there
+    # even if it ends in another mix; one on the same layer would have to move across (refused).
+    if right.layer == left.layer and any(m.involves(right) for m in tl.mixes(t)):
         raise ProjectError(
             "unsupported_structure",
             f"The next clip on {t.label} (at {right.start}) is already in a mix.",
@@ -1029,6 +1031,28 @@ def _plan_mix(tl: Timeline, t: Track, left: Item, frames: int) -> tuple[Item, in
     before = min(frames // 2, head)
     after = min(frames - before, tail)
     before = min(frames - after, head)
+    # Room on both layers: the left clip grows by `after` on its layer, the right one starts
+    # `before` earlier on the other layer (#92 review: never into a neighbour or its mix).
+    others = [c for c in tl.clips(t) if c.element not in (left.element, right.element)]
+    if any(
+        c.layer == left.layer and c.start < left.end + after and c.end > left.end for c in others
+    ):
+        raise ProjectError(
+            "overlap",
+            f"On {t.label}, the clip before the cut cannot be extended by {after} frames: "
+            "another clip follows it on the same layer.",
+            "Use a shorter crossfade.",
+        )
+    if any(
+        c.layer == 1 - left.layer and c.start < right.end and c.end > right.start - before
+        for c in others
+    ):
+        raise ProjectError(
+            "overlap",
+            f"On {t.label}, the clip after the cut cannot start {before} frames earlier on the "
+            "other layer: a clip is already there.",
+            "Use a shorter crossfade.",
+        )
     if before + after < frames:
         raise ProjectError(
             "invalid_range",
@@ -1075,7 +1099,8 @@ def add_mix(
     placements = []
     for t, left, right, before, after in plan:
         cut = left.end
-        tl.set_bounds(t, left, left.start, left.end + after)
+        # Take the right clip off its layer first: extending the left clip while the right one
+        # is still next to it would push every later clip of the layer (#92).
         current = next(c for c in tl.clips(t) if c.element is right.element)
         new_layer = 1 - left.layer
         tl._rebuild(
@@ -1083,6 +1108,8 @@ def add_mix(
             [(s, e) for s, e in tl.placed(t, current.layer) if e is not right.element],
             current.layer,
         )
+        extended = next(c for c in tl.clips(t) if c.element is left.element)
+        tl.set_bounds(t, extended, extended.start, extended.end + after)
         source_in, _ = tl._entry_bounds(right.element)
         right.element.set("in", frames_to_clock(source_in - before, tl.doc.rate))
         tl._rebuild(t, [*tl.placed(t, new_layer), (cut - before, right.element)], new_layer)

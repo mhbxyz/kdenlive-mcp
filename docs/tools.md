@@ -276,7 +276,7 @@ it writes a verified copy without changing anything.
 | Destination exists | `[output_exists]`, unless `overwrite=true`. The old file is first copied to `<name>.backup-<UTC timestamp>.kdenlive`; the first backup of a file (its state before the server's first edit) and the 4 most recent are kept; 0.1 backups and other files are never removed. If nothing changed (same content), nothing is written and no backup is made (`saved.written: false`). |
 | Destination is the source | `[source_protected]`, unless `overwrite=true` **and** `expected_sha256` equals the sha256 of the version read (from `inspect_project`). A backup is kept. |
 | Source changed since it was read | `[conflict]`, nothing written. The source is re-hashed just before writing. |
-| Destination appears open in Kdenlive | `[open_in_kdenlive]`, with the evidence (#62): a `kdenlive` process started with that file; a Kdenlive autosave lock of unsaved changes; or a running Kdenlive whose **window title** names a project with the same file name (read-only, over the session D-Bus, see [security.md](security.md), *Open projects*). This last signal also catches a project opened from Kdenlive's *Open* dialog without changes. |
+| Destination appears open in Kdenlive | `[open_in_kdenlive]`, with the evidence (#62): a `kdenlive` process started with that file; a Kdenlive autosave lock of unsaved changes; or a running Kdenlive whose **window title** names a project with the same file name (read-only, over the session D-Bus, see [security.md](security.md), *Open projects*). This last signal also catches a project opened from Kdenlive's *Open* dialog without changes. Command-line renders (`kdenlive --render`) are not counted: they never hold a project open for editing. |
 | Kdenlive runs but could not be checked | Written, with a warning in `saved.warnings` telling the user to close or reload the project in Kdenlive. This happens without `busctl` (systemd) or a session bus, or with a Kdenlive that is not on the session bus. |
 | The edit adds a file next to the project (subtitles, #16) | Named after the destination (`<name>.kdenlive.ass`) and written atomically just before the project, under the same rules: an existing one is `[output_exists]` unless `overwrite=true` (then backed up as `<name>.ass.backup-<UTC timestamp>`); if the project cannot be written, the new file is removed. Listed in `saved.side_files`. |
 | Kdenlive 20.08–22.12 document (version 1.0x) | `[unsupported_structure]`. Save it once in a recent Kdenlive first. |
@@ -498,10 +498,14 @@ after    V1  [ A ............ ]                          layer 0, extended by `a
 - **Format:** Kdenlive 26.08.2's own: the second clip moves to the track's other layer, and a
   transition inside the track tractor with `kdenlive:mixcut` records where the original cut is.
   `get_timeline` reports it in the track's `mixes`.
-- **Refused:** a clip that already ends in a mix (use `remove_mix` first), a next clip that is
-  already in another mix (chains are not supported yet), or that has animated effects (their
-  keyframes would shift), and grouped clips whose next clips are not grouped together
-  (`[unsupported_structure]`). Nothing is written when a check fails.
+- **Chains:** crossfades can follow each other (A→B→C), as in Kdenlive: clips alternate between
+  the two layers, and a next clip already on the other layer stays there even if it ends in the
+  following crossfade. Clips after the crossfade never move.
+- **Refused:** a clip that already ends in a mix (use `remove_mix` first), a next clip on the
+  same layer that is already in another mix (it would have to cross to the layer of its other
+  partner), a next clip with animated effects (their keyframes would shift), and grouped clips
+  whose next clips are not grouped together (`[unsupported_structure]`). Nothing is written when
+  a check fails.
 - **Edge fades** (audio and black fades) stay at both clips' edges.
 - `remove_mix` removes the mix at the end of `clip` and puts both clips back to the cut; a track of
   the group without a mix (e.g. a video-only mix made in Kdenlive) is left as it is.

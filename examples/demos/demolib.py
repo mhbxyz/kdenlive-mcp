@@ -74,6 +74,40 @@ class Session:
         return track_data["clips"][index], tl["file"]["sha256"]
 
 
+class Editor:
+    """Edit one project in place through the server, carrying its revision from call to call.
+
+    Every call passes `expected_sha256` (and `revision` for clip edits), so an edit made
+    elsewhere in between makes the server refuse instead of overwriting it.
+    """
+
+    def __init__(self, session: Session, project: Path) -> None:
+        self.session = session
+        self.project = project
+        self.sha = ""
+
+    async def open(self) -> Editor:
+        self.sha = (await self.session.timeline(self.project))["file"]["sha256"]
+        return self
+
+    async def edit(self, tool: str, **args: Any) -> dict[str, Any]:
+        result = await self.session.call(
+            tool, path=str(self.project), destination=str(self.project), overwrite=True,
+            expected_sha256=self.sha, **args,
+        )  # fmt: skip
+        self.sha = result["saved"]["sha256"]
+        return result
+
+    async def on_clip(self, tool: str, track: str, index: int, **args: Any) -> dict[str, Any]:
+        """Edit the `index`-th clip of `track` (refs are read fresh before each edit)."""
+        clip, revision = await self.session.clip(self.project, track, index)
+        return await self.edit(tool, clip=clip["ref"], revision=revision, **args)
+
+    async def clips(self, track: str) -> list[dict[str, Any]]:
+        tl = await self.session.timeline(self.project)
+        return next(t for t in tl["tracks"] if t["label"] == track)["clips"]
+
+
 async def render(session: Session, project: Path, output: Path, **args: Any) -> str:
     """Render through the server; fall back to melt where `kdenlive --render` is missing.
 
@@ -248,9 +282,20 @@ def region_rgb(
     return r, g, b
 
 
-def bright_box(path: Path, t: float, threshold: int = 200) -> tuple[int, int, int, int] | None:
-    """(left, top, right, bottom) of the pixels brighter than `threshold` at time t, or None."""
+def bright_box(
+    path: Path,
+    t: float,
+    threshold: int = 200,
+    region: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0),
+) -> tuple[int, int, int, int] | None:
+    """(left, top, right, bottom) of the pixels brighter than `threshold` at time t, or None.
+
+    `region` (x, y, w, h as fractions of the frame) limits the search; coordinates stay frame
+    coordinates.
+    """
     width, height = video_size(path)
+    x0, y0 = int(region[0] * width), int(region[1] * height)
+    x1, y1 = int((region[0] + region[2]) * width), int((region[1] + region[3]) * height)
     proc = _exec(
         [
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", str(t),
@@ -260,10 +305,10 @@ def bright_box(path: Path, t: float, threshold: int = 200) -> tuple[int, int, in
         text=False,
     )  # fmt: skip
     data = proc.stdout[: width * height]
-    rows = [y for y in range(height) if max(data[y * width : (y + 1) * width]) > threshold]
+    rows = [y for y in range(y0, y1) if max(data[y * width + x0 : y * width + x1]) > threshold]
     if not rows:
         return None
-    cols = [x for x in range(width) if any(data[y * width + x] > threshold for y in rows)]
+    cols = [x for x in range(x0, x1) if any(data[y * width + x] > threshold for y in rows)]
     return cols[0], rows[0], cols[-1], rows[-1]
 
 

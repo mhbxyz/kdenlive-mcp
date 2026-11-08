@@ -904,7 +904,9 @@ def _register_editing(server: MCPServer) -> None:
         title="Create project",
         description=(
             "Create a new Kdenlive project file containing one media clip placed at the start "
-            "of the timeline (video on V1, audio on A1, grouped). The project is modeled on "
+            "of the timeline (video on V1, audio on A1, grouped). Like a new Kdenlive project, "
+            "it has two video tracks (V1, V2) and two audio tracks (A1, A2): V2 is free for "
+            "overlays and titles before any add_track. The project is modeled on "
             "Kdenlive 26.08 files and stays editable in Kdenlive. `profile` is an MLT profile "
             "name (see list_profiles) or 'auto' to use the standard profile matching the "
             "media. Refuses to replace an existing file unless overwrite=true; writes "

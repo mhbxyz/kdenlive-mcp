@@ -37,7 +37,9 @@ ALIGN = {"left": 1, "right": 2, "center": 4}  # Qt::AlignLeft, AlignRight, Align
 # Attributes Kdenlive 26.08.2 writes on a text item and that this server does not expose.
 FIXED_CONTENT = {
     "font-underline": "0",
-    "font-weight": "50",
+    # Qt 6 scale (400 = normal): melt 7.42 draws Qt 5's "50" as Thin (#92); Kdenlive 26.08.2
+    # keeps 400 on save and MLT 7.22 draws both alike (checked in the lab and in Docker).
+    "font-weight": "400",
     "letter-spacing": "0",
     "shadow": "0;#ff000000;21968;0;0",
     "tab-width": "80",

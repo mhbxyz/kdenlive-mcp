@@ -211,6 +211,26 @@ def test_kdenlive_render_helpers_are_not_kdenlive_windows(tmp_path):
         helper.wait()
 
 
+def test_command_line_renders_are_not_open_projects():
+    """Found by a real-client demo run (#92): `kdenlive --render` (e.g. a render running at the
+    same time) never holds a project open for editing, so it must not trigger the warning."""
+    render = subprocess.Popen(
+        ["kdenlive", "-c", "import time; time.sleep(30)", "--render", "a.kdenlive", "o.mp4"],
+        executable=sys.executable,
+    )
+    gui = subprocess.Popen(
+        ["kdenlive", "-c", "import time; time.sleep(30)", "a.kdenlive"], executable=sys.executable
+    )
+    try:
+        time.sleep(0.2)
+        found = presence.kdenlive_processes()
+        assert render.pid not in found and gui.pid in found
+    finally:
+        for proc in (render, gui):
+            proc.kill()
+            proc.wait()
+
+
 def test_autosave_lock_of_unsaved_changes(tmp_path, monkeypatch):
     import os
     import urllib.parse
