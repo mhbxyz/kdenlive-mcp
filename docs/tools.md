@@ -13,6 +13,8 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 | `list_profiles` | yes | MLT video profiles usable for new projects |
 | `create_project` | no (creates a file) | New Kdenlive project with one media clip on the timeline |
 | `save_project_copy` | no (writes a file) | Verified copy of a project; the base of every editing tool |
+| `add_media_to_bin` | no (writes a file) | Add audio/video files to the bin |
+| `add_track` | no (writes a file) | Add a named audio or video track |
 | `list_render_presets` | yes | Render presets of the installed Kdenlive |
 | `render_project` | no (creates a file) | Render with `kdenlive --render`, then validate the output |
 | `start_render` | no (creates a file) | Same as `render_project`, in the background; returns a job id |
@@ -239,3 +241,56 @@ only: **the external change was silently lost**. Close the project in Kdenlive, 
 Paths must be absolute. The server reads and writes only the paths given to it and the files
 those projects reference, with the permissions of the user running it. An allow-list of roots
 is tracked in #27.
+
+## Editing tools: shared rules
+
+Every editing tool reads `path`, applies the change in memory and writes the result to
+`destination` with the rules of `save_project_copy`:
+
+- **Copies by default.** Writing over the source needs `overwrite` and `expected_sha256`.
+- **Conflict detection** before writing.
+- **Atomic write** with a backup when replacing an existing file.
+- **Path rebasing** when the destination is in another folder.
+
+The result's `saved.changes` lists what was modified. Only Kdenlive 23.04+ documents
+(version 1.1) are edited.
+
+## `add_media_to_bin(path, media_paths, destination, …)`
+
+Adds up to 50 audio or video files to the bin. They are not placed on the timeline.
+
+- **Clip data:** MLT computes it under the *project's own profile* (written to a temporary MLT profile file, so custom profiles work too). Kdenlive metadata is added as in `create_project`.
+- **Duplicates:** a file already in the bin (compared by resolved path, through proxies to the original) is reported as `existing` with its clip id and is not duplicated. Kdenlive does the same.
+- **References:** stored relative to the project root when inside it, absolute otherwise.
+
+## `add_track(path, kind, destination, name=None, sequence=None, …)`
+
+Adds an empty track, in Kdenlive's track order (audio tracks below video tracks):
+
+- **Video:** on top of all tracks; the new label is `V<n+1>`.
+- **Audio:** below all audio tracks; the new label is `A<n+1>`. Every track moves up one MLT index, and the server renumbers the internal and user transitions (`a_track`/`b_track`), the clip groups, and the active, audio and video target tracks. Clips keep their track, timing and ids.
+
+### How the track is built
+
+The structure is copied from Kdenlive 26.08.2's own tracks:
+
+- **Tractor:** two playlists, the second one for same-track mixes.
+- **Audio extras:** `kdenlive:audio_track` and three disabled internal filters (volume, panner, audiolevel).
+- **Internal transition:** one per track, `mix` for audio and `qtblend` for video.
+- **Name:** stored in `kdenlive:track_name`.
+
+### Verification
+
+`research/lab/verify_roundtrip.py`: a copy of a 26.08.2 project with two media added, a named
+video track and a named audio track (Unicode name) opened in Kdenlive 26.08.2 without dialogs.
+After Kdenlive's save, these were identical:
+
+- track labels, kinds and names;
+- clips;
+- bin media;
+- the per-track internal transitions.
+
+### Limits
+
+- **Track positions:** other positions (a track between existing ones) are not supported yet.
+- **Track properties:** track locking, muting and hiding are not set by these tools.

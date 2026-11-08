@@ -12,9 +12,19 @@ from typing import Annotated
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from mcp_kdenlive import __version__, create, jobs, kdenlive_doc, media, project, render, writer
+from mcp_kdenlive import (
+    __version__,
+    create,
+    edits,
+    jobs,
+    kdenlive_doc,
+    media,
+    project,
+    render,
+    writer,
+)
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.kdenlive_doc import ProjectError
 
@@ -31,9 +41,31 @@ READ_ONLY = ToolAnnotations(
 )
 
 
+Destination = Annotated[
+    str,
+    Field(
+        description="Absolute path of the .kdenlive file to write (the source by default is "
+        "never modified; see save_project_copy for the overwrite rules)."
+    ),
+]
+Overwrite = Annotated[bool, Field(description="Allow replacing an existing destination file.")]
+ExpectedSha = Annotated[
+    str | None,
+    Field(description="Required to write over the source: its sha256 as last read."),
+]
+EDIT = ToolAnnotations(
+    read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False
+)
+
 ProjectPath = Annotated[
     str, Field(description="Absolute path of a .kdenlive project file on this machine.")
 ]
+
+
+class EditResult(BaseModel):
+    saved: writer.SaveResult
+    media: list[edits.MediaAdded] | None = None
+    track: edits.TrackAdded | None = None
 
 
 def _tool_error(exc: ProjectError) -> ToolError:
@@ -390,5 +422,66 @@ def _register_editing(server: MCPServer) -> None:
             return writer.save(
                 edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
             )
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="add_media_to_bin",
+        title="Add media to bin",
+        description=(
+            "Add audio or video files to a project's bin (not to the timeline) and write the "
+            "result to `destination`. Files already in the bin are reported as 'existing' with "
+            "their clip id instead of being duplicated. Clip data comes from MLT, as in "
+            "Kdenlive. Same safety rules as save_project_copy."
+        ),
+        annotations=EDIT,
+    )
+    def add_media_to_bin(
+        path: ProjectPath,
+        media_paths: Annotated[list[str], Field(description="Absolute paths of media files.")],
+        destination: Destination,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        try:
+            edit = writer.open_for_edit(path)
+            added = edits.add_media(edit, media_paths)
+            saved = writer.save(
+                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
+            )
+            return EditResult(saved=saved, media=added)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="add_track",
+        title="Add track",
+        description=(
+            "Add an empty, optionally named audio or video track to a sequence and write the "
+            "result to `destination`. Video tracks are added on top of the existing video "
+            "tracks; audio tracks below the existing audio tracks (Kdenlive's track order). "
+            "Existing clips, groups, compositions and mixes are preserved. Same safety rules "
+            "as save_project_copy."
+        ),
+        annotations=EDIT,
+    )
+    def add_track(
+        path: ProjectPath,
+        kind: Annotated[str, Field(description="'audio' or 'video'.", pattern="^(audio|video)$")],
+        destination: Destination,
+        name: Annotated[str | None, Field(description="Track name shown in Kdenlive.")] = None,
+        sequence: Annotated[
+            str | None, Field(description="Sequence uuid or name; default: active sequence.")
+        ] = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        try:
+            edit = writer.open_for_edit(path)
+            track = edits.add_track(edit, kind, name, sequence)
+            saved = writer.save(
+                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
+            )
+            return EditResult(saved=saved, track=track)
         except ProjectError as exc:
             raise _tool_error(exc) from exc

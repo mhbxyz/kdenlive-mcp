@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 from pathlib import Path
 
@@ -13,44 +12,6 @@ from mcp_kdenlive.kdenlive_doc import ProjectError
 
 FIX = Path(__file__).parent / "fixtures"
 MEDIA = FIX / "kd26" / "media"
-CAT = shutil.which("cat")  # resolved before fixtures replace PATH
-
-AV_PRODUCER = """<?xml version="1.0"?><mlt><producer id="producer0" in="0" out="59">
- <property name="length">60</property><property name="eof">pause</property>
- <property name="resource">x</property><property name="audio_index">1</property>
- <property name="video_index">0</property><property name="seekable">1</property>
- <property name="meta.media.nb_streams">2</property><property name="mlt_service">avformat</property>
-</producer></mlt>"""
-AUDIO_PRODUCER = AV_PRODUCER.replace(
-    '<property name="video_index">0</property>', '<property name="video_index">-1</property>'
-).replace('<property name="audio_index">1</property>', '<property name="audio_index">0</property>')
-
-
-@pytest.fixture
-def stub_melt(tmp_path, make_stub, stub_env):
-    """A melt stub writing canned MLT XML; records its arguments."""
-    profiles = tmp_path / "profiles"
-    profiles.mkdir()
-    shutil.copy(FIX / "profiles" / "atsc_720p_2997", profiles / "atsc_720p_2997")
-    shutil.copy(FIX / "profiles" / "atsc_1080p_25", profiles / "atsc_1080p_25")
-    canned_av = tmp_path / "av.mlt"
-    canned_av.write_text(AV_PRODUCER)
-    canned_audio = tmp_path / "audio.mlt"
-    canned_audio.write_text(AUDIO_PRODUCER)
-    args_file = tmp_path / "melt.args"
-    make_stub(
-        "melt",
-        f'''printf "%s\\n" "$@" > "{args_file}"
-for last; do :; done
-case "$4" in *.wav) src="{canned_audio}";; *) src="{canned_av}";; esac
-{CAT} "$src" > "${{last#xml:}}"''',
-    )
-    env = dict(stub_env, MLT_PROFILES_PATH=str(profiles))
-    saved = dict(os.environ)
-    os.environ.update(env)
-    yield env, args_file
-    os.environ.clear()
-    os.environ.update(saved)
 
 
 def copy_media(tmp_path: Path) -> Path:
