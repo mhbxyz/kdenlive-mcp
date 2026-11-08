@@ -10,7 +10,8 @@ Statuses are defined in [docs/versioning.md](versioning.md#external-software-sup
 | MLT | 7.42.0, 7.22.0 | 7.x | — | — |
 | FFmpeg / ffprobe | n9.0.2, 6.1.1 | ≥ 6 | older | — |
 | Python | 3.11, 3.12, 3.13, 3.14 | — | 3.15+ | ≤ 3.10 |
-| Linux | CachyOS (rolling), Ubuntu 24.04 (CI) | other distributions | Snap Kdenlive through wrappers; AppImage through `KDENLIVE_MCP_KDENLIVE` | — |
+| Linux | CachyOS (rolling), Ubuntu 24.04 (CI) | other distributions | Snap Kdenlive through wrappers | — |
+| AppImage (download.kde.org) | 24.12.3, 25.04.3 through `KDENLIVE_MCP_KDENLIVE`: detection and rendering | other releases | — | — |
 | Flatpak (Flathub `org.kde.kdenlive`) | 26.08.3 (user installation, with its melt 7.43.0 and FFmpeg 9.0.2): detection, probing, creation, both render engines | system installation | — | files in `/tmp`, `/usr`, `/etc`… (the sandbox cannot see them; refused with `[invalid_path]`) |
 | macOS, Windows | — | — | — | not supported |
 | MCP clients | see [docs/clients.md](clients.md) | standard stdio MCP clients | desktop/IDE variants | cloud-only clients without a local bridge |
@@ -27,6 +28,23 @@ The server does not pin a protocol revision: the SDK negotiates the newest one b
 A new major version of the SDK is a compatibility change for this server and is released as a
 new minor version (from 1.0: as decided in the changelog). Tested clients and versions are in
 [clients.md](clients.md).
+
+## Other Kdenlive releases (#66)
+
+Checked on 2026-11-08 with the official AppImages from download.kde.org (SHA-256 verified),
+pointed to by `KDENLIVE_MCP_KDENLIVE`:
+
+| Kdenlive | Detection | `kdenlive --render` of projects written by this server and by Kdenlive 26.08.2 | Projects saved by this release |
+|---|---|---|---|
+| 24.12.3 (AppImage) | ✅ version, `--render` detected | ✅ montage, crossfades, AV pair: picture and sound | pending (#86) |
+| 25.04.3 (AppImage) | ✅ version, `--render` detected | ✅ same | pending (#86) |
+
+`tests/test_compat.py::test_other_kdenlive_releases_render_fixtures` repeats this with any
+binaries listed in `KDENLIVE_MCP_TEST_KDENLIVE` (`:`-separated; skipped when unset). AppImages are
+supported through `KDENLIVE_MCP_KDENLIVE`; they bundle their own MLT, used by `kdenlive --render`.
+
+Projects *saved* by 24.x/25.x need Kdenlive's GUI: these AppImages expose neither the
+accessibility bus nor D-Bus in the headless lab, so the files are produced by hand (#86).
 
 ## Tested versions
 

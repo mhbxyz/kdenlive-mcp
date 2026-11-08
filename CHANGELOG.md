@@ -7,6 +7,10 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Other Kdenlive releases (#66):** the official 24.12.3 and 25.04.3 AppImages, through `KDENLIVE_MCP_KDENLIVE`, are detected and render projects written by this server and by Kdenlive 26.08.2 (`docs/compatibility.md`; integration test with `KDENLIVE_MCP_TEST_KDENLIVE`). Projects *saved* by these releases are tracked in #86.
+
 ### Added
 
 - **Flatpak Kdenlive (#65):** when Kdenlive is not on `PATH`, a Flathub installation (`org.kde.kdenlive`, user or system) is detected and used, with its own melt and FFmpeg, MLT profiles and render presets. Paths the sandbox cannot see (`/tmp`, system folders) are refused with `[invalid_path]`. `KDENLIVE_MCP_FLATPAK=off` disables it. Tested with Flathub's 26.08.3.
