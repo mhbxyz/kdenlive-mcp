@@ -67,7 +67,8 @@ Point the variables above to executables or wrapper scripts.
 uv run --directory /path/to/kdenlive-mcp kdenlive-mcp     # same as: kdenlive-mcp serve
 ```
 
-A typical MCP client configuration (the exact format depends on the client):
+Tested clients (Claude Code, Codex CLI, OpenCode, Grok Build CLI) and copyable
+configurations are listed in [docs/clients.md](docs/clients.md). A typical configuration:
 
 ```json
 {
