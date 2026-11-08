@@ -21,11 +21,11 @@ VERIFICATION = """
 - **Artifacts:** the wheel and sdist were built once, checked, installed in clean environments and smoke-tested. The same files went to TestPyPI, were installed from there and tested, then were promoted.
 - **Real tools:** integration and end-to-end tests against Ubuntu 24.04's Kdenlive 23.08 / MLT 7.22 / FFmpeg 6.1, run under `xvfb-run` (MLT 7.22's Qt module needs a display), renders through melt there; the four demos of `examples/demos` are played by their scripts and their renders checked.
 
-**Local, with Kdenlive 26.08.2 (recorded in the pull requests and `docs/compatibility.md`):**
+**Local, with Kdenlive 26.08.2 unless stated (recorded in the pull requests, `docs/compatibility.md` and `examples/demos/RESULTS.md`):**
 
 - **Round trip:** projects generated or edited by every new tool open without dialogs and survive Kdenlive's own save unchanged, including effect parameter values, crossfades, titles (text and style) and subtitles (events), and the projects of the four demos (`research/lab/verify_roundtrip.py`).
-- **Rendering:** `kdenlive --render` renders them; effects, crossfades and titles also rendered by the official 24.12.3 and 25.04.3 AppImages and by Flathub's 26.08.3; subtitled projects render with melt (Kdenlive's command-line render crashes on them, reported on #16).
-- **Real client:** each demo's prompt played by Claude Code 2.1.319 (claude-opus-5-5) over MCP; results and interface friction in `examples/demos/RESULTS.md`.
+- **Rendering:** `kdenlive --render` renders them; effects and crossfades also rendered by the official 24.12.3 and 25.04.3 AppImages, titles by 25.04.3 (the 24.12.3 AppImage drew no title at all on the test machine, even from Kdenlive's own file); subtitled projects render with melt (Kdenlive's command-line render crashes on them; a bug report is prepared on #16). Flathub's 26.08.3 was checked for detection, creation and both render engines (#65).
+- **Real client:** the four demos played by Claude Code 2.1.319 (claude-opus-5-5) over MCP (the travel vlog with an earlier version of its prompt); results and interface friction in `examples/demos/RESULTS.md`.
 
 **Not verified automatically: manual Kdenlive GUI checks are still pending.**
 Interactive editing, undo/redo and GUI rendering of server-written projects — including the

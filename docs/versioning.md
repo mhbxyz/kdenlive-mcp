@@ -77,7 +77,7 @@ These are **not** public:
 `tests/test_interface.py` snapshots the tool names, their parameters and the error codes, so a
 change to the public surface fails CI until the snapshot and the changelog are updated together.
 
-### Error codes (v0.1)
+### Error codes
 
 `ambiguous_sequence`, `clip_not_found`, `conflict`, `dependency_missing`, `incompatible_track`,
 `internal_error`, `invalid_argument`, `invalid_configuration`, `invalid_output`, `invalid_path`,
@@ -127,8 +127,9 @@ against the decisions above, with four real-client sessions (the demos, `example
 | Errors | One new code, `subtitles_exist`; everything else reuses the catalog. |
 | Annotations | Reads (`list_effects`, `list_subtitles`): read-only, idempotent. Writes: destructive, not idempotent. |
 
-Deferred to #68, from the real-client runs: subtitles written from text (no file), a loudness
-reading, frame extraction to check a render, and effect parameter values in `get_timeline`.
+Deferred to #68: from the real-client runs, subtitles written from text (no file), a loudness
+reading and frame extraction to check a render; from this review, effect parameter values in
+`get_timeline` (only effect ids are listed, so `update_effect` cannot show what it changes).
 
 ## One version, checked everywhere
 
