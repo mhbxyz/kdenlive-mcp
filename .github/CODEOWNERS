@@ -1,0 +1,9 @@
+# Ownership record (docs/governance.md). Reviews are not required by the rulesets today; this
+# file documents who answers for the sensitive areas and enables code-owner review later.
+*                     @mhbxyz
+/.github/             @mhbxyz
+/pyproject.toml       @mhbxyz
+/uv.lock              @mhbxyz
+/scripts/             @mhbxyz
+/SECURITY.md          @mhbxyz
+/docs/security.md     @mhbxyz
