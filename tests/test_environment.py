@@ -154,3 +154,19 @@ def test_report_is_json_serialisable(all_tools_stubbed):
     data = diagnose(all_tools_stubbed).model_dump(mode="json")
     assert data["tools"][0]["status"] == "available"
     assert Path(data["tools"][0]["path"]).name == "kdenlive"
+
+
+def test_diagnose_reports_filesystem_access(all_tools_stubbed, tmp_path):
+    env = dict(all_tools_stubbed, HOME=str(tmp_path), KDENLIVE_MCP_ALLOWED_ROOTS="")
+    report = diagnose(env)
+    assert report.filesystem.source == "default"
+    assert report.filesystem.roots == [str((tmp_path / "Videos").resolve())]
+    assert report.filesystem.missing == [str((tmp_path / "Videos").resolve())]
+    opt_out = diagnose(dict(env, KDENLIVE_MCP_ALLOWED_ROOTS="unrestricted")).filesystem
+    assert (opt_out.source, opt_out.roots, opt_out.missing) == ("unrestricted", None, [])
+
+
+def test_diagnose_reports_invalid_scope(all_tools_stubbed):
+    files = diagnose(dict(all_tools_stubbed, KDENLIVE_MCP_ALLOWED_ROOTS="relative")).filesystem
+    assert (files.source, files.roots) == ("invalid", None)
+    assert "absolute" in files.error

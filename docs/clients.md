@@ -41,10 +41,15 @@ Replace `/path/to/kdenlive-mcp` with the absolute path of the `kdenlive-mcp` exe
 (`command -v kdenlive-mcp` after `pipx install mcp-kdenlive`), or use the `uv run` form for a
 source checkout. No secrets are required.
 
+Set `KDENLIVE_MCP_ALLOWED_ROOTS` to the folders that hold your projects and media (`:`-separated
+absolute paths). Without it, the server only reaches your videos directory (since 0.2). The
+examples below allow `/home/you/Videos` and `/home/you/Projects/edits`.
+
 **Claude Code**, `mcp.json` (or `claude mcp add kdenlive -- /path/to/kdenlive-mcp`):
 
 ```json
-{ "mcpServers": { "kdenlive": { "command": "/path/to/kdenlive-mcp", "args": [] } } }
+{ "mcpServers": { "kdenlive": { "command": "/path/to/kdenlive-mcp", "args": [],
+    "env": { "KDENLIVE_MCP_ALLOWED_ROOTS": "/home/you/Videos:/home/you/Projects/edits" } } } }
 ```
 
 **Codex CLI**, `~/.codex/config.toml`:
@@ -53,19 +58,21 @@ source checkout. No secrets are required.
 [mcp_servers.kdenlive]
 command = "/path/to/kdenlive-mcp"
 args = []
+env = { KDENLIVE_MCP_ALLOWED_ROOTS = "/home/you/Videos:/home/you/Projects/edits" }
 ```
 
 **OpenCode**, `opencode.json` (project) or the global config:
 
 ```json
 { "$schema": "https://opencode.ai/config.json",
-  "mcp": { "kdenlive": { "type": "local", "command": ["/path/to/kdenlive-mcp"], "enabled": true } } }
+  "mcp": { "kdenlive": { "type": "local", "command": ["/path/to/kdenlive-mcp"], "enabled": true,
+    "environment": { "KDENLIVE_MCP_ALLOWED_ROOTS": "/home/you/Videos:/home/you/Projects/edits" } } } }
 ```
 
 **Grok Build CLI:**
 
 ```sh
-grok mcp add kdenlive /path/to/kdenlive-mcp      # user scope
+grok mcp add kdenlive /path/to/kdenlive-mcp      # user scope; set KDENLIVE_MCP_ALLOWED_ROOTS in its env
 grok mcp doctor kdenlive                         # expect: handshake OK, 5 tools discovered
 ```
 
@@ -85,6 +92,7 @@ npx @modelcontextprotocol/inspector --cli /path/to/kdenlive-mcp --method tools/c
 
 ## Environment and PATH issues
 
+- **Folders the server can reach:** without `KDENLIVE_MCP_ALLOWED_ROOTS` in the client's `env` for the server, only your videos directory is allowed (since 0.2). Add your project and media folders there, separated by `:`.
 - **Reduced environment:** clients start the server with their own, often reduced, environment. GUI-launched clients may not inherit your shell's `PATH`. Use absolute paths for the server command. If `diagnose_environment` reports Kdenlive, melt or ffprobe as missing only from the client, set `KDENLIVE_MCP_KDENLIVE`, `KDENLIVE_MCP_MELT` and `KDENLIVE_MCP_FFPROBE` in the client's `env` for the server.
 - **Clean stdout:** the server writes only protocol messages to stdout. Use `--log-level DEBUG` to get diagnostics on stderr; most clients show them in their MCP logs.
 - **Absolute paths:** paths passed to tools must be absolute. The server's working directory is whatever the client chose and carries no meaning.

@@ -88,8 +88,9 @@ whose text starts with a stable code in brackets, e.g. `[not_found] â€¦ Hint: â€
 ### Filesystem scope
 
 The server runs locally with the permissions of the user who started it. It reads only the
-paths it is given and the media those projects reference, and never writes them. A
-configurable allow-list of roots is tracked in #27. ffprobe is only called on local
+paths it is given and the media those projects reference, and never writes them. Every path
+must be inside the allowed roots (`KDENLIVE_MCP_ALLOWED_ROOTS`; unset means the user's videos
+directory, see [security.md](security.md)). ffprobe is only called on local
 regular files, with `-protocol_whitelist file` and a `file:` prefix, so names containing `:`
 are not interpreted as protocols.
 
@@ -240,8 +241,10 @@ only: **the external change was silently lost**. Close the project in Kdenlive, 
 ### Filesystem scope
 
 Paths must be absolute. The server reads and writes only the paths given to it and the files
-those projects reference, with the permissions of the user running it. An allow-list of roots
-is tracked in #27.
+those projects reference, with the permissions of the user running it, and only inside the
+allowed roots: the user's videos directory by default, or `KDENLIVE_MCP_ALLOWED_ROOTS`
+(`[path_not_allowed]` otherwise). `diagnose_environment` reports the effective roots in
+`filesystem`.
 
 ## Editing tools: shared rules
 

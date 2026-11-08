@@ -61,7 +61,7 @@ Programs are looked up on `PATH`. Override their location with these environment
 | `KDENLIVE_MCP_FFPROBE` | `ffprobe` |
 | `KDENLIVE_MCP_FFMPEG` | `ffmpeg` (optional) |
 | `KDENLIVE_MCP_PROBE_TIMEOUT` | Seconds allowed for each version probe (default 10) |
-| `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated absolute directories; every read and write must stay inside them (**recommended**, see [docs/security.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/security.md)) |
+| `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated absolute directories; every read and write must stay inside them. **Unset: only your videos directory** (`XDG_VIDEOS_DIR`, usually `~/Videos`). `unrestricted` lifts the limit (not recommended). See [docs/security.md](https://github.com/mhbxyz/kdenlive-mcp/blob/main/docs/security.md) |
 | `KDENLIVE_MCP_MAX_RENDERS` | Concurrent background renders (default 1, max 4) |
 
 Flatpak and Snap builds of Kdenlive do not expose `kdenlive`, `melt` or `ffprobe` on `PATH`.
@@ -82,7 +82,7 @@ configurations are listed in [docs/clients.md](https://github.com/mhbxyz/kdenliv
     "kdenlive": {
       "command": "uv",
       "args": ["run", "--directory", "/path/to/kdenlive-mcp", "kdenlive-mcp"],
-      "env": { "KDENLIVE_MCP_KDENLIVE": "/usr/bin/kdenlive" }
+      "env": { "KDENLIVE_MCP_ALLOWED_ROOTS": "/home/you/Videos:/home/you/Projects/edits" }
     }
   }
 }

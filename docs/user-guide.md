@@ -59,12 +59,18 @@ the smoke test with the MCP Inspector are in [docs/clients.md](clients.md). The 
 listed in the official MCP Registry as `io.github.mhbxyz/kdenlive-mcp`
 ([docs/registry.md](registry.md)).
 
-**Recommended:** set `KDENLIVE_MCP_ALLOWED_ROOTS` to the folders that hold your projects and
-media. The server then refuses every path outside them ([docs/security.md](security.md)).
+**Which folders the server can reach.** Since 0.2, without configuration the server only reads
+and writes inside your **videos directory** (`XDG_VIDEOS_DIR` from `~/.config/user-dirs.dirs`,
+usually `~/Videos`, `~/Vidéos` on a French desktop). If your projects or media live elsewhere,
+set `KDENLIVE_MCP_ALLOWED_ROOTS` to those folders, separated by `:`. `kdenlive-mcp diagnose`
+prints the effective folders (line `files`), and the server logs them on stderr at startup.
+`KDENLIVE_MCP_ALLOWED_ROOTS=unrestricted` restores the 0.1 behaviour; it is not recommended,
+because a model manipulated by a web page or a document could then reach any of your files
+([docs/security.md](security.md)).
 
 | Variable | Purpose |
 |---|---|
-| `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated folders the server may read and write (recommended) |
+| `KDENLIVE_MCP_ALLOWED_ROOTS` | `:`-separated folders the server may read and write. Unset: your videos directory only. `unrestricted`: no limit (not recommended) |
 | `KDENLIVE_MCP_KDENLIVE`, `KDENLIVE_MCP_MELT`, `KDENLIVE_MCP_FFPROBE`, `KDENLIVE_MCP_FFMPEG` | executables that are not on `PATH` |
 | `KDENLIVE_MCP_PROBE_TIMEOUT` | seconds allowed per version probe (default 10) |
 | `KDENLIVE_MCP_MAX_RENDERS` | concurrent background renders (default 1, max 4) |
@@ -96,7 +102,7 @@ What changed between versions, and any migration notes for breaking changes:
 | `[missing_media]` / `list_project_media` shows `missing` | Media moved or deleted. Check `resolved_path`; relinking tools are planned (#17). |
 | Render `failed` with codec errors in `log_tail` | Your FFmpeg/MLT build lacks that codec; pick another preset (`list_render_presets`). |
 | Render of a project with subtitles crashes | Known Kdenlive 26.08.2 command-line bug (#16); rendering from Kdenlive's GUI works. |
-| `[path_not_allowed]` | The path is outside `KDENLIVE_MCP_ALLOWED_ROOTS` (symlinks are resolved first). |
+| `[path_not_allowed]` | The path is outside the allowed folders: your videos directory by default, or `KDENLIVE_MCP_ALLOWED_ROOTS` (symlinks are resolved first). Add the folder to `KDENLIVE_MCP_ALLOWED_ROOTS` in the client's server configuration. |
 | `[open_in_kdenlive]` | Close the project in Kdenlive, or write to another file. |
 | Nothing on stdout, MCP client hangs | Run `kdenlive-mcp --log-level DEBUG` from the client's config. Diagnostics go to stderr, which most clients show in their MCP logs. |
 
