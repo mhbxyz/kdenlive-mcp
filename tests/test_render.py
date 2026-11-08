@@ -156,13 +156,17 @@ def test_missing_media_is_refused_unless_allowed(env, tmp_path):
 def test_old_kdenlive_without_cli_render(env, tmp_path, make_stub):
     make_stub("kdenlive", 'echo "Usage: kdenlive [options] file"; exit 0')  # like 23.08
     with pytest.raises(ProjectError) as err:
-        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=env)
+        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=env, engine="kdenlive")
     assert err.value.code == "unsupported_kdenlive"
+    # 'auto' falls back to melt; without melt it says so (#42)
+    with pytest.raises(ProjectError) as err:
+        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=env)
+    assert err.value.code == "dependency_missing" and "melt" in err.value.message
 
 
 def test_kdenlive_missing(stub_env, tmp_path):
     with pytest.raises(ProjectError) as err:
-        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=stub_env)
+        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=stub_env, engine="kdenlive")
     assert err.value.code == "dependency_missing"
 
 
@@ -285,12 +289,12 @@ def test_real_render_end_to_end(tmp_path):
     before = project.read_bytes()
     out = tmp_path / "out é.mp4"
     if not render.supports_cli_render(shutil.which("kdenlive") or ""):
-        # e.g. Kdenlive 23.08 in CI: the server must refuse cleanly instead of failing later.
+        # e.g. Kdenlive 23.08 in CI: Kdenlive's own path is refused cleanly, `auto` uses melt.
         with pytest.raises(ProjectError) as err:
-            render.prepare(str(project), str(out))
+            render.prepare(str(project), str(out), engine="kdenlive")
         assert err.value.code == "unsupported_kdenlive"
-        return
-    result = render.render(render.prepare(str(project), str(out)), timeout=300)
+    plan = render.prepare(str(project), str(out))
+    result = render.render(plan, timeout=300)
     assert result.state is RenderState.SUCCEEDED, (result.error, result.log_tail)
     assert result.validation and result.validation.video_streams == 1
     assert result.validation.duration_seconds == pytest.approx(2.002, abs=0.25)

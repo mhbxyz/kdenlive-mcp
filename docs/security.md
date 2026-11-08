@@ -87,6 +87,7 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
   - only for the read-only Kdenlive window check (#62): `DBUS_SESSION_BUS_ADDRESS`.
 
   Tokens and credentials of other tools in the server's environment are not inherited.
+- **Render presets.** Kdenlive's preset files (system, user, downloaded) are data: with the melt engine only `key=value` encoder settings are passed, and presets naming outputs, inputs or URLs are refused (#42).
 - **Executable trust.** The programs found on `PATH` (or set via `KDENLIVE_MCP_*`) are trusted. Do not point these variables at untrusted files.
 
 ## Logs

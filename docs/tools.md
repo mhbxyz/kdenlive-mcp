@@ -118,10 +118,42 @@ Reads Kdenlive's preset files in Kdenlive's own order, with later files overridi
 
 Codec support by the installed MLT and FFmpeg is only known when rendering.
 
-## `render_project(path, output, preset="MP4-H264/AAC", overwrite=False, allow_missing_media=False, timeout_seconds=3600)`
+## `render_project(path, output, preset="MP4-H264/AAC", overwrite=False, allow_missing_media=False, timeout_seconds=3600, engine="auto")`
 
-Runs `kdenlive --render --render-preset <preset> <project> <temporary output>`. Kdenlive's
-own behaviour drives the checks:
+### Engines
+
+| `engine` | Command | When `auto` picks it |
+|---|---|---|
+| `kdenlive` | `kdenlive --render --render-preset <preset> <project> <temporary output>` | Kdenlive accepts `--render` (it exists from **Kdenlive 24.02.0**: KDE MR !414, merged 2023-10-27, first tag `v24.01.75`) and the project has no subtitles |
+| `melt` | `melt <project> -progress -consumer avformat:<temporary output> <preset arguments> real_time=-1` | Kdenlive 23.04–23.12 (no `--render`), or a project with subtitles (Kdenlive 26.08.2's command-line render crashes on them) |
+
+The melt engine reads the preset's `args` from Kdenlive's preset files and fills them the way
+Kdenlive does: `%quality`, `%audioquality`, `%bitrate`, `%audiobitrate` take the preset's
+defaults (`defaultquality`…, else the middle of the range), `+'k'` suffixes are joined,
+`%dv_standard` is `pal` at 25 fps and `ntsc` otherwise, and the default speed option is
+appended. A preset with another placeholder is refused (`[unknown_preset]`). The result's
+`engine` says which one ran, and a melt render carries a warning: it is **not Kdenlive's own
+render path** (proxy clips, render zones and Kdenlive-specific render options are ignored).
+
+Safety: the melt engine only passes `key=value` encoder settings from a preset. A preset whose
+arguments name an output or input (`target=`, `resource=`, a bare path, `-consumer`…), contain a
+URL, or write an image sequence is refused (`[unknown_preset]`): presets can come from user or
+downloaded files, and the server's output checks must not be bypassed.
+
+Like Kdenlive, melt reads the project with its media resolved from the folder Kdenlive would use:
+when the stored `root` no longer exists (a moved project), melt renders a copy whose `root` is
+the project's folder (without it, melt rendered a blank, silent picture). Kdenlive's consumer
+defaults `rescale=bilinear` and `deinterlacer=onefield` are added; with no default speed, the
+middle speed entry is used, as Kdenlive does.
+
+Verified: CI renders the fixtures with the melt engine on Ubuntu's Kdenlive 23.08 / MLT 7.22
+and checks picture and sound; locally, melt and Kdenlive 26.08.2 renders of a project with
+crossfades have the same streams and duration, frame colours within 12/255 and mean audio level
+within 1.5 dB. Known differences: no proxies or render zones, Kdenlive's `in`/`out` not set.
+
+### Kdenlive engine checks
+
+Kdenlive's own behaviour drives the checks:
 
 | Kdenlive behaviour observed (26.08.2) | What the server does first |
 |---|---|
@@ -129,7 +161,7 @@ own behaviour drives the checks:
 | Missing media: exits 0 and renders gaps | Rejects (`missing_media`) unless `allow_missing_media=true`, which adds a warning |
 | Nonexistent project: crashes (exit 139) | The project is loaded and validated first |
 | Existing output: refuses (exit 1) | `output_exists`, unless `overwrite=true` |
-| `--render` / `--render-preset` unknown in Kdenlive 23.08 (Ubuntu 24.04) | `unsupported_kdenlive`, detected from `kdenlive --help`; a `melt` fallback is tracked in #42 |
+| `--render` / `--render-preset` unknown before Kdenlive 24.02 (e.g. 23.08 in Ubuntu 24.04) | Detected from `kdenlive --help`: `auto` uses the melt engine; `engine="kdenlive"` is refused (`unsupported_kdenlive`) |
 
 ### Execution
 

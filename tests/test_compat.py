@@ -126,6 +126,9 @@ def test_kdenlive_renders_kd26_fixtures(entry, tmp_path, request):
     if exe is None or shutil.which("ffprobe") is None or not render.supports_cli_render(exe):
         pytest.skip("Kdenlive with command-line rendering and ffprobe are required")
     result = render.render(
-        render.prepare(str((FIX / entry["file"]).resolve()), str(tmp_path / "o.mp4")), timeout=300
+        render.prepare(
+            str((FIX / entry["file"]).resolve()), str(tmp_path / "o.mp4"), engine="kdenlive"
+        ),
+        timeout=300,
     )
     assert result.state is render.RenderState.SUCCEEDED, (result.error, result.log_tail)

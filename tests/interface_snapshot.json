@@ -269,6 +269,7 @@
    "Progress.percent",
    "Progress.source",
    "RenderResult.elapsed_seconds",
+   "RenderResult.engine",
    "RenderResult.error",
    "RenderResult.exit_code",
    "RenderResult.log_tail",
@@ -385,6 +386,7 @@
    "Progress.percent",
    "Progress.source",
    "RenderResult.elapsed_seconds",
+   "RenderResult.engine",
    "RenderResult.error",
    "RenderResult.exit_code",
    "RenderResult.log_tail",
@@ -783,6 +785,7 @@
    "Progress.percent",
    "Progress.source",
    "RenderResult.elapsed_seconds",
+   "RenderResult.engine",
    "RenderResult.error",
    "RenderResult.exit_code",
    "RenderResult.log_tail",
@@ -1187,6 +1190,7 @@
  "render_project": {
   "params": [
    "allow_missing_media",
+   "engine",
    "output",
    "overwrite",
    "path",
@@ -1210,6 +1214,7 @@
    "OutputValidation.ok",
    "OutputValidation.video_streams",
    "elapsed_seconds",
+   "engine",
    "error",
    "exit_code",
    "log_tail",
@@ -1511,6 +1516,7 @@
  "start_render": {
   "params": [
    "allow_missing_media",
+   "engine",
    "output",
    "overwrite",
    "path",
@@ -1537,6 +1543,7 @@
    "Progress.percent",
    "Progress.source",
    "RenderResult.elapsed_seconds",
+   "RenderResult.engine",
    "RenderResult.error",
    "RenderResult.exit_code",
    "RenderResult.log_tail",

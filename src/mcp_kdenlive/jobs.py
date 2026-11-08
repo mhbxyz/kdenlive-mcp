@@ -40,7 +40,7 @@ PROGRESS_UNAVAILABLE = (
 class Progress(BaseModel):
     percent: int
     frame: int
-    source: str = "kdenlive_render log"
+    source: str = "render log (kdenlive_render or melt -progress)"
 
 
 class JobInfo(BaseModel):
@@ -241,8 +241,9 @@ class JobManager:
                 sequence=job.plan.sequence,
                 output=str(job.plan.output),
                 preset=job.plan.preset.name,
+                engine=job.plan.engine,
                 process_completed=False,
-                error=f"Cannot start Kdenlive: {exc.strerror or exc}.",
+                error=f"Cannot start the render ({job.plan.engine}): {exc.strerror or exc}.",
             )
             return False
         job.state, job.started_at, job.started_mono = RenderState.RUNNING, _now(), time.monotonic()

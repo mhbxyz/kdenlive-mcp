@@ -6,7 +6,7 @@ Statuses are defined in [docs/versioning.md](versioning.md#external-software-sup
 
 | Component | tested | supported | untested | unsupported |
 |---|---|---|---|---|
-| Kdenlive | 26.08.2 (everything); 23.08.5 (reading, editing, melt rendering) | 23.04 – 26.08 for reading and editing (document version 1.1) | other versions | `kdenlive --render` on 23.08 (refused with `[unsupported_kdenlive]`); editing documents older than 1.1 |
+| Kdenlive | 26.08.2 (everything); 23.08.5 (reading, editing, rendering with the melt engine) | 23.04 – 26.08 for reading and editing (document version 1.1); rendering with `kdenlive --render` from 24.02, with melt before | other versions | `engine="kdenlive"` before 24.02 (refused with `[unsupported_kdenlive]`); editing documents older than 1.1 |
 | MLT | 7.42.0, 7.22.0 | 7.x | — | — |
 | FFmpeg / ffprobe | n9.0.2, 6.1.1 | ≥ 6 | older | — |
 | Python | 3.11, 3.12, 3.13, 3.14 | — | 3.15+ | ≤ 3.10 |
@@ -32,7 +32,7 @@ new minor version (from 1.0: as decided in the changelog). Tested clients and ve
 | Environment | Kdenlive | MLT | FFmpeg | Python | What is exercised |
 |---|---|---|---|---|---|
 | Local reference (CachyOS, 2026-11-08) | 26.08.2 | 7.42.0 | n9.0.2 | 3.11–3.14 | everything (see below) |
-| CI `Integration` job (Ubuntu 24.04 packages) | 23.08.5 | 7.22.0 | 6.1.1 | 3.13 | real-tool tests: diagnostics, ffprobe probing, creation and edits with melt, melt rendering of every fixture. `kdenlive --render` is absent in 23.08, so the server refuses with `[unsupported_kdenlive]`, which is also tested. |
+| CI `Integration` job (Ubuntu 24.04 packages) | 23.08.5 | 7.22.0 | 6.1.1 | 3.13 | real-tool tests: diagnostics, ffprobe probing, creation and edits with melt, melt rendering of every fixture. `kdenlive --render` is absent in 23.08: `render_project` uses the melt engine there (end-to-end tests render through it), and `engine="kdenlive"` is refused with `[unsupported_kdenlive]`, which is also tested. |
 | CI test matrix | — | — | — | 3.11, 3.12, 3.13, 3.14 | everything that needs no external program, on all fixtures |
 
 Project documents read: Kdenlive document version **1.1** (Kdenlive ≥ 23.04, written by
