@@ -7,7 +7,7 @@ protocol itself; logs go to stderr.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -30,6 +30,7 @@ from mcp_kdenlive import (
 from mcp_kdenlive import audio as audio_mod
 from mcp_kdenlive import effects as effects_mod
 from mcp_kdenlive import relink as relink_mod
+from mcp_kdenlive import titles as titles_mod
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.markers import MarkerEditResult
@@ -84,6 +85,7 @@ class EditResult(BaseModel):
     audio: audio_mod.AudioEditResult | None = None
     relink: relink_mod.RelinkResult | None = None
     effects: effects_mod.EffectEditResult | None = None
+    title: titles_mod.TitleResult | None = None
 
 
 Revision = Annotated[
@@ -140,7 +142,8 @@ def _project_edit(
         | audio_mod.AudioEditResult
         | MarkerEditResult
         | relink_mod.RelinkResult
-        | effects_mod.EffectEditResult,
+        | effects_mod.EffectEditResult
+        | titles_mod.TitleResult,
     ],
     revision: str | None = None,
 ) -> EditResult:
@@ -157,6 +160,8 @@ def _project_edit(
             return EditResult(saved=saved, markers=result)
         if isinstance(result, relink_mod.RelinkResult):
             return EditResult(saved=saved, relink=result)
+        if isinstance(result, titles_mod.TitleResult):
+            return EditResult(saved=saved, title=result)
         if isinstance(result, effects_mod.EffectEditResult):
             return EditResult(saved=saved, effects=result)
         return EditResult(saved=saved, timeline=result)
@@ -291,6 +296,64 @@ EffectParams = Annotated[
     dict[str, float | int | bool],
     Field(description="Parameter values by name (see list_effects for names, units, ranges)."),
 ]
+
+
+Color = Annotated[str, Field(description="#RRGGBB or #RRGGBBAA.")]
+
+
+def _register_titles(server: MCPServer) -> None:
+    @server.tool(
+        name="add_title",
+        title="Add title",
+        annotations=EDIT,
+        description=(
+            "Create a text title (an editable Kdenlive title clip, not an image) and place it on "
+            "a video track, usually one above the footage (add_track). Unicode and several "
+            "lines (\\n) are kept. Position: `align` x `vertical` presets inside 5 % margins, "
+            "or the box's top-left `x`, `y` in pixels. The font must be installed (checked "
+            "with fontconfig); `font` defaults to an installed sans font. The result gives the "
+            "bin id, so insert_clip can place the same title again. The result is written to "
+            "`destination` with the save_project_copy rules."
+        ),
+    )
+    def add_title(
+        path: ProjectPath,
+        text: Annotated[str, Field(description="Title text; \\n starts a new line.")],
+        track: Annotated[str, Field(description="Video track label, e.g. V2.")],
+        start: Annotated[int, Field(ge=0, description="Timeline frame.")],
+        destination: Destination,
+        duration: Annotated[int, Field(ge=1, description="Frames; default 5 seconds.")]
+        | None = None,
+        font: Annotated[str, Field(description="Font family, e.g. 'Noto Sans'.")] | None = None,
+        font_size: Annotated[
+            int, Field(ge=1, le=1000, description="Pixels; default 1/12 of the frame height.")
+        ]
+        | None = None,
+        color: Color = "#FFFFFF",
+        outline: Annotated[int, Field(ge=0, le=50, description="Outline width, pixels.")] = 0,
+        outline_color: Color = "#000000",
+        align: Literal["left", "center", "right"] = "center",
+        vertical: Literal["top", "center", "bottom"] = "center",
+        x: Annotated[int, Field(ge=0, description="Left of the text box, pixels; with y.")]
+        | None = None,
+        y: Annotated[int, Field(ge=0, description="Top of the text box, pixels; with x.")]
+        | None = None,
+        italic: bool = False,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: titles_mod.add_title(
+                e, text, track, start, duration=duration, font=font, font_size=font_size,
+                color=color, outline=outline, outline_color=outline_color, align=align,
+                vertical=vertical, x=x, y=y, italic=italic, sequence=sequence,
+            ),
+        )  # fmt: skip
 
 
 def _register_effects(server: MCPServer) -> None:
@@ -448,6 +511,25 @@ def _register_effects(server: MCPServer) -> None:
         )
 
 
+class KdenliveServer(MCPServer):
+    """MCPServer that refuses unknown arguments: the SDK would silently drop them (#15)."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> Any:
+        tool = self._tool_manager.get_tool(name)
+        if tool is not None:
+            known = set(tool.parameters.get("properties", {}))
+            unknown = sorted(set(arguments or {}) - known)
+            if unknown:
+                raise _tool_error(
+                    ProjectError(
+                        "invalid_argument",
+                        f"{name} has no argument(s) {unknown}; nothing was done.",
+                        f"Accepted: {sorted(known)}.",
+                    )
+                )
+        return await super().call_tool(name, arguments, context)
+
+
 def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     """Create the MCP server with every tool registered."""
     manager_holder: list[jobs.JobManager] = [job_manager] if job_manager else []
@@ -457,7 +539,7 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
             manager_holder.append(jobs.JobManager())
         return manager_holder[0]
 
-    server = MCPServer(
+    server = KdenliveServer(
         name=SERVER_NAME,
         title="Kdenlive MCP",
         description="Inspect, edit and render Kdenlive projects locally.",
@@ -471,6 +553,9 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     _register_editing(server)
     _register_markers(server)
     _register_effects(server)
+    _register_titles(server)
+    for tool in server._tool_manager.list_tools():
+        tool.parameters["additionalProperties"] = False  # unknown arguments are refused
     return server
 
 

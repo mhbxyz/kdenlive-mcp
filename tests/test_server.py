@@ -37,6 +37,24 @@ async def test_diagnose_returns_structured_content(all_tools_stubbed, monkeypatc
     assert {t["name"] for t in data["tools"]} == {"kdenlive", "melt", "ffprobe", "ffmpeg"}
 
 
+async def test_unknown_arguments_are_refused_not_ignored(tmp_path):
+    """#15: an unsupported option (e.g. bold on a title) must not vanish silently."""
+    async with Client(build_server()) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        result = await client.call_tool(
+            "add_title",
+            {"path": str(tmp_path / "p.kdenlive"), "text": "Hi", "track": "V2", "start": 0,
+             "destination": str(tmp_path / "o.kdenlive"), "bold": True, "shadow": 2},
+        )  # fmt: skip
+        other = await client.call_tool("list_profiles", {"verbose": True})
+    assert result.is_error is True
+    text = result.content[0].text
+    assert "[invalid_argument]" in text and "bold" in text and "shadow" in text
+    assert "italic" in text  # the accepted ones are listed
+    assert other.is_error is True and "verbose" in other.content[0].text
+    assert all(t.input_schema.get("additionalProperties") is False for t in tools.values())
+
+
 async def test_unknown_tool_is_an_error_result():
     async with Client(build_server()) as client:
         result = await client.call_tool("does_not_exist", {})
