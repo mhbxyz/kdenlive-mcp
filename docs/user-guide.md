@@ -99,7 +99,7 @@ What changed between versions, and any migration notes for breaking changes:
 | `diagnose` says a program is `missing` only when run from the client | The client starts the server with a reduced `PATH`: set the `KDENLIVE_MCP_*` variables in the client's `env`. |
 | `kdenlive` reported `failed`, or a crash with no display | The probe already uses `QT_QPA_PLATFORM=offscreen`. Run `QT_QPA_PLATFORM=offscreen kdenlive --version` yourself to see the error. |
 | `[unsupported_kdenlive]` when rendering | Your Kdenlive (for example 23.08) has no command-line rendering: install a newer one and point `KDENLIVE_MCP_KDENLIVE` at it. |
-| `[missing_media]` / `list_project_media` shows `missing` | Media moved or deleted. Check `resolved_path`; relinking tools are planned (#17). |
+| `[missing_media]` / `list_project_media` shows `missing` | Media moved or deleted. Check `resolved_path`, then point the clips at the new files with `relink_media`. |
 | Render `failed` with codec errors in `log_tail` | Your FFmpeg/MLT build lacks that codec; pick another preset (`list_render_presets`). |
 | Render of a project with subtitles crashes | Known Kdenlive 26.08.2 command-line bug (#16); rendering from Kdenlive's GUI works. |
 | `[path_not_allowed]` | The path is outside the allowed folders: your videos directory by default, or `KDENLIVE_MCP_ALLOWED_ROOTS` (symlinks are resolved first). Add the folder to `KDENLIVE_MCP_ALLOWED_ROOTS` in the client's server configuration. |

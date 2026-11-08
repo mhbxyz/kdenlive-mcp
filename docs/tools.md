@@ -409,8 +409,11 @@ Points bin clips at new files, for example after a media folder was moved or ren
 | New path relative, a URL, unreadable, outside the allowed roots | `[invalid_path]`, `[media_unreadable]`, `[path_not_allowed]` |
 | Fewer frames (at the project rate) than the timeline uses, or no video/audio where timeline clips use it | `[media_mismatch]` |
 | Longer or shorter (but still covering the used frames), another frame size or rate, other streams, different bytes (Kdenlive hash) | written, with a `warnings` entry per clip |
-| Clip using a proxy, image sequence, generated clip, sequence | `[unsupported_structure]` or `[invalid_argument]` |
+| Clip using a proxy (by its path or its original's), with speed-changed instances (`timewarp`) | `[unsupported_structure]` |
+| Not an audio/video file: image, image sequence, color or generated clip, sequence | `[invalid_argument]` |
+| The new file orders its streams differently | `video_index`/`audio_index` updated on every copy, with a warning |
+| The new file is already another bin clip's | written, with a warning (the bin then has two clips for one file) |
 
-What changes: `resource`, `kdenlive:file_hash` and `kdenlive:file_size` on the bin clip **and every timeline instance** (`instances` in the result). The reference is relative to the project folder when the file is inside it, absolute otherwise. Clip ids, timing, effects and the other media are untouched.
+What changes: `resource`, `kdenlive:file_hash`, `kdenlive:file_size` (and the stream indexes when they differ) on the bin clip **and every timeline instance** (`instances` in the result). The reference is relative to the project's effective root (its `root`, or its folder when `root` does not exist) when the file is inside it, absolute otherwise. Clip ids, timing, effects and the other media are untouched. Keys may be the `resolved_path` from `list_project_media` even through symlinked folders or with `..`. The frames the timelines use are counted from every timeline entry, so large projects are checked completely.
 
 Verified: a project whose `media/` folder was moved to `footage/rushes été/` (three files, one used twice, one in crossfades) relinked with real MLT, reopened in Kdenlive 26.08.2 **without a missing-media dialog**, and survived Kdenlive's own save unchanged.

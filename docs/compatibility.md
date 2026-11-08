@@ -84,8 +84,8 @@ expected reading of each fixture is in `tests/fixtures/compat.json`.
 ## Manual GUI checks
 
 CI cannot open Kdenlive's interface. The lab automates *open → save → compare* locally, but
-interactive editing must be checked by hand. The checklists are kept in the issues (#8, #10, #11)
-and in the release notes as known limitations. For every new Kdenlive version, open each
+interactive editing must be checked by hand. The checklists are kept in the issues (#8, #10, #11,
+#12, #13, #17, #61, #62; all linked from #67) and in the release notes as known limitations. For every new Kdenlive version, open each
 `kd26/*` fixture and run through this checklist:
 
 - [ ] Opens without a dialog; bin thumbnails appear; the profile in *Project Settings* matches `compat.json`.

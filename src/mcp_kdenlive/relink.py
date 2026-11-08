@@ -25,7 +25,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import create, media, project
+from mcp_kdenlive import create, media
 from mcp_kdenlive.edits import _profile_file, _set_prop
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import props
@@ -60,6 +60,7 @@ class _Clip:
     copies: list[ET.Element]
     reference: str | None
     resolved: str | None
+    original: str | None = None
     used_frames: int = 0  # highest source frame used on any timeline, + 1
     on_video: bool = False
     on_audio: bool = False
@@ -84,27 +85,41 @@ def _clips(edit: EditableProject) -> dict[str, _Clip]:
         clip.copies.append(el)
         if el.get("id") in in_bin:
             clip.reference = p.get("resource")
+            clip.original = p.get("kdenlive:originalurl")
             if clip.reference and el.tag != "tractor":
                 clip.resolved = str(Path(resolver.resolve(clip.reference)[0]).resolve())
-    for seq in doc.sequence_tractors():
-        timeline = project.timeline(doc, props(seq).get("kdenlive:uuid") or seq.get("id"))
-        for track in timeline.tracks:
-            for c in track.clips:
-                if c.bin_id in found:
-                    used = found[c.bin_id]
-                    used.used_frames = max(used.used_frames, c.source_out + 1)
-                    used.on_video |= track.kind == "video"
-                    used.on_audio |= track.kind == "audio"
+    # What the timelines use, from every playlist entry (no truncated view).
+    for playlist in doc.root.iter("playlist"):
+        if playlist is doc.main_bin:
+            continue
+        for entry in playlist.findall("entry"):
+            producer = doc.by_id.get(entry.get("producer") or "")
+            if producer is None:
+                continue
+            p = props(producer)
+            used = found.get(p.get("kdenlive:id", ""))
+            if used is None:
+                continue
+            length = p.get("length")
+            default_out = doc.time(length, what="length") - 1 if length else 0
+            out = doc.time(entry.get("out"), default=default_out, what="entry out")
+            used.used_frames = max(used.used_frames, out + 1)
+            has_video = int(p.get("video_index", "-1") or -1) >= 0
+            has_audio = int(p.get("audio_index", "-1") or -1) >= 0
+            used.on_video |= has_video and p.get("set.test_image") != "1"
+            used.on_audio |= has_audio and p.get("set.test_audio") != "1"
     return found
 
 
 def _select(clips: dict[str, _Clip], key: str) -> _Clip:
     if key in clips:
         return clips[key]
+    normalized = str(Path(key).resolve()) if Path(key).is_absolute() else None
     matches = [
         c
         for c in clips.values()
-        if key in (c.reference, c.resolved) or (Path(key).is_absolute() and c.resolved == key)
+        if key in (c.reference, c.resolved, c.original)
+        or (normalized is not None and c.resolved == normalized)
     ]
     if not matches:
         raise ProjectError(
@@ -126,6 +141,13 @@ def _check_clip(clip: _Clip) -> ET.Element:
     p = props(bin_copy) if bin_copy is not None else {}
     if bin_copy is None or bin_copy.tag == "tractor" or not clip.reference:
         raise ProjectError("invalid_argument", f"Bin clip {clip.bin_id} is not a media file.")
+    if any(props(el).get("mlt_service") == "timewarp" for el in clip.copies):
+        raise ProjectError(
+            "unsupported_structure",
+            f"Bin clip {clip.bin_id} has speed-changed instances (timewarp); relinking them is "
+            "not supported.",
+            "Relink it in Kdenlive (Missing clips dialog), or reset the speed first.",
+        )
     proxy = p.get("kdenlive:proxy")
     if proxy and proxy != "-":
         raise ProjectError(
@@ -228,10 +250,28 @@ def relink_media(edit: EditableProject, mapping: dict[str, str]) -> RelinkResult
                     f"{path.name} is a different file (its Kdenlive hash differs)."
                 )
             reference = create._media_reference(path, effective)
+            others = sorted(
+                c.bin_id
+                for c in clips.values()
+                if c.bin_id != clip.bin_id and c.resolved == str(path.resolve())
+            )
+            if others:
+                clip.warnings.append(
+                    f"{path.name} is also used by bin clip {', '.join(others)}: the bin will have "
+                    "two clips for one file."
+                )
+            indexes = {k: new[k] for k in ("video_index", "audio_index") if k in new}
+            if any(old.get(k) != v for k, v in indexes.items()):
+                clip.warnings.append(
+                    f"{path.name} orders its streams differently; video_index/audio_index were "
+                    "updated on every copy."
+                )
             for el in clip.copies:
                 _set_prop(el, "resource", reference)
                 _set_prop(el, "kdenlive:file_hash", file_hash)
                 _set_prop(el, "kdenlive:file_size", str(size))
+                for name, value in indexes.items():
+                    _set_prop(el, name, value)
             results.append(
                 Relinked(
                     bin_id=clip.bin_id,

@@ -43,7 +43,10 @@ def ws(tmp_path, make_stub, stub_env, monkeypatch) -> Path:
 case "$4" in *-audio*) src="{tmp_path}/audio.mlt";; *-video*) src="{tmp_path}/video.mlt";;
   *) src="{tmp_path}/av.mlt";; esac
 n=$(printf "%s" "$4" | {SED} -n 's/.*-\\([0-9]*\\)f\\..*/\\1/p'); [ -n "$n" ] || n=60
-{SED} -e "s/>60</>$n</" -e "s/out=\\"59\\"/out=\\"$((n - 1))\\"/" "$src" > "${{last#xml:}}"
+swap=""; case "$4" in *-swapped*) swap="-e s/audio_index\\">1</audio_index\\">X</"
+  swap="$swap -e s/video_index\\">0</video_index\\">1</"
+  swap="$swap -e s/audio_index\\">X</audio_index\\">0</";; esac
+{SED} -e "s/>60</>$n</" -e "s/out=\\"59\\"/out=\\"$((n - 1))\\"/" $swap "$src" > "${{last#xml:}}"
 """,
     )
     for key, value in dict(stub_env, MLT_PROFILES_PATH=str(profiles)).items():
@@ -195,3 +198,69 @@ def test_target_outside_allowed_roots(ws, tmp_path, monkeypatch):
         assert code_of(ws, {"4": str(outside)}) == "path_not_allowed"
     finally:
         os.unlink(outside)
+
+
+# ------------------------------------------------------------------ review cases ------
+def test_resolved_paths_through_a_symlinked_project_folder(ws, tmp_path):
+    link = tmp_path / "linked"
+    link.symlink_to(ws)
+    target = move_away(ws)
+    doc = kdenlive_doc.load(str(link / "kd26-ntsc-timeline.kdenlive"))
+    reported = next(i.resolved_path for i in media.media_report(doc).items if i.bin_id == "4")
+    edit = writer.open_for_edit(str(link / "kd26-ntsc-timeline.kdenlive"))
+    result = relink.relink_media(edit, {reported: str(target)})
+    assert result.relinked[0].bin_id == "4"
+    edit = writer.open_for_edit(str(link / "kd26-ntsc-timeline.kdenlive"))
+    dotted = str(link / "media" / ".." / "media" / "ntsc.mp4")
+    assert relink.relink_media(edit, {dotted: str(target)}).relinked[0].bin_id == "4"
+
+
+def test_speed_changed_instances_are_refused(ws):
+    src = ws / "kd26-ntsc-timeline.kdenlive"
+    text = src.read_text(encoding="utf-8")
+    text = text.replace(
+        '<property name="mlt_service">avformat-novalidate</property>',
+        '<property name="mlt_service">timewarp</property>',
+        1,
+    )
+    src.write_text(text, encoding="utf-8")
+    target = move_away(ws)
+    assert code_of(ws, {"4": str(target)}) == "unsupported_structure"
+
+
+def test_stream_indexes_follow_the_new_file(ws):
+    target = ws / "moved" / "clip-swapped.mp4"
+    target.parent.mkdir()
+    shutil.copy(ws / "media" / "ntsc.mp4", target)
+    result, out = apply(ws, {"4": str(target)})
+    for p in chains_of(load(out), "4"):
+        assert (p["video_index"], p["audio_index"]) == ("1", "0")
+    assert any("stream" in w for w in result.relinked[0].warnings)
+
+
+def test_relinking_to_another_bin_clips_file_warns(ws):
+    result, _ = apply(ws, {"4": str(ws / "media" / "pal clip é.mp4")})
+    assert any("bin clip 5" in w for w in result.relinked[0].warnings)
+
+
+def test_proxied_clip_by_its_original_path(ws):
+    src = ws / "kd26-ntsc-timeline.kdenlive"
+    text = src.read_text(encoding="utf-8").replace(
+        '<property name="kdenlive:id">4</property>',
+        '<property name="kdenlive:id">4</property><property name="kdenlive:proxy">'
+        'proxy/ntsc.mkv</property><property name="kdenlive:originalurl">orig/ntsc.mp4</property>',
+    )
+    src.write_text(text, encoding="utf-8")
+    target = move_away(ws)
+    assert code_of(ws, {"orig/ntsc.mp4": str(target)}) == "unsupported_structure"
+
+
+def test_usage_counts_every_timeline_entry(ws, monkeypatch):
+    """The used range comes from the playlists, not from a (truncated) timeline view."""
+    from mcp_kdenlive import project
+
+    monkeypatch.setattr(project, "DEFAULT_MAX_CLIPS", 1)
+    target = ws / "moved" / "short-30f.mp4"
+    target.parent.mkdir()
+    shutil.copy(ws / "media" / "ntsc.mp4", target)
+    assert code_of(ws, {"4": str(target)}) == "media_mismatch"
