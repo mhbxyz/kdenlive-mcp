@@ -37,8 +37,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, safexml
-from mcp_kdenlive.kdenlive_doc import KdenliveDocument, ProjectError, props
+from mcp_kdenlive import kdenlive_doc, policy, safexml
+from mcp_kdenlive.errors import ProjectError
+from mcp_kdenlive.kdenlive_doc import KdenliveDocument, props
 from mcp_kdenlive.media import ASSET_FILE_PROPERTIES, URL_RE, _Resolver
 
 # Properties holding file references that must follow the project when it moves.
@@ -262,6 +263,7 @@ def _check_destination(
         raise ProjectError("invalid_output", f"{destination!r} must be an absolute .kdenlive path.")
     if dest.is_dir():
         raise ProjectError("invalid_output", f"{dest} is a directory.")
+    policy.check_write_target(dest, "Saving a project")
     if not dest.parent.is_dir() or not os.access(dest.parent, os.W_OK | os.X_OK):
         raise ProjectError("invalid_output", f"Cannot create files in {dest.parent}.")
     same_file = dest.exists() and dest.resolve() == project.path.resolve()

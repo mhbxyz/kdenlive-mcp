@@ -26,7 +26,7 @@ from mcp_kdenlive import (
     writer,
 )
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
-from mcp_kdenlive.kdenlive_doc import ProjectError
+from mcp_kdenlive.errors import ProjectError
 
 SERVER_NAME = "kdenlive-mcp"
 

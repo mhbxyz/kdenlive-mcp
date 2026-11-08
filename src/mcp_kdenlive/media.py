@@ -25,8 +25,10 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel, Field
 
+from mcp_kdenlive import policy
 from mcp_kdenlive.environment import locate
-from mcp_kdenlive.kdenlive_doc import KdenliveDocument, ProjectError, props
+from mcp_kdenlive.errors import ProjectError
+from mcp_kdenlive.kdenlive_doc import KdenliveDocument, props
 from mcp_kdenlive.process import ProcessTimeout, run
 from mcp_kdenlive.project import used_bin_ids
 
@@ -315,7 +317,7 @@ def probe_file(path: Path, ffprobe: str | None = None, timeout: float = PROBE_TI
         f"file:{path}",
     ]
     try:
-        done = run(args, timeout=timeout)
+        done = run(args, timeout=timeout, env=policy.child_env())
     except ProcessTimeout:
         return ProbeInfo(ok=False, error=f"ffprobe did not finish within {timeout:g}s.")
     except OSError as exc:
@@ -376,6 +378,7 @@ def inspect_file(raw: str) -> MediaFileReport:
     path = Path(raw).expanduser()
     if not path.is_absolute():
         raise ProjectError("invalid_path", f"{raw!r} is not an absolute path.")
+    policy.check_allowed(path, "Reading media")
     status, detail, target = check_path(path)
     return MediaFileReport(
         path=str(path),
@@ -510,6 +513,11 @@ def media_report(
                 break
             path = item.resolved_path if item.status is MediaStatus.OK else None
             if item.kind in ("file", "image") and path:
+                try:
+                    policy.check_allowed(Path(path), "Probing media")
+                except ProjectError as exc:
+                    item.probe = ProbeInfo(ok=False, error=exc.message)
+                    continue
                 item.probe = probe_file(Path(path), exe)
                 probed += 1
     assets = _asset_files(doc, resolver)

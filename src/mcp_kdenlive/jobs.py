@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive.kdenlive_doc import ProjectError
+from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.render import RenderPlan, RenderResult, RenderRun, RenderState
 
 MAX_RENDERS_ENV = "KDENLIVE_MCP_MAX_RENDERS"

@@ -24,7 +24,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from mcp_kdenlive import create, media
-from mcp_kdenlive.kdenlive_doc import ProjectError, props
+from mcp_kdenlive.errors import ProjectError
+from mcp_kdenlive.kdenlive_doc import props
 from mcp_kdenlive.media import _Resolver
 from mcp_kdenlive.timecode import frames_to_clock
 from mcp_kdenlive.writer import EditableProject

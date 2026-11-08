@@ -28,9 +28,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import kdenlive_doc, media, project, safexml
+from mcp_kdenlive import kdenlive_doc, media, policy, project, safexml
 from mcp_kdenlive.environment import locate
-from mcp_kdenlive.kdenlive_doc import ProjectError
+from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, run
 from mcp_kdenlive.timecode import FrameRate, frames_to_clock
 
@@ -189,7 +189,7 @@ def melt_producer(path: Path, profile: str, env: Mapping[str, str] | None = None
         # "avformat:<path>" stops melt from parsing '=' or a leading '-' in file names.
         args = [melt, "-quiet", "-profile", profile, f"avformat:{path}", "-consumer", f"xml:{out}"]
         try:
-            done = run(args, timeout=MELT_TIMEOUT, env=dict(os.environ if env is None else env))
+            done = run(args, timeout=MELT_TIMEOUT, env=policy.child_env(env))
         except ProcessTimeout as exc:
             raise ProjectError(
                 "media_unreadable", f"melt did not finish within {MELT_TIMEOUT:g}s."
@@ -457,6 +457,7 @@ def create_project(
         )
     if out.is_dir():
         raise ProjectError("invalid_output", f"{out} is a directory.")
+    policy.check_write_target(out, "Creating a project", env)
     if out.exists() and not overwrite:
         raise ProjectError(
             "output_exists",
