@@ -81,7 +81,7 @@ change to the public surface fails CI until the snapshot and the changelog are u
 
 `ambiguous_sequence`, `clip_not_found`, `conflict`, `dependency_missing`, `incompatible_track`,
 `internal_error`, `invalid_argument`, `invalid_configuration`, `invalid_output`, `invalid_path`,
-`invalid_range`, `invalid_xml`, `media_unreadable`, `missing_media`, `not_a_file`,
+`invalid_range`, `invalid_xml`, `media_mismatch`, `media_unreadable`, `missing_media`, `not_a_file`,
 `not_a_project`, `not_found`, `open_in_kdenlive`, `output_exists`, `output_in_use`, `overlap`,
 `path_not_allowed`, `permission_denied`, `profile_required`, `queue_full`, `remote_media`,
 `render_failed`, `revision_required`, `sequence_not_found`, `source_protected`,
