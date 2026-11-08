@@ -307,12 +307,12 @@ After Kdenlive's save, these were identical:
 | `move_clip(clip, revision, start, track=None)` | Moves a clip, optionally to another track of the same kind. |
 | `trim_clip(clip, revision, start=None, end=None)` | New timeline bounds `[start, end)`; the source in/out follow, like resizing in Kdenlive. |
 | `split_clip(clip, revision, at)` | Razor cut at timeline frame `at` (`start < at < end`). |
-| `remove_clip(clip, revision)` | Removes the clip and leaves a gap. The bin clip stays. |
+| `remove_clip(clip, revision)` | Removes the clip and leaves a gap. The bin clip stays. `clips` lists the neighbours that were trimmed back to a cut (only when a mix was removed, see below). |
 
 ### Rules
 
 - **Units and references:** frames at the project rate; timeline `[start, end)`, source in/out inclusive. Clips are referenced by `ref` (`track:layer:entry`) from `get_timeline`, together with `revision`, the `file.sha256` returned by that same call. If the file changed since, the edit is refused (`[stale_revision]`), because refs could point at another clip.
-- **No ripple, no overwrite:** neighbours never move, and any overlap is refused (`[overlap]`). Trimming and extending are limited by the source length.
+- **No ripple, no overwrite:** neighbours never move, and any overlap is refused (`[overlap]`). The only exception is removing a clip that is part of a crossfade: its partner is trimmed back to the original cut (see below). Trimming and extending are limited by the source length.
 - **Groups:** a clip in a Kdenlive audio/video group (`AVSplit`) is moved, trimmed, split and removed together with its counterpart, as Kdenlive does by default. Groups are updated (a split creates a group for the new right halves).
 - **Kdenlive's layout:** like Kdenlive 26.08, each clip instance on the timeline gets its own `<chain>`, a copy of the bin clip. On AV media, `set.test_audio` or `set.test_image` disables the unused half.
 
@@ -326,8 +326,8 @@ mixed clip keeps its mix:
 |---|---|
 | `insert_clip`, `move_clip` of other clips | allowed where both layers are free (`[overlap]` otherwise) |
 | `move_clip` | refused (`[unsupported_structure]`, names the mix) |
-| `trim_clip` | the side without a mix only, and the clip must still cover the mix (`[unsupported_structure]` or `[invalid_range]`) |
-| `split_clip` | allowed outside the mix (`[invalid_range]` inside it); each half keeps the mix it touches |
+| `trim_clip` | the side without a mix only, and the clip must still extend at least one frame beyond the mix (`[unsupported_structure]`). Grouped audio and video move their edges by the same amounts, even when only one of them is mixed |
+| `split_clip` | allowed outside the mix (`[unsupported_structure]` inside it); each half keeps the mix it touches |
 | `remove_clip` | removes the clip **and its mixes**; each partner is trimmed back to the original `cut`, like deleting the mix in Kdenlive (`saved.changes` says so) |
 
 A clip left on the second layer without a mix goes back to the first one, as in Kdenlive.

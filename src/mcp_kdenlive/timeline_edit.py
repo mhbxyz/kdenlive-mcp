@@ -107,6 +107,10 @@ class Mix:
     def involves(self, item: Item) -> bool:
         return item.element is self.left.element or item.element is self.right.element
 
+    def at_end_of(self, item: Item) -> bool:
+        """True when the mix is at the end of `item` (it is the left clip)."""
+        return item.element is self.left.element
+
     def partner(self, item: Item) -> Item:
         return self.right if item.element is self.left.element else self.left
 
@@ -197,10 +201,11 @@ class Timeline:
             start = self.doc.time(transition.get("in"), default=-1, what="mix in")
             end = self.doc.time(transition.get("out"), default=-1, what="mix out")
             cut_offset = p.get("kdenlive:mixcut", "")
-            left = next((c for c in clips if c.end == end), None)
-            right = next(
-                (c for c in clips if c.start == start and left and c.layer != left.layer), None
-            )
+            # Which layer holds the left clip: video mixes swap a_track/b_track, audio mixes
+            # set reverse (docs/research/mixes.md).
+            left_layer = int((p.get("a_track") == "1") != (p.get("reverse") == "1"))
+            left = next((c for c in clips if c.end == end and c.layer == left_layer), None)
+            right = next((c for c in clips if c.start == start and c.layer != left_layer), None)
             if left is None or right is None or not cut_offset.lstrip("-").isdigit():
                 raise ProjectError(
                     "unsupported_structure",
@@ -324,12 +329,20 @@ class Timeline:
             for data in datas:
                 t_index, pos = (int(x) for x in str(data).split(":")[:2])
                 other_track = next(t for t in self.tracks.values() if t.index == t_index + 1)
-                other_item = next((i for i in self.clips(other_track) if i.start == pos), None)
-                if other_item is None:
+                found = [i for i in self.clips(other_track) if i.start == pos]
+                if other_track is track and item in found:
+                    found = [item]
+                if len(found) != 1:
                     raise ProjectError(
-                        "unsupported_structure", "Clip groups do not match the timeline content."
+                        "unsupported_structure",
+                        "Clip groups do not match the timeline content"
+                        + (
+                            f": two clips start at frame {pos} on {other_track.label}."
+                            if found
+                            else "."
+                        ),
                     )
-                result.append((other_track, other_item))
+                result.append((other_track, found[0]))
             return result
         return [(track, item)]
 
@@ -602,11 +615,11 @@ def move_clip(
                 )
         tl.check_editable(t)
         tl.check_editable(destination)
-        for mix in tl.mixes_of(t, i):
+        if mixed := tl.mixes_of(t, i):
             raise ProjectError(
                 "unsupported_structure",
                 f"The clip on {t.label} at {i.start}-{i.end} is part of a "
-                f"{mix.describe(t.label)}; moving it would break the mix.",
+                f"{mixed[0].describe(t.label)}; moving it would break the mix.",
                 "Trim, split or remove clips around the mix instead, or remove the mix in "
                 "Kdenlive first.",
             )
@@ -692,57 +705,59 @@ def trim_clip(
             "invalid_range", "A clip must keep at least one frame: need 0 <= start < end."
         )
     group = tl.partners(track, item)
+    # Grouped clips move their edges by the same amounts, even when their bounds differ.
+    d_start, d_end = new_start - item.start, new_end - item.end
     plan = []
     for t, i in group:
         tl.check_editable(t)
+        p_start, p_end = i.start + d_start, i.end + d_end
+        if p_end <= p_start or p_start < 0:
+            raise ProjectError(
+                "invalid_range", f"The grouped clip on {t.label} would have no frame left."
+            )
         source_in, source_out = tl._entry_bounds(i.element)
         producer = tl.doc.by_id.get(i.element.get("producer") or "")
         length = int(props(producer).get("length", "0") or 0) if producer is not None else 0
-        new_in = source_in + (new_start - item.start)
-        new_out = source_out + (new_end - item.end)
-        if new_in < 0 or (length and new_out >= length):
+        if source_in + d_start < 0 or (length and source_out + d_end >= length):
             raise ProjectError(
                 "invalid_range",
                 f"The source has frames 0..{length - 1}; trimming to "
-                f"{new_in}..{new_out} is not possible.",
+                f"{source_in + d_start}..{source_out + d_end} is not possible.",
             )
-        if new_start != item.start and _has_keyframes(i.element):
+        if d_start and _has_keyframes(i.element):
             raise ProjectError(
                 "unsupported_structure",
                 "Trimming the start of a clip with animated "
                 "effects would shift its keyframes; not supported yet.",
             )
         for mix in tl.mixes_of(t, i):
-            at_end = mix.left.element is i.element
-            if (new_end != i.end) if at_end else (new_start != i.start):
+            at_end = mix.at_end_of(i)
+            if d_end if at_end else d_start:
                 raise ProjectError(
                     "unsupported_structure",
-                    f"The {'end' if at_end else 'start'} of this clip is in a "
+                    f"The {'end' if at_end else 'start'} of the clip on {t.label} is in a "
                     f"{mix.describe(t.label)}; trimming that side would break the mix.",
                     "Trim the other side, or remove the mix in Kdenlive first.",
                 )
-            if (new_start > mix.start) if at_end else (new_end < mix.end):
+            # Keep at least one frame outside the mix so partners never share an edge.
+            if (p_start >= mix.start) if at_end else (p_end <= mix.end):
                 raise ProjectError(
-                    "invalid_range",
-                    f"The clip must keep covering its {mix.describe(t.label)}.",
+                    "unsupported_structure",
+                    f"The clip on {t.label} must extend beyond its {mix.describe(t.label)}.",
                 )
         ignore = {id(i.element)}
-        if (new_start < i.start and not tl.free(t, new_start, i.start, ignore)) or (
-            new_end > i.end and not tl.free(t, i.end, new_end, ignore)
+        if (p_start < i.start and not tl.free(t, p_start, i.start, ignore)) or (
+            p_end > i.end and not tl.free(t, i.end, p_end, ignore)
         ):
             raise ProjectError(
-                "overlap", f"{t.label} is not free between frames {new_start} and {new_end}."
+                "overlap", f"{t.label} is not free between frames {p_start} and {p_end}."
             )
-        plan.append((t, i, new_in, new_out))
-    rate = tl.doc.rate
+        plan.append((t, i, p_start, p_end))
     placements = []
-    for t, i, new_in, new_out in plan:
-        before = tl.placed(t, i.layer)  # positions must be read before the bounds change
-        i.element.set("in", frames_to_clock(new_in, rate))
-        i.element.set("out", frames_to_clock(new_out, rate))
-        tl._rebuild(t, [(new_start if e is i.element else s, e) for s, e in before], i.layer)
-        placements.append(_placement(tl, t, new_start, i.element))
-    tl.regroup([(t, i.start) for t, i in group], [(t, new_start) for t, *_ in plan])
+    for t, i, p_start, p_end in plan:
+        tl.set_bounds(t, i, p_start, p_end)
+        placements.append(_placement(tl, t, p_start, i.element))
+    tl.regroup([(t, i.start) for t, i in group], [(t, p_start) for t, _i, p_start, _e in plan])
     duration = tl.refresh_durations()
     edit.changes.append(f"timeline: trimmed {ref} to [{new_start}, {new_end})")
     return TimelineEditResult(operation="trim", clips=placements, sequence_duration_frames=duration)
@@ -768,10 +783,15 @@ def split_clip(
                 "unsupported_structure",
                 "Splitting a clip with animated effects is not supported yet.",
             )
+        if not i.start < at < i.end:
+            raise ProjectError(
+                "unsupported_structure",
+                f"The grouped clip on {t.label} ({i.start}-{i.end}) does not span frame {at}.",
+            )
         for mix in tl.mixes_of(t, i):
             if mix.start < at < mix.end:
                 raise ProjectError(
-                    "invalid_range",
+                    "unsupported_structure",
                     f"Frame {at} is inside a {mix.describe(t.label)}; cut outside the mix.",
                 )
     for t, i in group:

@@ -108,13 +108,12 @@ def test_trim_the_free_side_of_mixed_clips(m):
         (30, {"start": 35}),
         (30, {"end": 85}),
         (0, {"start": 35}),
+        (0, {"start": 30}),  # would start on the same frame as its partner
+        (70, {"end": 90}),  # would end on the same frame as its partner
     ],
 )
 def test_trims_that_would_break_a_mix_are_refused(m, start, kwargs):
-    assert code(m, te.trim_clip, m.ref("V1", start), m.rev(), **kwargs) in {
-        "unsupported_structure",
-        "invalid_range",
-    }
+    assert code(m, te.trim_clip, m.ref("V1", start), m.rev(), **kwargs) == "unsupported_structure"
     assert m.clips() == BASE
 
 
@@ -132,7 +131,7 @@ def test_split_outside_the_mixes(m):
 
 
 def test_split_inside_a_mix_is_refused(m):
-    assert code(m, te.split_clip, m.ref("V1", 70), m.rev(), 80) == "invalid_range"
+    assert code(m, te.split_clip, m.ref("V1", 70), m.rev(), 80) == "unsupported_structure"
 
 
 # ------------------------------------------------------------------ removals ----------
@@ -159,6 +158,68 @@ def test_removing_the_first_clip(m):
     assert m.clips() == {"V1": expected, "A1": expected}
     assert mixes(m) == {"V1": [MIXES[1]], "A1": [MIXES[1]]}
     assert sorted(m.groups()) == [["1:40:-1", "2:40:-1"], ["1:70:-1", "2:70:-1"]]
+
+
+def test_mix_sides_follow_the_transition_direction(m):
+    edit = writer.open_for_edit(str(m.current))
+    tl = te.Timeline(edit, edit.doc.sequence_tractors()[0])
+    for label in ("V1", "A1"):
+        sides = [(x.left.layer, x.right.layer) for x in tl.mixes(tl.tracks[label])]
+        assert sides == [(0, 1), (1, 0)]
+
+
+def _rewrite(m: Session, tmp_path: Path, name: str, change) -> None:  # type: ignore[no-untyped-def]
+    """Change the fixture with low-level helpers (states the tools themselves never produce)."""
+    edit = writer.open_for_edit(str(m.current))
+    tl = te.Timeline(edit, edit.doc.sequence_tractors()[0])
+    change(tl)
+    writer.save(edit, str(tmp_path / name))
+    m.current = tmp_path / name
+
+
+def test_av_partners_with_different_bounds(m, tmp_path):
+    """Video keeps its mixes; the audio mixes were deleted (clips back at the cuts)."""
+
+    def unmix_audio(tl: te.Timeline) -> None:
+        audio = tl.tracks["A1"]
+        moved = {}
+        for mix in tl.mixes(audio):
+            audio.tractor.remove(mix.element)
+        for start, end in ((0, 40), (40, 80), (80, 130)):
+            clip = next(
+                c for c in tl.clips(audio) if c.start <= start < c.end and c.end >= end - 10
+            )
+            if (clip.start, clip.end) != (start, end):
+                tl.set_bounds(audio, clip, start, end)
+                if clip.start != start:
+                    moved[(audio.index, clip.start)] = start
+        tl.settle(audio)
+        tl.rekey(moved)
+
+    _rewrite(m, tmp_path, "unmixed-audio.kdenlive", unmix_audio)
+    assert mixes(m) == {"V1": MIXES}
+    assert m.clips()["A1"] == [(0, 40, 0, 39, "4"), (40, 80, 10, 49, "4"), (80, 130, 10, 59, "4")]
+    # trimming the free start of the first pair moves both starts by the same amount
+    m.apply(te.trim_clip, m.ref("A1", 0), m.rev(), start=10)
+    assert m.clips()["V1"][0] == (10, 60, 10, 59, "4")
+    assert m.clips()["A1"][0] == (10, 40, 10, 39, "4")
+    # the audio side has no mix, but its video partner has one at its end
+    assert code(m, te.trim_clip, m.ref("A1", 10), m.rev(), end=35) == "unsupported_structure"
+
+
+def test_ambiguous_group_positions_are_refused(m, tmp_path):
+    def same_start(tl: te.Timeline) -> None:
+        for label in ("V1", "A1"):
+            track = tl.tracks[label]
+            first = tl.clips(track)[0]
+            tl.set_bounds(track, first, 30, first.end)
+        tl.rekey({(tl.tracks[label].index, 0): 30 for label in ("V1", "A1")})
+
+    _rewrite(m, tmp_path, "same-start.kdenlive", same_start)
+    middle = next(
+        c.ref for t in m.timeline().tracks if t.label == "V1" for c in t.clips if c.layer == 1
+    )
+    assert code(m, te.remove_clip, middle, m.rev()) == "unsupported_structure"
 
 
 # ------------------------------------------------------------------ structure ---------
