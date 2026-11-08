@@ -12,6 +12,14 @@ FIXTURES = Path(__file__).parent / "fixtures"
 CAT = shutil.which("cat")  # resolved before fixtures replace PATH
 
 
+@pytest.fixture(autouse=True)
+def _scoped_filesystem(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Since 0.2 the server only reaches the videos directory by default (#60). Tests work in
+    tmp_path and read the repository fixtures, so those are the allowed roots unless a test
+    sets its own policy."""
+    monkeypatch.setenv("KDENLIVE_MCP_ALLOWED_ROOTS", f"{tmp_path}{os.pathsep}{FIXTURES.resolve()}")
+
+
 @pytest.fixture
 def make_stub(tmp_path: Path) -> Callable[[str, str], Path]:
     """Create an executable POSIX shell stub named `name` in a private bin directory."""
@@ -31,7 +39,11 @@ def make_stub(tmp_path: Path) -> Callable[[str, str], Path]:
 def stub_env(tmp_path: Path) -> dict[str, str]:
     """A minimal environment whose PATH only contains the stub directory."""
     (tmp_path / "bin").mkdir(exist_ok=True)
-    return {"PATH": str(tmp_path / "bin"), "HOME": os.environ.get("HOME", str(tmp_path))}
+    return {
+        "PATH": str(tmp_path / "bin"),
+        "HOME": os.environ.get("HOME", str(tmp_path)),
+        "KDENLIVE_MCP_ALLOWED_ROOTS": os.environ["KDENLIVE_MCP_ALLOWED_ROOTS"],
+    }
 
 
 @pytest.fixture

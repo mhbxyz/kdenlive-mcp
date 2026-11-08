@@ -7,6 +7,16 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking — filesystem scope by default (#60):** without `KDENLIVE_MCP_ALLOWED_ROOTS`, the tools now only read and write inside the user's videos directory (`XDG_VIDEOS_DIR`, usually `~/Videos`) and refuse other paths with `[path_not_allowed]`. Before, the unset variable meant no restriction.
+  - **Migration:** if your projects or media are elsewhere, add `"env": {"KDENLIVE_MCP_ALLOWED_ROOTS": "/path/one:/path/two"}` to the server entry of your MCP client. `KDENLIVE_MCP_ALLOWED_ROOTS=unrestricted` restores the 0.1 behaviour (not recommended).
+  - `kdenlive-mcp diagnose` prints the effective folders, and the server logs them on stderr at startup.
+
+### Added
+
+- **`diagnose_environment`:** a `filesystem` field with the effective roots, their source (`default`, `environment`, `unrestricted`) and the ones that do not exist (#60).
+
 ### Documentation
 
 - **Path to 1.0:** release criteria, release candidate procedure and feedback period (`docs/versioning.md`, `docs/releasing.md`, #64).

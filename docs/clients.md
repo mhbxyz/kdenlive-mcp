@@ -85,6 +85,7 @@ npx @modelcontextprotocol/inspector --cli /path/to/kdenlive-mcp --method tools/c
 
 ## Environment and PATH issues
 
+- **Folders the server can reach:** without `KDENLIVE_MCP_ALLOWED_ROOTS` in the client's `env` for the server, only your videos directory is allowed (since 0.2). Add your project and media folders there, separated by `:`.
 - **Reduced environment:** clients start the server with their own, often reduced, environment. GUI-launched clients may not inherit your shell's `PATH`. Use absolute paths for the server command. If `diagnose_environment` reports Kdenlive, melt or ffprobe as missing only from the client, set `KDENLIVE_MCP_KDENLIVE`, `KDENLIVE_MCP_MELT` and `KDENLIVE_MCP_FFPROBE` in the client's `env` for the server.
 - **Clean stdout:** the server writes only protocol messages to stdout. Use `--log-level DEBUG` to get diagnostics on stderr; most clients show them in their MCP logs.
 - **Absolute paths:** paths passed to tools must be absolute. The server's working directory is whatever the client chose and carries no meaning.

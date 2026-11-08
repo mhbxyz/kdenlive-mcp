@@ -18,7 +18,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from mcp_kdenlive import __version__
+from mcp_kdenlive import __version__, policy
+from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.policy import child_env
 from mcp_kdenlive.process import ProcessTimeout, run
 
@@ -141,6 +142,18 @@ class PlatformInfo(BaseModel):
     flatpak_sandbox: bool = Field(description="True when this server itself runs inside Flatpak.")
 
 
+class FilesystemAccess(BaseModel):
+    """Which folders the tools may read and write (KDENLIVE_MCP_ALLOWED_ROOTS, #60)."""
+
+    roots: list[str] | None = Field(description="Allowed roots, resolved; null when unrestricted.")
+    source: str = Field(
+        description="'default' (the user's videos directory), 'environment' "
+        "(KDENLIVE_MCP_ALLOWED_ROOTS) or 'unrestricted' (explicit opt-out)."
+    )
+    missing: list[str] = Field(description="Allowed roots that do not exist.")
+    error: str | None = Field(default=None, description="Invalid configuration, if any.")
+
+
 class EnvironmentReport(BaseModel):
     """Read-only report on the local environment."""
 
@@ -148,6 +161,7 @@ class EnvironmentReport(BaseModel):
     platform: PlatformInfo
     ready: bool = Field(description="True when every required program is available.")
     tools: list[ToolReport]
+    filesystem: FilesystemAccess
     notes: list[str] = Field(
         default_factory=list,
         description="Limitations of this report: what was not verified.",
@@ -307,6 +321,16 @@ def locate(name: str, env: Mapping[str, str] | None = None) -> str | None:
     return None if problem is not None else path
 
 
+def filesystem_access(env: Mapping[str, str]) -> FilesystemAccess:
+    try:
+        config = policy.roots_config(env)
+    except ProjectError as err:
+        return FilesystemAccess(roots=[], source="environment", missing=[], error=err.message)
+    roots = [str(r) for r in config.roots] if config.roots is not None else None
+    missing = [r for r in roots or [] if not Path(r).is_dir()]
+    return FilesystemAccess(roots=roots, source=config.source, missing=missing)
+
+
 def diagnose(env: Mapping[str, str] | None = None) -> EnvironmentReport:
     """Probe every known program and return a read-only report."""
     environ = dict(os.environ if env is None else env)
@@ -334,5 +358,6 @@ def diagnose(env: Mapping[str, str] | None = None) -> EnvironmentReport:
         ),
         ready=ready,
         tools=tools,
+        filesystem=filesystem_access(environ),
         notes=notes,
     )

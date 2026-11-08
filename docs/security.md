@@ -34,7 +34,15 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
   - media probed or rendered from a project;
   - render outputs and project destinations.
 
-  Paths are checked **after resolving symlinks and `..`**, so neither a traversal nor a symlink inside a root can escape it. When the variable is unset, access is unrestricted, limited only by the user's permissions. **Setting it is recommended**, for example `KDENLIVE_MCP_ALLOWED_ROOTS=$HOME/Videos`.
+  Paths are checked **after resolving symlinks and `..`**, so neither a traversal nor a symlink inside a root can escape it.
+
+  | Value | Effective roots (`diagnose` → `filesystem.source`) |
+  |---|---|
+  | unset or empty | the user's **videos directory**: `XDG_VIDEOS_DIR` from `$XDG_CONFIG_HOME/user-dirs.dirs`, else `~/Videos` (`default`). If it does not exist, every path is refused with a hint. |
+  | `/a:/b` | exactly these directories (`environment`) |
+  | `unrestricted` | no restriction beyond the user's permissions (`unrestricted`, not recommended) |
+
+  Until 0.1 the unset variable meant unrestricted. 0.2 changed the default (#60) because a manipulated model could otherwise reach any file of the user, and changing a default after 1.0 would be a breaking change. Refusing to start without configuration was rejected: MCP clients report a failed server with little detail, and the registry's `uvx mcp-kdenlive` would fail on the first run.
 - **Write targets.**
   - Nothing is written through a symlink, or over anything but a regular file (FIFOs, devices and directories are refused).
   - Project destinations must end in `.kdenlive`.
@@ -78,6 +86,6 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
 
 ## Known limitations
 
-- **Unrestricted by default:** without `KDENLIVE_MCP_ALLOWED_ROOTS`, any file readable or writable by the user is in reach of a manipulated model. Set the variable.
+- **Inside the allowed roots,** every project and media file is in reach of a manipulated model (with the safeguards above: copies by default, backups, conflict checks). Keep the roots narrow, and avoid `unrestricted`.
 - **Open-project detection** misses a project opened from Kdenlive's *Open* dialog that has no unsaved changes yet.
 - **Decoders:** media decoding vulnerabilities in FFmpeg or MLT are inherited; keep them updated.

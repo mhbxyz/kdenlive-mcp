@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 from mcp_kdenlive import __version__
-from mcp_kdenlive.environment import EnvironmentReport, diagnose
+from mcp_kdenlive.environment import (
+    EnvironmentReport,
+    FilesystemAccess,
+    diagnose,
+    filesystem_access,
+)
 from mcp_kdenlive.server import build_server
 
 
@@ -30,6 +36,20 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _scope(files: FilesystemAccess) -> str:
+    if files.error:
+        return f"INVALID: {files.error}"
+    if files.roots is None:
+        return "unrestricted (KDENLIVE_MCP_ALLOWED_ROOTS=unrestricted)"
+    origin = (
+        "default: videos directory" if files.source == "default" else "KDENLIVE_MCP_ALLOWED_ROOTS"
+    )
+    text = f"{':'.join(files.roots)} ({origin})"
+    if files.missing:
+        text += f"; missing: {', '.join(files.missing)}"
+    return text
+
+
 def _print_human(report: EnvironmentReport) -> None:
     print(
         f"kdenlive-mcp {report.server_version} on {report.platform.system} "
@@ -45,6 +65,7 @@ def _print_human(report: EnvironmentReport) -> None:
         print(line)
         if tool.status.value != "available" and tool.hint:
             print(f"            hint: {tool.hint}")
+    print(f"  files     {_scope(report.filesystem)}")
     print("ready" if report.ready else "NOT ready: a required program is unavailable")
 
 
@@ -60,5 +81,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             _print_human(report)
         return 0 if report.ready else 1
+    # One line on stderr (never stdout, which carries the protocol) so client logs show the scope.
+    print(
+        f"kdenlive-mcp: Filesystem access: {_scope(filesystem_access(os.environ))}", file=sys.stderr
+    )
     build_server().run("stdio")
     return 0

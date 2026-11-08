@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import stat
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from mcp_kdenlive.errors import ProjectError
@@ -50,11 +51,47 @@ CHILD_ENV_ALLOW = (
 )
 
 
-def allowed_roots(env: Mapping[str, str] | None = None) -> list[Path] | None:
-    """Configured roots (resolved), or None when unrestricted."""
+UNRESTRICTED = "unrestricted"
+
+
+@dataclass(frozen=True)
+class RootsConfig:
+    """Effective filesystem scope and where it comes from."""
+
+    roots: list[Path] | None  # None: unrestricted
+    source: str  # "default" (videos directory), "environment" or "unrestricted"
+
+
+def videos_dir(env: Mapping[str, str] | None = None) -> Path:
+    """The user's videos directory, as xdg-user-dirs defines it, else ~/Videos."""
+    source = os.environ if env is None else env
+    home = Path(source.get("HOME") or Path.home())
+    config_home = Path(source.get("XDG_CONFIG_HOME") or home / ".config")
+    try:
+        lines = (config_home / "user-dirs.dirs").read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        lines = []
+    for line in lines:
+        key, _, value = line.strip().partition("=")
+        if key != "XDG_VIDEOS_DIR":
+            continue
+        value = value.strip().strip('"')
+        if value.startswith("$HOME"):
+            value = str(home) + value[len("$HOME") :]
+        path = Path(value)
+        # A directory set to $HOME itself is disabled (xdg-user-dirs convention).
+        if path.is_absolute() and path.resolve() != home.resolve():
+            return path
+    return home / "Videos"
+
+
+def roots_config(env: Mapping[str, str] | None = None) -> RootsConfig:
+    """Parse KDENLIVE_MCP_ALLOWED_ROOTS: unset → videos directory, 'unrestricted', or a list."""
     raw = (os.environ if env is None else env).get(ALLOWED_ROOTS_ENV, "").strip()
+    if raw == UNRESTRICTED:
+        return RootsConfig(None, UNRESTRICTED)
     if not raw:
-        return None
+        return RootsConfig([videos_dir(env).resolve()], "default")
     roots = []
     for part in raw.split(os.pathsep):
         if not part:
@@ -66,23 +103,48 @@ def allowed_roots(env: Mapping[str, str] | None = None) -> list[Path] | None:
                 f"{ALLOWED_ROOTS_ENV} entries must be absolute paths: {part!r}.",
             )
         roots.append(path.resolve())
-    return roots or None
+    if not roots:
+        return RootsConfig([videos_dir(env).resolve()], "default")
+    return RootsConfig(roots, "environment")
+
+
+def allowed_roots(env: Mapping[str, str] | None = None) -> list[Path] | None:
+    """Effective roots (resolved), or None when explicitly unrestricted."""
+    return roots_config(env).roots
+
+
+def _scope_hint(config: RootsConfig) -> str:
+    roots = [str(r) for r in config.roots or []]
+    origin = (
+        "the default (your videos directory)"
+        if config.source == "default"
+        else f"{ALLOWED_ROOTS_ENV}"
+    )
+    hint = f"Allowed roots, from {origin}: {roots}."
+    missing = [r for r in roots if not Path(r).is_dir()]
+    if missing:
+        hint += f" {missing} does not exist."
+    return (
+        hint + f" To allow other folders, set {ALLOWED_ROOTS_ENV} in the MCP client's server"
+        f" configuration to absolute directories separated by '{os.pathsep}'"
+        f" (or to '{UNRESTRICTED}', not recommended)."
+    )
 
 
 def check_allowed(path: Path, purpose: str, env: Mapping[str, str] | None = None) -> Path:
     """Refuse `path` if it resolves (symlinks included) outside the allowed roots."""
-    roots = allowed_roots(env)
-    if roots is None:
+    config = roots_config(env)
+    if config.roots is None:
         return path
     real = path.resolve()
-    if any(real == root or root in real.parents for root in roots):
+    if any(real == root or root in real.parents for root in config.roots):
         return path
     raise ProjectError(
         "path_not_allowed",
         f"{purpose}: {path} is outside the allowed roots"
         + (f" (it resolves to {real})" if real != path else "")
         + ".",
-        f"Allowed roots ({ALLOWED_ROOTS_ENV}): {[str(r) for r in roots]}.",
+        _scope_hint(config),
     )
 
 

@@ -36,3 +36,24 @@ def test_diagnose_not_ready_exit_code(stub_env):
     assert proc.returncode == 1
     assert "NOT ready" in proc.stdout
     assert "hint:" in proc.stdout
+
+
+def test_diagnose_shows_filesystem_scope(all_tools_stubbed, tmp_path):
+    proc = _run(["diagnose"], dict(all_tools_stubbed, KDENLIVE_MCP_ALLOWED_ROOTS=str(tmp_path)))
+    assert f"files     {tmp_path} (KDENLIVE_MCP_ALLOWED_ROOTS)" in proc.stdout
+    proc = _run(["diagnose"], dict(all_tools_stubbed, KDENLIVE_MCP_ALLOWED_ROOTS="unrestricted"))
+    assert "files     unrestricted" in proc.stdout
+
+
+def test_serve_logs_filesystem_scope_on_stderr(tmp_path):
+    proc = subprocess.run(
+        [sys.executable, "-m", "mcp_kdenlive", "serve"],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=dict(os.environ, KDENLIVE_MCP_ALLOWED_ROOTS=str(tmp_path)),
+        check=False,
+    )
+    assert proc.stdout == ""
+    assert f"Filesystem access: {tmp_path}" in proc.stderr
