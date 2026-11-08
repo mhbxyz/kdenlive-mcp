@@ -156,13 +156,17 @@ def test_missing_media_is_refused_unless_allowed(env, tmp_path):
 def test_old_kdenlive_without_cli_render(env, tmp_path, make_stub):
     make_stub("kdenlive", 'echo "Usage: kdenlive [options] file"; exit 0')  # like 23.08
     with pytest.raises(ProjectError) as err:
-        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=env)
+        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=env, engine="kdenlive")
     assert err.value.code == "unsupported_kdenlive"
+    # 'auto' falls back to melt; without melt it says so (#42)
+    with pytest.raises(ProjectError) as err:
+        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=env)
+    assert err.value.code == "dependency_missing" and "melt" in err.value.message
 
 
 def test_kdenlive_missing(stub_env, tmp_path):
     with pytest.raises(ProjectError) as err:
-        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=stub_env)
+        render.prepare(str(PROJECT), str(tmp_path / "o.mp4"), env=stub_env, engine="kdenlive")
     assert err.value.code == "dependency_missing"
 
 

@@ -7,6 +7,14 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+### Added
+
+- **melt render engine (#42):** `render_project` and `start_render` take `engine` (`auto`, `kdenlive`, `melt`). `auto` renders with MLT's melt when Kdenlive has no `--render` (before 24.02, e.g. Ubuntu 24.04's 23.08) or when the project has subtitles (Kdenlive 26.08.2 crashes on them), using the preset's arguments filled with its defaults. Results report the `engine`; melt renders carry a warning that they are not Kdenlive's own render path.
+
+### Changed
+
+- **Rendering on Kdenlive 23.x (#42):** `render_project` no longer fails with `[unsupported_kdenlive]` there by default; it renders with melt. Pass `engine="kdenlive"` to require Kdenlive's own render path.
+
 ## [0.2.0] - 2026-11-08
 
 Editing essentials (milestone M6). **Contains breaking changes**: read the *Changed* section and its migrations before upgrading.

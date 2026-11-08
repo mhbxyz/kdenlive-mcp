@@ -7,7 +7,7 @@ protocol itself; logs go to stderr.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated
+from typing import Annotated, Literal
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -111,6 +111,15 @@ TIMELINE_RULES = (
 def _tool_error(exc: ProjectError) -> ToolError:
     return ToolError(str(exc))
 
+
+RenderEngine = Annotated[
+    Literal["auto", "kdenlive", "melt"],
+    Field(
+        description="'kdenlive' runs kdenlive --render (Kdenlive 24.02+); 'melt' renders with "
+        "MLT directly using the preset's arguments (not Kdenlive's own render path); 'auto' "
+        "uses Kdenlive when it can, and melt for older Kdenlive or projects with subtitles."
+    ),
+]
 
 BinId = Annotated[
     str | None,
@@ -419,8 +428,9 @@ def _register_rendering(server: MCPServer, manager: Callable[[], jobs.JobManager
         title="Render project",
         description=(
             "Render a Kdenlive project to a new local file with an installed Kdenlive preset "
-            "(kdenlive --render), then validate the output with ffprobe. Blocks until the "
-            "render ends or `timeout_seconds` elapses. Never modifies the project or its media. "
+            "(kdenlive --render, or MLT's melt: see `engine`), then validate the output with "
+            "ffprobe. Blocks until the render ends or `timeout_seconds` elapses. Never modifies "
+            "the project or its media. "
             "Refuses an existing output unless overwrite=true (the old file is replaced only "
             "after a successful, validated render), unknown presets, and projects with missing "
             "media unless allow_missing_media=true. Renders the file on disk, not unsaved "
@@ -446,10 +456,16 @@ def _register_rendering(server: MCPServer, manager: Callable[[], jobs.JobManager
         timeout_seconds: Annotated[
             float, Field(gt=0, le=render.MAX_TIMEOUT, description="Stop the render after this.")
         ] = render.DEFAULT_TIMEOUT,
+        engine: RenderEngine = "auto",
     ) -> render.RenderResult:
         try:
             plan = render.prepare(
-                path, output, preset, overwrite=overwrite, allow_missing_media=allow_missing_media
+                path,
+                output,
+                preset,
+                overwrite=overwrite,
+                allow_missing_media=allow_missing_media,
+                engine=engine,
             )
             return render.render(plan, timeout=timeout_seconds)
         except ProjectError as exc:
@@ -484,10 +500,16 @@ def _register_rendering(server: MCPServer, manager: Callable[[], jobs.JobManager
         timeout_seconds: Annotated[
             float, Field(gt=0, le=render.MAX_TIMEOUT, description="Stop the render after this.")
         ] = render.DEFAULT_TIMEOUT,
+        engine: RenderEngine = "auto",
     ) -> jobs.JobInfo:
         try:
             plan = render.prepare(
-                path, output, preset, overwrite=overwrite, allow_missing_media=allow_missing_media
+                path,
+                output,
+                preset,
+                overwrite=overwrite,
+                allow_missing_media=allow_missing_media,
+                engine=engine,
             )
             return manager().submit(plan, timeout_seconds)
         except ProjectError as exc:

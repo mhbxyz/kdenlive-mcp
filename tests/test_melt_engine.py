@@ -52,7 +52,11 @@ def attrs(name: str) -> dict[str, str]:
         ),
         ("WAV", NTSC, ["properties=WAV", "video_off=1"]),
         ("AC3", NTSC, ["ab=160k", "vn=1", "video_off=1"]),
-        ("NVENC H264 ABR", NTSC, ["f=mp4", "vcodec=h264_nvenc", "vb=6000k", "acodec=aac", "ab=160k"]),
+        (
+            "NVENC H264 ABR",
+            NTSC,
+            ["f=mp4", "vcodec=h264_nvenc", "vb=6000k", "acodec=aac", "ab=160k"],
+        ),
         (
             "VOB (DVD)",
             PAL,
@@ -166,3 +170,48 @@ def test_melt_progress_is_read_from_its_log(no_cli_kdenlive):
     assert run.progress() == (50, 30)
     run.cleanup()
     assert os.path.exists(str(plan.project_path))
+
+
+# ------------------------------------------------------------------ real tools ---------
+needs_melt = pytest.mark.skipif(
+    shutil.which("melt") is None or shutil.which("ffprobe") is None,
+    reason="needs melt and ffprobe",
+)
+
+
+@pytest.mark.integration
+@needs_melt
+@pytest.mark.parametrize(
+    "fixture", ["kd26-ntsc-timeline.kdenlive", "kd26-mixes.kdenlive", "kd26-subtitle.kdenlive"]
+)
+def test_melt_engine_renders_kdenlive_projects(fixture, tmp_path):
+    """Runs in CI against Ubuntu's MLT 7.22 (no kdenlive --render there) and locally."""
+    shutil.copytree(FIX / "kd26", tmp_path / "p")
+    plan = render.prepare(str(tmp_path / "p" / fixture), str(tmp_path / "o.mp4"), engine="melt")
+    result = render.render(plan, timeout=300)
+    assert result.state is render.RenderState.SUCCEEDED, result.error or result.log_tail
+    assert result.engine == "melt" and result.validation and result.validation.ok
+    assert any("not Kdenlive's own render" in w for w in result.warnings)
+
+
+@pytest.mark.integration
+@needs_melt
+def test_melt_and_kdenlive_engines_agree(tmp_path):
+    """Local comparison with Kdenlive's own render (skipped where kdenlive --render is missing)."""
+    from mcp_kdenlive.environment import locate
+
+    exe = locate("kdenlive", os.environ)
+    if exe is None or not render.supports_cli_render(exe):
+        pytest.skip("needs a Kdenlive with --render (24.02+)")
+    shutil.copytree(FIX / "kd26", tmp_path / "p")
+    project = str(tmp_path / "p" / "kd26-mixes.kdenlive")
+    outputs = {}
+    for engine in ("melt", "kdenlive"):
+        out = tmp_path / f"{engine}.mp4"
+        result = render.render(render.prepare(project, str(out), engine=engine), timeout=300)
+        assert result.state is render.RenderState.SUCCEEDED, (engine, result.log_tail)
+        outputs[engine] = result.validation
+    melt, kd = outputs["melt"], outputs["kdenlive"]
+    assert melt and kd
+    assert abs((melt.duration_seconds or 0) - (kd.duration_seconds or 0)) < 0.1
+    assert (melt.video_streams, melt.audio_streams) == (kd.video_streams, kd.audio_streams)
