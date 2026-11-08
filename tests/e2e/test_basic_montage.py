@@ -68,3 +68,10 @@ async def test_cut_and_close_the_gap(tmp_path, media_tools):
     assert dl.dominant(dl.region_rgb(out, 2.5)) == "blue"
     assert dl.mean_volume(out, 0.2, 1.0) > -25  # the tone of the red clip
     assert dl.mean_volume(out, 2.0, 1.0) < -60  # blue has no audio
+
+
+def test_tool_failed_extracts_the_error_code():
+    err = dl.ToolFailed(
+        "render_project", "Error executing tool render_project: [unsupported_kdenlive] x"
+    )
+    assert err.code == "unsupported_kdenlive"

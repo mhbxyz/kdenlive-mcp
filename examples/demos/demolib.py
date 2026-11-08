@@ -34,7 +34,7 @@ class ToolFailed(RuntimeError):
         super().__init__(f"{tool}: {text}")
         self.tool = tool
         self.text = text
-        match = re.match(r"\[(\w+)\]", text)
+        match = re.search(r"\[(\w+)\]", text)
         self.code = match.group(1) if match else None
 
 

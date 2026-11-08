@@ -84,7 +84,7 @@ jobs:
       - run: uv run pytest -ra -p no:cacheprovider --cov --cov-report=term
         if: matrix.python != '3.13'
       # The coverage floor is enforced once, on the reference Python. It only goes up.
-      - run: uv run pytest -ra -p no:cacheprovider --cov --cov-report=term --cov-fail-under=80
+      - run: uv run pytest -ra -p no:cacheprovider --cov --cov-report=term --cov-fail-under=89
         if: matrix.python == '3.13'
 
   package:
