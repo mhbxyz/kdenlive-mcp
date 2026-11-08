@@ -73,6 +73,11 @@ class SaveResult(BaseModel):
     changes: list[str] = Field(description="Human-readable list of modifications applied.")
     rebased_paths: list[str] = Field(description="References rewritten for the new location.")
     backup: str | None = Field(description="Copy of the replaced file, when one was replaced.")
+    written: bool = Field(
+        default=True,
+        description="False when nothing changed and the destination already had this content: "
+        "no write and no backup.",
+    )
     warnings: list[str]
     notes: list[str]
 
@@ -247,6 +252,23 @@ def _check_destination(
     return dest
 
 
+KEEP_BACKUPS = 5
+
+
+def _rotate_backups(dest: Path) -> None:
+    """Keep the first and the KEEP_BACKUPS - 1 most recent backups of `dest` made by 0.2+.
+
+    Only names this server writes since 0.2 (with microseconds) are considered: 0.1 backups
+    and files made by hand are never removed. The first one is the project as it was before
+    the server's first edit, so a run of writes can never flush it.
+    """
+    pattern = re.compile(re.escape(dest.stem) + r"\.backup-\d{8}T\d{6}\.\d{6}Z\.kdenlive")
+    backups = sorted(p for p in dest.parent.iterdir() if pattern.fullmatch(p.name) and p.is_file())
+    for old in backups[1 : -(KEEP_BACKUPS - 1)]:
+        with contextlib.suppress(OSError):
+            old.unlink()
+
+
 def save(
     project: EditableProject,
     destination: str,
@@ -277,13 +299,19 @@ def save(
             f"{project.path} changed since it was read; nothing written.",
             "Read the project again and reapply the edit.",
         )
+    unchanged = dest.exists() and (
+        (not project.changes and not rebased and dest.resolve() == project.path.resolve())
+        or dest.read_bytes() == data
+    )
     backup = None
-    if dest.exists():
-        stamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    if dest.exists() and not unchanged:
+        stamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S.%fZ")
         backup_path = dest.with_name(f"{dest.stem}.backup-{stamp}.kdenlive")
         shutil.copy2(dest, backup_path)
         backup = str(backup_path)
-    _write_atomically(dest, data, replace=dest.exists())
+        _rotate_backups(dest)
+    if not unchanged:
+        _write_atomically(dest, data, replace=dest.exists())
     reloaded = kdenlive_doc.load(str(dest))  # must still be a readable Kdenlive project
     return SaveResult(
         destination=str(dest),
@@ -294,6 +322,7 @@ def save(
         changes=list(project.changes),
         rebased_paths=rebased,
         backup=backup,
+        written=not unchanged,
         warnings=warnings,
         notes=[
             "Kdenlive keeps open projects in memory: if the destination is open in Kdenlive, "

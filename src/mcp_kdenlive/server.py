@@ -56,7 +56,10 @@ Destination = Annotated[
 Overwrite = Annotated[bool, Field(description="Allow replacing an existing destination file.")]
 ExpectedSha = Annotated[
     str | None,
-    Field(description="Required to write over the source: its sha256 as last read."),
+    Field(
+        description="Required to write over the source: its sha256 as last read. Tools that "
+        "take `revision` use it when this is omitted."
+    ),
 ]
 EDIT = ToolAnnotations(
     read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False
@@ -65,6 +68,10 @@ EDIT = ToolAnnotations(
 ProjectPath = Annotated[
     str, Field(description="Absolute path of a .kdenlive project file on this machine.")
 ]
+
+
+class ProfileList(BaseModel):
+    profiles: list[create.ProfileInfo]
 
 
 class EditResult(BaseModel):
@@ -84,7 +91,13 @@ Revision = Annotated[
         "ref comes from; the edit is refused if the file changed since."
     ),
 ]
-ClipRef = Annotated[str, Field(description="Clip ref 'track:layer:entry' from get_timeline.")]
+ClipRef = Annotated[
+    str,
+    Field(
+        description="Clip ref from get_timeline, '<track>@<start>' (e.g. 'V1@90'). It changes "
+        "when the clip moves: read the timeline again after an edit."
+    ),
+]
 Sequence = Annotated[
     str | None, Field(description="Sequence uuid or name; default: active sequence.")
 ]
@@ -117,12 +130,15 @@ def _project_edit(
         | MarkerEditResult
         | relink_mod.RelinkResult,
     ],
+    revision: str | None = None,
 ) -> EditResult:
     """Open, apply one operation, save; the result goes in its EditResult field."""
     try:
         edit = writer.open_for_edit(path)
         result = operation(edit)
-        saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected_sha256)
+        # In place, the revision the refs were read from is the expected source version.
+        expected = expected_sha256 or revision
+        saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected)
         if isinstance(result, audio_mod.AudioEditResult):
             return EditResult(saved=saved, audio=result)
         if isinstance(result, MarkerEditResult):
@@ -539,8 +555,8 @@ def _register_editing(server: MCPServer) -> None:
         ),
         annotations=READ_ONLY,
     )
-    def list_profiles() -> list[create.ProfileInfo]:
-        return create.list_profiles()
+    def list_profiles() -> ProfileList:
+        return ProfileList(profiles=create.list_profiles())
 
     @server.tool(
         name="create_project",
@@ -562,7 +578,7 @@ def _register_editing(server: MCPServer) -> None:
         ),
     )
     def create_project(
-        output: Annotated[str, Field(description="Absolute path of the new .kdenlive file.")],
+        destination: Annotated[str, Field(description="Absolute path of the new .kdenlive file.")],
         media_path: Annotated[str, Field(description="Absolute path of an audio or video file.")],
         profile: Annotated[
             str, Field(description="MLT profile name, or 'auto' to match the media.")
@@ -570,7 +586,7 @@ def _register_editing(server: MCPServer) -> None:
         overwrite: Annotated[bool, Field(description="Replace an existing project file.")] = False,
     ) -> create.CreateResult:
         try:
-            return create.create_project(output, media_path, profile, overwrite=overwrite)
+            return create.create_project(destination, media_path, profile, overwrite=overwrite)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
@@ -765,6 +781,7 @@ def _register_editing(server: MCPServer) -> None:
             overwrite,
             expected_sha256,
             lambda e: timeline_edit.move_clip(e, clip, revision, start, track, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -794,6 +811,7 @@ def _register_editing(server: MCPServer) -> None:
             overwrite,
             expected_sha256,
             lambda e: timeline_edit.trim_clip(e, clip, revision, start, end, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -820,6 +838,7 @@ def _register_editing(server: MCPServer) -> None:
             overwrite,
             expected_sha256,
             lambda e: timeline_edit.split_clip(e, clip, revision, at, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -846,6 +865,7 @@ def _register_editing(server: MCPServer) -> None:
             overwrite,
             expected_sha256,
             lambda e: timeline_edit.remove_clip(e, clip, revision, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -875,6 +895,7 @@ def _register_editing(server: MCPServer) -> None:
             overwrite,
             expected_sha256,
             lambda e: audio_mod.set_clip_volume(e, clip, revision, level_db, sequence),
+            revision=revision,
         )
 
     @server.tool(
@@ -906,4 +927,5 @@ def _register_editing(server: MCPServer) -> None:
             overwrite,
             expected_sha256,
             lambda e: audio_mod.set_clip_fades(e, clip, revision, fade_in, fade_out, sequence),
+            revision=revision,
         )

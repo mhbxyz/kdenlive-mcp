@@ -545,3 +545,34 @@ def test_real_render_job_and_cancel(tmp_path):
         assert list(tmp_path.glob(".*partial*")) == []
     finally:
         mgr.shutdown()
+
+
+def test_queue_full(env, tmp_path, make_stub, fake_probe, monkeypatch):
+    from mcp_kdenlive import jobs
+
+    kdenlive_stub(make_stub, f'{SLEEP} 5; echo x > "$5"')
+    monkeypatch.setattr(jobs, "MAX_QUEUED", 1)
+    mgr = _manager(1)
+    try:
+        mgr.submit(_plan(env, tmp_path / "a.mp4"), timeout=30)  # running
+        mgr.submit(_plan(env, tmp_path / "b.mp4"), timeout=30)  # queued
+        with pytest.raises(ProjectError) as err:
+            mgr.submit(_plan(env, tmp_path / "c.mp4"), timeout=30)
+        assert err.value.code == "queue_full"
+    finally:
+        mgr.shutdown()
+
+
+def test_render_failed_when_kdenlive_cannot_start(env, tmp_path, fake_probe, monkeypatch):
+    plan = _plan(env, tmp_path / "o.mp4")
+    monkeypatch.setattr(plan, "kdenlive", str(tmp_path / "gone" / "kdenlive"), raising=False)
+    original = render.RenderRun.start
+
+    def broken(self):  # type: ignore[no-untyped-def]
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(render.RenderRun, "start", broken)
+    with pytest.raises(ProjectError) as err:
+        render.render(plan, timeout=5, env=env)
+    assert err.value.code == "render_failed"
+    monkeypatch.setattr(render.RenderRun, "start", original)

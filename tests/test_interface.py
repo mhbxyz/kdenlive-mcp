@@ -21,18 +21,31 @@ from mcp_kdenlive.server import build_server
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def output_fields(schema: dict) -> list[str]:
+    """Every output field name, nested ones as 'Model.field' (from $defs)."""
+    names = [str(k) for k in schema.get("properties", {})]
+    for model, definition in schema.get("$defs", {}).items():
+        names += [f"{model}.{k}" for k in definition.get("properties", {})]
+    return sorted(names)
+
+
+def describe(tool) -> dict:  # type: ignore[no-untyped-def,type-arg]
+    a = tool.annotations
+    return {
+        "params": sorted(tool.input_schema.get("properties", {})),
+        "required": sorted(tool.input_schema.get("required", [])),
+        "read_only": bool(a and a.read_only_hint),
+        "destructive": bool(a and a.destructive_hint),
+        "idempotent": bool(a and a.idempotent_hint),
+        "output": output_fields(tool.output_schema or {}),
+    }
+
+
 @pytest.mark.anyio
 async def test_tools_match_snapshot():
     async with Client(build_server()) as client:
         tools = (await client.list_tools()).tools
-    current = {
-        t.name: {
-            "params": sorted(t.input_schema.get("properties", {})),
-            "required": sorted(t.input_schema.get("required", [])),
-            "read_only": bool(t.annotations and t.annotations.read_only_hint),
-        }
-        for t in tools
-    }
+    current = {t.name: describe(t) for t in tools}
     expected = json.loads((ROOT / "tests" / "interface_snapshot.json").read_text())
     assert current == expected
 
@@ -45,6 +58,16 @@ def test_error_codes_are_documented():
     section = doc.split("### Error codes", 1)[1].split("\n## ", 1)[0]
     documented = set(re.findall(r"`([a-z_]+)`", section))
     assert raised == documented
+
+
+def test_every_error_code_is_exercised_by_a_test():
+    """Each documented code is expected by at least one test (#63)."""
+    raised = set()
+    for path in (ROOT / "src" / "mcp_kdenlive").glob("*.py"):
+        raised |= set(re.findall(r'ProjectError\(\s*"([a-z_]+)"', path.read_text(encoding="utf-8")))
+    tests = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "tests").rglob("*.py"))
+    untested = sorted(code for code in raised if f'"{code}"' not in tests)
+    assert untested == []
 
 
 def _run_check(tmp_path, pyproject_version: str, *args: str, changelog: str = "", server=None):

@@ -188,3 +188,11 @@ def test_real_add_media_and_tracks_render_with_melt(ws, tmp_path):
         check=False,
     )
     assert done.returncode == 0 and (tmp_path / "o.mp4").stat().st_size > 0
+
+
+def test_too_many_tracks(ws, monkeypatch):
+    monkeypatch.setattr(edits, "MAX_TRACKS", 4)
+    edit = writer.open_for_edit(str(ws / "kd26-ntsc.kdenlive"))  # 4 tracks already
+    with pytest.raises(ProjectError) as err:
+        edits.add_track(edit, "video")
+    assert err.value.code == "too_many_tracks"

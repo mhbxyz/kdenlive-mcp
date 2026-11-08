@@ -14,7 +14,7 @@ async def test_cut_and_close_the_gap(tmp_path, media_tools):
     proj = tmp_path / "montage.kdenlive"
 
     async with dl.connect(dl.server_env([tmp_path])) as s:
-        created = await s.call("create_project", media_path=str(red), output=str(proj))
+        created = await s.call("create_project", media_path=str(red), destination=str(proj))
         assert sorted(created["tracks"]) == ["A1", "V1"]
         sha = created["project_sha256"]
         edit = {"destination": str(proj), "overwrite": True}

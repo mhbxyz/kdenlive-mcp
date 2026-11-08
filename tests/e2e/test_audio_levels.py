@@ -12,7 +12,7 @@ async def test_level_and_fades_are_audible(tmp_path, media_tools):
     clip = dl.make_clip(tmp_path / "media" / "tone.mp4", 4, color="green", tone_db=-6)
     proj = tmp_path / "level.kdenlive"
     async with dl.connect(dl.server_env([tmp_path])) as s:
-        created = await s.call("create_project", media_path=str(clip), output=str(proj))
+        created = await s.call("create_project", media_path=str(clip), destination=str(proj))
         sha = created["project_sha256"]
         a1, rev = await s.clip(proj, "A1")
         assert rev == sha

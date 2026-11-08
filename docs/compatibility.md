@@ -14,6 +14,19 @@ Statuses are defined in [docs/versioning.md](versioning.md#external-software-sup
 | macOS, Windows | — | — | — | not supported |
 | MCP clients | see [docs/clients.md](clients.md) | standard stdio MCP clients | desktop/IDE variants | cloud-only clients without a local bridge |
 
+## MCP protocol and SDK
+
+| | Supported |
+|---|---|
+| MCP Python SDK | `mcp>=2.3,<3` (tested with 2.3.0) |
+| Protocol revisions negotiated by the SDK | 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25 (initialize handshake) and 2026-07-28 |
+| Transport | stdio only |
+
+The server does not pin a protocol revision: the SDK negotiates the newest one both sides know.
+A new major version of the SDK is a compatibility change for this server and is released as a
+new minor version (from 1.0: as decided in the changelog). Tested clients and versions are in
+[clients.md](clients.md).
+
 ## Tested versions
 
 | Environment | Kdenlive | MLT | FFmpeg | Python | What is exercised |

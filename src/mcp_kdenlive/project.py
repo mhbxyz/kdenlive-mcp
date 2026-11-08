@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
+from collections import Counter
 from pathlib import PurePosixPath
 
 from pydantic import BaseModel, Field
@@ -94,7 +95,9 @@ class AudioSettings(BaseModel):
 
 class ClipInfo(BaseModel):
     ref: str = Field(
-        description="Position-based reference 'track:layer:entry', valid for this file revision."
+        description="Clip reference '<track>@<start>' (e.g. 'V1@90'; '#1' is appended for the "
+        "secondary layer when two clips start on the same frame). Valid for this file revision; "
+        "a clip keeps its ref as long as it does not move."
     )
     layer: int = Field(description="0 = main playlist, 1 = secondary playlist used for mixes.")
     start: int
@@ -111,6 +114,11 @@ class ClipInfo(BaseModel):
         description="MLT service, e.g. avformat-novalidate, color, tractor."
     )
     effects: list[str] = Field(description="Effect identifiers applied to this clip instance.")
+    group: list[str] = Field(
+        default_factory=list,
+        description="Refs of the clips grouped with this one (Kdenlive audio/video pair); "
+        "edits apply to the whole group.",
+    )
     audio: AudioSettings | None = Field(
         default=None,
         description="Level and fades set on this clip (volume, fadein, fadeout effects); "
@@ -333,6 +341,10 @@ class _SequenceView:
                     continue
                 clips.extend(self._playlist_clips(playlist, index, layer))
             clips.sort(key=lambda c: (c.start, c.layer))
+            label = labels[index]
+            starts = Counter(c.start for c in clips)
+            for c in clips:
+                c.ref = f"{label}@{c.start}" + (f"#{c.layer}" if starts[c.start] > 1 else "")
             mixes = (
                 sorted(
                     (
@@ -359,6 +371,7 @@ class _SequenceView:
                     clips=clips,
                 )
             )
+        self._link_groups()
         for transition in self.tractor.findall("transition"):
             p = props(transition)
             if p.get("internal_added"):
@@ -374,6 +387,41 @@ class _SequenceView:
                     end=end,
                 )
             )
+
+    def _link_groups(self) -> None:
+        """Fill ClipInfo.group from Kdenlive's AVSplit groups, at any depth."""
+        raw = props(self.tractor).get("kdenlive:sequenceproperties.groups", "").strip()
+        try:
+            groups = json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            return
+        by_key: dict[tuple[int, int], list[ClipInfo]] = {}
+        for t in self.tracks:
+            for c in t.clips:
+                by_key.setdefault((t.index - 1, c.start), []).append(c)
+
+        def walk(node: object) -> None:
+            if not isinstance(node, dict):
+                return
+            children = node.get("children", [])
+            if node.get("type") == "AVSplit":
+                members = []
+                for leaf in children:
+                    data = leaf.get("data") if isinstance(leaf, dict) else None
+                    try:
+                        track, pos = (int(x) for x in str(data).split(":")[:2])
+                    except ValueError:
+                        continue
+                    found = by_key.get((track, pos), [])
+                    if len(found) == 1:  # ambiguous positions are not linked
+                        members.append(found[0])
+                for clip in members:
+                    clip.group = [m.ref for m in members if m is not clip]
+            for child in children:
+                walk(child)
+
+        for group in groups if isinstance(groups, list) else []:
+            walk(group)
 
     def _range(self, element: ET.Element, what: str) -> tuple[int | None, int | None]:
         start = self.doc.time(element.get("in"), default=-1, what=f"{what} in")

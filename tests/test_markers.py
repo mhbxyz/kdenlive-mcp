@@ -131,8 +131,8 @@ def test_invalid_markers(s, args, kwargs, expected):
 def test_duplicates_and_missing(s):
     s.apply(markers.add_marker, 12)
     assert code(s, markers.add_marker, 12) == "invalid_argument"
-    assert code(s, markers.update_marker, 13, comment="x") == "not_found"
-    assert code(s, markers.remove_marker, 13) == "not_found"
+    assert code(s, markers.update_marker, 13, comment="x") == "marker_not_found"
+    assert code(s, markers.remove_marker, 13) == "marker_not_found"
     s.apply(markers.add_marker, 30)
     assert code(s, markers.update_marker, 12, new_position=30) == "invalid_argument"
 

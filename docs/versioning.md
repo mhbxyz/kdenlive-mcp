@@ -81,7 +81,7 @@ change to the public surface fails CI until the snapshot and the changelog are u
 
 `ambiguous_sequence`, `clip_not_found`, `conflict`, `dependency_missing`, `incompatible_track`,
 `internal_error`, `invalid_argument`, `invalid_configuration`, `invalid_output`, `invalid_path`,
-`invalid_range`, `invalid_xml`, `media_mismatch`, `media_unreadable`, `missing_media`, `not_a_file`,
+`invalid_range`, `invalid_xml`, `marker_not_found`, `media_mismatch`, `media_unreadable`, `missing_media`, `not_a_file`,
 `not_a_project`, `not_found`, `open_in_kdenlive`, `output_exists`, `output_in_use`, `overlap`,
 `path_not_allowed`, `permission_denied`, `profile_required`, `queue_full`, `remote_media`,
 `render_failed`, `revision_required`, `sequence_not_found`, `source_protected`,
@@ -91,6 +91,26 @@ change to the public surface fails CI until the snapshot and the changelog are u
 
 The MCP **protocol** version is negotiated by the MCP SDK with each client and is unrelated to
 the package version.
+
+## Interface review before 1.0 (#63, 0.2)
+
+Every tool was reviewed for names, units, defaults, truncation, annotations and outputs, with a
+recorded session of a real client (Claude Code, Opus 5.5) doing a six-step in-place edit.
+
+| Topic | Decision |
+|---|---|
+| Names | Tools are `verb_object`. Every tool that writes a project takes `destination` (`create_project`'s `output` was renamed, **breaking**); renders keep `output` (a media file). |
+| Clip references | `<track>@<start>` (`V1@90`) instead of `index:layer:entry`, which shifted after every edit because blanks were counted (**breaking for stored refs**; the old form is still accepted). |
+| Groups | `get_timeline` clips list their `group`. |
+| Concurrency guards | `revision` (refs) and `expected_sha256` (in-place writes) stay separate concepts; tools with `revision` use it as `expected_sha256` when omitted. |
+| No-op writes | Nothing is written, and no backup made, when the content would not change (`saved.written`). Backups are rotated (5 per file). |
+| Units | Frames for every timeline position and duration, with timecodes alongside in reads; seconds only for timeouts and media durations; dB for levels. |
+| Truncation | `get_timeline.max_clips` and `list_project_media.max_items` report `truncated` and totals. Edits never rely on truncated views. |
+| Outputs | Every tool returns an object with a schema (`list_profiles` now returns `{profiles}`, **breaking**), covered by `tests/interface_snapshot.json` (inputs and top-level outputs). |
+| Annotations | Reads: read-only, idempotent. Writes: destructive (they may replace a file with `overwrite`), not idempotent. `cancel_render_job`: not read-only, idempotent. |
+| Error codes | One catalog (below); every code is raised in `src/` and expected by at least one test (`test_every_error_code_is_exercised_by_a_test`). `not_found` is only for project files; markers use `marker_not_found`. |
+
+Tools added in M7 get the same review before `1.0.0rc1` (#68).
 
 ## One version, checked everywhere
 
