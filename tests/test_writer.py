@@ -195,7 +195,7 @@ def test_open_in_kdenlive_is_detected_and_blocks_overwrite(workspace, tmp_path):
     finally:
         proc.kill()
         proc.wait()
-    assert writer.kdenlive_usage(dest).open is None
+    assert writer.kdenlive_usage(dest).open is not True  # False, or None if a real Kdenlive runs
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses permissions")
