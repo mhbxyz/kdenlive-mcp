@@ -30,6 +30,7 @@ from mcp_kdenlive import (
 from mcp_kdenlive import audio as audio_mod
 from mcp_kdenlive import effects as effects_mod
 from mcp_kdenlive import relink as relink_mod
+from mcp_kdenlive import subtitles as subtitles_mod
 from mcp_kdenlive import titles as titles_mod
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.errors import ProjectError
@@ -86,6 +87,7 @@ class EditResult(BaseModel):
     relink: relink_mod.RelinkResult | None = None
     effects: effects_mod.EffectEditResult | None = None
     title: titles_mod.TitleResult | None = None
+    subtitles: subtitles_mod.SubtitleImport | None = None
 
 
 Revision = Annotated[
@@ -131,6 +133,17 @@ BinId = Annotated[
 ]
 
 
+# Which EditResult field holds each operation's result (timeline edits otherwise).
+RESULT_FIELDS: dict[type, str] = {
+    audio_mod.AudioEditResult: "audio",
+    MarkerEditResult: "markers",
+    relink_mod.RelinkResult: "relink",
+    effects_mod.EffectEditResult: "effects",
+    titles_mod.TitleResult: "title",
+    subtitles_mod.SubtitleImport: "subtitles",
+}
+
+
 def _project_edit(
     path: str,
     destination: str,
@@ -143,7 +156,8 @@ def _project_edit(
         | MarkerEditResult
         | relink_mod.RelinkResult
         | effects_mod.EffectEditResult
-        | titles_mod.TitleResult,
+        | titles_mod.TitleResult
+        | subtitles_mod.SubtitleImport,
     ],
     revision: str | None = None,
 ) -> EditResult:
@@ -154,17 +168,8 @@ def _project_edit(
         # In place, the revision the refs were read from is the expected source version.
         expected = expected_sha256 or revision
         saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected)
-        if isinstance(result, audio_mod.AudioEditResult):
-            return EditResult(saved=saved, audio=result)
-        if isinstance(result, MarkerEditResult):
-            return EditResult(saved=saved, markers=result)
-        if isinstance(result, relink_mod.RelinkResult):
-            return EditResult(saved=saved, relink=result)
-        if isinstance(result, titles_mod.TitleResult):
-            return EditResult(saved=saved, title=result)
-        if isinstance(result, effects_mod.EffectEditResult):
-            return EditResult(saved=saved, effects=result)
-        return EditResult(saved=saved, timeline=result)
+        field = next((f for t, f in RESULT_FIELDS.items() if isinstance(result, t)), "timeline")
+        return EditResult.model_validate({"saved": saved, field: result})
     except ProjectError as exc:
         raise _tool_error(exc) from exc
 
@@ -296,6 +301,64 @@ EffectParams = Annotated[
     dict[str, float | int | bool],
     Field(description="Parameter values by name (see list_effects for names, units, ranges)."),
 ]
+
+
+def _register_subtitles(server: MCPServer) -> None:
+    @server.tool(
+        name="list_subtitles",
+        title="List subtitles",
+        annotations=READ_ONLY,
+        description=(
+            "Read a sequence's subtitles (Kdenlive's subtitle track, an ASS file next to the "
+            "project): file and status, styles, and events with start/end frames, layer and "
+            "text. Read-only."
+        ),
+    )
+    def list_subtitles(
+        path: ProjectPath,
+        sequence: Sequence = None,
+        max_events: Annotated[int, Field(ge=1, le=5000)] = 500,
+    ) -> subtitles_mod.SubtitleReport:
+        try:
+            return subtitles_mod.list_subtitles(kdenlive_doc.load(path), sequence, max_events)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="import_subtitles",
+        title="Import subtitles",
+        annotations=EDIT,
+        description=(
+            "Import a SubRip (.srt) or WebVTT (.vtt) file, UTF-8 or UTF-16 with a byte order mark, "
+            "as the main sequence's subtitles, in Kdenlive's own format: an ASS file named after "
+            "the saved project (`<destination>.ass`) with Kdenlive's default style. Times are "
+            "rounded to frames; overlapping subtitles go to separate layers; <i>, <b>, <u> become "
+            "ASS styling, other styling is dropped (warnings). Existing subtitles are refused "
+            "([subtitles_exist]) unless replace=true; written to a new destination their file is "
+            "untouched, replaced in place it is backed up first. `offset` "
+            "shifts every subtitle by that many frames. The result is written to `destination` "
+            "with the save_project_copy rules."
+        ),
+    )
+    def import_subtitles(
+        path: ProjectPath,
+        subtitle_file: Annotated[str, Field(description="Path of the .srt or .vtt file.")],
+        destination: Destination,
+        offset: Annotated[int, Field(description="Frames added to every subtitle.")] = 0,
+        replace: bool = False,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _project_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: subtitles_mod.import_subtitles(
+                e, subtitle_file, offset=offset, replace=replace, sequence=sequence
+            ),
+        )
 
 
 Color = Annotated[str, Field(description="#RRGGBB or #RRGGBBAA.")]
@@ -554,6 +617,7 @@ def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     _register_markers(server)
     _register_effects(server)
     _register_titles(server)
+    _register_subtitles(server)
     for tool in server._tool_manager.list_tools():
         tool.parameters["additionalProperties"] = False  # unknown arguments are refused
     return server

@@ -103,8 +103,15 @@ def clips(path: Path) -> list[tuple]:
                 (title.get("width"), title.get("height"), title.get("duration")),
             ))
     titles.sort(key=repr)
+    # subtitles (#16): events read from the ASS file the sequence points to
+    from mcp_kdenlive import subtitles
+
+    subs = [
+        (t.name, t.status, [(e.start, e.end, e.layer, e.text) for e in t.events])
+        for t in subtitles.list_subtitles(doc, tl.sequence_uuid, max_events=100000).tracks
+    ]
     return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects, marks, params,
-            titles]
+            titles, subs]
 
 
 def verify(path: Path) -> bool:

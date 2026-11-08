@@ -118,6 +118,23 @@ try:
             if hit:
                 print("DSETTEXT", combo, hit.get_editable_text_iface().set_text_contents(text), flush=True)
             else: print("DSETTEXT not found", flush=True)
+        elif cmd == "dsettextn":  # Nth editable text field of the dialogs (unnamed fields)
+            n, text = int(p[1]), p[2]; fields = []
+            def collect(node, depth=0):
+                try:
+                    role = node.get_role_name(); kids = node.get_child_count()
+                except Exception: return
+                if role in ("text", "entry") and node.get_editable_text_iface() is not None:
+                    try:
+                        if node.get_state_set().contains(Atspi.StateType.EDITABLE): fields.append(node)
+                    except Exception: pass
+                if depth < 25:
+                    for i in range(min(kids, 300)):
+                        c = node.get_child_at_index(i)
+                        if c: collect(c, depth + 1)
+            for w in windows():
+                if w.get_role_name() in ("dialog", "alert"): collect(w)
+            print("DSETTEXTN", n, "of", len(fields), fields[n].get_editable_text_iface().set_text_contents(text) if n < len(fields) else "missing", flush=True)
         elif cmd == "dclick":
             target = p[1]; hit = None
             for w in windows():

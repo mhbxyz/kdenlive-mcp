@@ -8,7 +8,7 @@ They are **not** part of the `mcp-kdenlive` package and are not supported interf
 | `kdgui.sh` / `kdgui.py` | Run Kdenlive headlessly (`kwin_wayland --virtual`) with isolated XDG directories, a private session D-Bus and a private AT-SPI bus. Then run a small command script against it: list dialogs, click buttons, fill the save dialog, call D-Bus methods. |
 | `kdrender.sh` | Run `kdenlive --render` offscreen with isolated XDG directories and a private D-Bus. |
 | `kdsum.py` | Summarize a `.kdenlive` file: bin, sequences, tracks, playlist entries, transitions. |
-| `verify_roundtrip.py` | Open projects in real Kdenlive, *Save As* a copy, and compare timelines (exit 0 if identical and no load dialog). Run with `uv run python research/lab/verify_roundtrip.py FILE...`; it also compares mixes, layers, effects with their parameter values, markers, and titles (text and style from `xmldata`), and prints the differences. Set `KDENLIVE_MCP_ALLOWED_ROOTS` to the files' folder, and `KD_KEEP=1` to keep Kdenlive's copy (`*.kdenlive-resaved.kdenlive`). The GUI driver uses `/usr/bin/python3` (needs `gi`); override with `KDGUI_PYTHON`. |
+| `verify_roundtrip.py` | Open projects in real Kdenlive, *Save As* a copy, and compare timelines (exit 0 if identical and no load dialog). Run with `uv run python research/lab/verify_roundtrip.py FILE...`; it also compares mixes, layers, effects with their parameter values, markers, titles (text and style from `xmldata`), and subtitles (events from the ASS file), and prints the differences. Set `KDENLIVE_MCP_ALLOWED_ROOTS` to the files' folder, and `KD_KEEP=1` to keep Kdenlive's copy (`*.kdenlive-resaved.kdenlive`). The GUI driver uses `/usr/bin/python3` (needs `gi`); override with `KDGUI_PYTHON`. |
 
 Requirements: Linux, Kdenlive, `kwin_wayland`, `qdbus6`, `dbus-run-session`, `at-spi2-core`
 (`at-spi2-registryd`) and Python GObject bindings for `Atspi` 2.0.
@@ -18,13 +18,20 @@ Requirements: Linux, Kdenlive, `kwin_wayland`, `qdbus6`, `dbus-run-session`, `at
 `KD_BIN` runs another Kdenlive executable (default: `kdenlive` on `PATH`), `KD_FLAGS` replaces the
 startup options (default `--no-welcome`, unknown to 24.x), `KD_WAIT` the start timeout in
 seconds (default 60), `KD_APPNAME` an extra application name to look for on the accessibility
-bus, and the `apps` command lists the applications on the accessibility bus. `dclick` also presses
+bus, and the `apps` command lists the applications on the accessibility bus. `dsettextn N TEXT` fills the N-th editable text field of the open dialogs (fields without an
+accessible name). `dclick` also presses
 *push button menu* buttons (the title editor's *Create Title* / *Update Title*).
 
 Finding (#15): the title editor's toolbar buttons have no accessible names. The reference title
 format was captured by adding a `.kdenlivetitle` file to the bin over D-Bus (`addProjectClip`),
 which Kdenlive keeps as a file reference, then `edit_clip` and *Add as new Title*, which writes the
 embedded form (`xmldata`).
+
+Finding (#16): Kdenlive's *Import Subtitle* dialog cannot be driven here: filling its file field
+over AT-SPI (`dsettextn 0`) does not load the preview, and *OK* does nothing. A project whose
+`av.filename` points to an `.srt` is not read either (Kdenlive writes an empty ASS on save). The
+server's import is therefore checked by round trip: Kdenlive opens the ASS the server wrote and
+re-saves the same events.
 Finding (#66): the official 24.12.3 AppImage starts in the lab but registers neither on the
 accessibility bus nor on the session D-Bus, so the lab cannot drive it.
 

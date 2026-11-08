@@ -85,7 +85,7 @@ change to the public surface fails CI until the snapshot and the changelog are u
 `not_a_project`, `not_found`, `open_in_kdenlive`, `output_exists`, `output_in_use`, `overlap`,
 `path_not_allowed`, `permission_denied`, `profile_required`, `queue_full`, `remote_media`,
 `render_failed`, `revision_required`, `sequence_not_found`, `source_protected`,
-`stale_revision`, `too_large`, `too_many_tracks`, `track_not_found`, `unknown_job`,
+`stale_revision`, `subtitles_exist`, `too_large`, `too_many_tracks`, `track_not_found`, `unknown_job`,
 `unknown_preset`, `unknown_profile`, `unsafe_xml`, `unsupported_kdenlive`,
 `unsupported_structure`.
 
