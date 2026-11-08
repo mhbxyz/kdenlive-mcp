@@ -168,7 +168,7 @@ def _project_edit(
         # In place, the revision the refs were read from is the expected source version.
         expected = expected_sha256 or revision
         saved = writer.save(edit, destination, overwrite=overwrite, expected_sha256=expected)
-        field = RESULT_FIELDS.get(type(result), "timeline")
+        field = next((f for t, f in RESULT_FIELDS.items() if isinstance(result, t)), "timeline")
         return EditResult.model_validate({"saved": saved, field: result})
     except ProjectError as exc:
         raise _tool_error(exc) from exc
@@ -334,7 +334,8 @@ def _register_subtitles(server: MCPServer) -> None:
             "the saved project (`<destination>.ass`) with Kdenlive's default style. Times are "
             "rounded to frames; overlapping subtitles go to separate layers; <i>, <b>, <u> become "
             "ASS styling, other styling is dropped (warnings). Existing subtitles are refused "
-            "([subtitles_exist]) unless replace=true; their file is never modified. `offset` "
+            "([subtitles_exist]) unless replace=true; written to a new destination their file is "
+            "untouched, replaced in place it is backed up first. `offset` "
             "shifts every subtitle by that many frames. The result is written to `destination` "
             "with the save_project_copy rules."
         ),

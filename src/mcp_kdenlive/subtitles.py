@@ -9,9 +9,12 @@ next to the saved project (writer.save names it after the destination, like Kden
 
 from __future__ import annotations
 
+import html
 import json
 import math
 import re
+import stat
+import unicodedata
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,7 +28,8 @@ from mcp_kdenlive.edits import _next_id, _sequence, _set_prop
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.kdenlive_doc import KdenliveDocument, props
 from mcp_kdenlive.media import _Resolver
-from mcp_kdenlive.timecode import FrameRate, frames_to_timecode
+from mcp_kdenlive.project import select_sequence
+from mcp_kdenlive.timecode import FrameRate, _round_half_up, frames_to_timecode
 from mcp_kdenlive.writer import EditableProject, PendingFile
 
 __all__ = ["SubtitleImport", "SubtitleReport", "import_subtitles", "list_subtitles"]
@@ -54,7 +58,10 @@ class SubtitleTrack(BaseModel):
     name: str
     file: str = Field(description="Resolved path of the subtitle file (ASS).")
     reference: str = Field(description="av.filename as stored in the project.")
-    status: str = Field(description="'ok', 'missing' or 'unreadable'.")
+    status: str = Field(
+        description="'ok', 'missing', 'unreadable' (not a regular file, over 10 MB, not UTF-8) "
+        "or 'not_allowed' (outside the allowed roots: not read)."
+    )
     styles: list[str]
     event_count: int
     events: list[SubtitleEvent]
@@ -87,7 +94,7 @@ class Cue:
 
 # ---------------------------------------------------------------- time --------------
 def _frames(ms: int, rate: FrameRate) -> int:
-    return round(Fraction(ms, 1000) * rate.fps)
+    return _round_half_up(Fraction(ms, 1000) * rate.fps)
 
 
 def _ass_time(frame: int, rate: FrameRate) -> str:
@@ -106,17 +113,39 @@ def _parse_ass_time(value: str, rate: FrameRate) -> int:
         raise ValueError(value)
     h, m, s, frac = match.groups()
     seconds = Fraction(int(h) * 3600 + int(m) * 60 + int(s)) + Fraction(int(frac), 10 ** len(frac))
-    return round(seconds * rate.fps)
+    return _round_half_up(seconds * rate.fps)
 
 
 # ---------------------------------------------------------------- reading -----------
 def _sequence_tractor(doc: KdenliveDocument, sequence: str | None) -> ET.Element | None:
-    tractors = doc.sequence_tractors()
-    wanted = sequence or doc.active_sequence_uuid()
-    return next(
-        (t for t in tractors if props(t).get("kdenlive:uuid") == wanted),
-        tractors[0] if tractors else None,
-    )
+    if not doc.sequence_tractors():
+        return None
+    return select_sequence(doc, sequence).tractor  # [sequence_not_found] for unknown names
+
+
+def _track_id(entry: dict[str, object], default: int) -> int:
+    value = entry.get("id", default)
+    return value if isinstance(value, int) else int(str(value)) if str(value).isdigit() else default
+
+
+def _read_file(path: Path) -> tuple[str, str]:
+    """(status, text) of a subtitle file: allowed roots, regular file, bounded size."""
+    try:
+        policy.check_allowed(path, "Reading subtitles")
+    except ProjectError:
+        return "not_allowed", ""  # neither read nor reported as existing
+    try:
+        info = path.stat()
+    except FileNotFoundError:
+        return "missing", ""
+    except OSError:
+        return "unreadable", ""
+    if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_BYTES:
+        return "unreadable", ""
+    try:
+        return "ok", path.read_bytes().decode("utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return "unreadable", ""
 
 
 def _subtitle_filters(tractor: ET.Element) -> list[ET.Element]:
@@ -137,7 +166,8 @@ def _read_ass(text: str, rate: FrameRate) -> tuple[list[str], list[SubtitleEvent
     events: list[SubtitleEvent] = []
     section, fmt = "", ["layer", "start", "end", "style", "name", "marginl", "marginr",
                         "marginv", "effect", "text"]  # fmt: skip
-    for line in text.splitlines():
+    for raw in text.split("\n"):  # \n only: other line separators belong to the text
+        line = raw.removesuffix("\r")
         stripped = line.strip()
         if stripped.startswith("[") and stripped.endswith("]"):
             section = stripped.lower()
@@ -179,21 +209,16 @@ def list_subtitles(
     if tractor is None:
         return SubtitleReport(sequence_uuid=None, tracks=[], truncated=False)
     resolver = _Resolver(doc)
-    names = {int(str(d.get("id", 0))): str(d.get("name", "Subtitles")) for d in _listed(tractor)}
+    names = {
+        _track_id(d, i): str(d.get("name", "Subtitles")) for i, d in enumerate(_listed(tractor))
+    }
     tracks, truncated = [], False
     for index, flt in enumerate(_subtitle_filters(tractor)):
         reference = props(flt).get("av.filename", "")
         resolved, _ = resolver.resolve(reference)
         path = Path(resolved)
-        styles: list[str] = []
-        events: list[SubtitleEvent] = []
-        status = "ok"
-        try:
-            styles, events = _read_ass(path.read_text(encoding="utf-8-sig"), doc.rate)
-        except FileNotFoundError:
-            status = "missing"
-        except (OSError, UnicodeDecodeError):
-            status = "unreadable"
+        status, text = _read_file(path)
+        styles, events = _read_ass(text, doc.rate) if status == "ok" else ([], [])
         truncated = truncated or len(events) > max_events
         tracks.append(
             SubtitleTrack(
@@ -272,9 +297,19 @@ def _timing(line: str, pattern: str, where: str) -> tuple[int, int, str]:
 def _parse_srt(text: str, name: str) -> tuple[list[Cue], list[str]]:
     cues: list[Cue] = []
     for start_line, lines in _blocks(text):
-        timing = 1 if lines[0].strip().isdigit() and len(lines) > 1 else 0
-        start, end, _rest = _timing(lines[timing], SRT_TIME, f"{name} line {start_line + timing}")
-        cues.append(Cue(start, end, "\n".join(lines[timing + 1 :]), len(cues) + 1))
+        first = 1 if lines[0].strip().isdigit() and len(lines) > 1 else 0
+        start, end, _ = _timing(lines[first], SRT_TIME, f"{name} line {start_line + first}")
+        body: list[str] = []
+        for offset, line in enumerate(lines[first + 1 :], first + 1):
+            if re.match(rf"\s*{SRT_TIME}\s*-->", line):  # next cue without a blank line before
+                if body and body[-1].strip().isdigit():
+                    body.pop()  # its number
+                cues.append(Cue(start, end, "\n".join(body), len(cues) + 1))
+                start, end, _ = _timing(line, SRT_TIME, f"{name} line {start_line + offset}")
+                body = []
+            else:
+                body.append(line)
+        cues.append(Cue(start, end, "\n".join(body), len(cues) + 1))
     return cues, []
 
 
@@ -283,7 +318,7 @@ def _parse_vtt(text: str, name: str) -> tuple[list[Cue], list[str]]:
     if not blocks or not blocks[0][1][0].startswith("WEBVTT"):
         raise ProjectError("invalid_argument", f"{name} does not start with `WEBVTT`.")
     cues: list[Cue] = []
-    settings = False
+    settings = tags = False
     for start_line, lines in blocks[1:]:
         if lines[0].startswith(("NOTE", "STYLE", "REGION")):
             continue
@@ -293,20 +328,34 @@ def _parse_vtt(text: str, name: str) -> tuple[list[Cue], list[str]]:
         start, end, rest = _timing(lines[timing], VTT_TIME, f"{name} line {start_line + timing}")
         settings = settings or bool(rest)
         body = "\n".join(lines[timing + 1 :])
-        body = re.sub(r"</?(?:v|c|lang|ruby|rt)(?:[ .][^>]*)?>", "", body)
-        cues.append(Cue(start, end, body, len(cues) + 1))
+        body = re.sub(r"<(/?)([ibu])(?:\.[^>]*)?>", r"<\1\2>", body)  # <i.loud> -> <i>
+        kept = re.sub(r"<(?!/?[ibu]>)[^>]*>", "", body)  # voices, classes, timestamps…
+        tags = tags or kept != body
+        cues.append(Cue(start, end, html.unescape(kept), len(cues) + 1))
     warnings = ["WebVTT cue settings (position, alignment) are ignored."] if settings else []
+    if tags:
+        warnings.append("WebVTT voice, class, language and timestamp tags were dropped.")
     return cues, warnings
 
 
+LINE_BREAKS = str.maketrans({c: "\n" for c in "\u2028\u2029\x85\x0b\x0c"})
+
+
 def _ass_text(cue: Cue, warnings: list[str]) -> str:
-    text = cue.text
-    if "{" in text or "}" in text:
+    # Other line separators would start a new line (an injected event) in the ASS file.
+    text = cue.text.translate(LINE_BREAKS).replace("\t", " ")
+    text = "".join(c for c in text if c == "\n" or unicodedata.category(c) != "Cc")
+    # ASS override blocks ({\an8}, from many SRT tools) are kept; other braces would hide text.
+    parts = re.split(r"(\{\\[^{}]*\})", text)
+    plain = [i for i in range(0, len(parts), 2) if "{" in parts[i] or "}" in parts[i]]
+    if plain:
         warnings.append(
             f"Cue {cue.number}: braces would hide text in ASS ({{...}} are style codes); "
             "they became parentheses."
         )
-        text = text.replace("{", "(").replace("}", ")")
+        for i in plain:
+            parts[i] = parts[i].replace("{", "(").replace("}", ")")
+    text = "".join(parts)
     for tag, code in (("i", "i"), ("b", "b"), ("u", "u")):
         text = re.sub(rf"<{tag}>", f"{{\\\\{code}1}}", text, flags=re.I)
         text = re.sub(rf"</{tag}>", f"{{\\\\{code}0}}", text, flags=re.I)
@@ -412,6 +461,11 @@ def _place(
             )
         start = _frames(cue.start_ms, rate) + offset
         end = _frames(cue.end_ms, rate) + offset
+        if end >= _frames(MAX_HOURS * 3600 * 1000, rate):
+            raise ProjectError(
+                "invalid_range",
+                f"With offset {offset}, subtitle {cue.number} would end after {MAX_HOURS} hours.",
+            )
         if start < 0:
             raise ProjectError(
                 "invalid_range",

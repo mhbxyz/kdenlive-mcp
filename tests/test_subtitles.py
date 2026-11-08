@@ -248,3 +248,148 @@ def test_written_times_read_back_as_the_same_frame(fps):
         hh, mm, rest = text.split(":")
         seconds = (int(hh) * 60 + int(mm)) * 60 + float(rest)
         assert round(seconds * rate.num / rate.den) == frame, text  # read back by rounding
+
+
+# ------------------------------------------------------------------ review fixes ------
+def subtitled(ws: Path) -> Session:
+    s = Session(ws)
+    s.current = ws / "kd26-subtitle.kdenlive"
+    return s
+
+
+def point_at(ws: Path, target: str) -> Path:
+    text = (ws / "kd26-subtitle.kdenlive").read_text(encoding="utf-8")
+    path = ws / "pointed.kdenlive"
+    path.write_text(text.replace(">kd26-subtitle.kdenlive.ass<", f">{target}<"), encoding="utf-8")
+    return path
+
+
+def test_subtitle_file_outside_the_allowed_roots_is_not_read(ws, tmp_path, monkeypatch):
+    secret = tmp_path / "outside" / "secret.ass"
+    secret.parent.mkdir()
+    secret.write_text((ws / "kd26-subtitle.kdenlive.ass").read_text(encoding="utf-8"))
+    monkeypatch.setenv("KDENLIVE_MCP_ALLOWED_ROOTS", str(ws))
+    (track,) = report(point_at(ws, str(secret))).tracks
+    assert (track.status, track.events, track.styles) == ("not_allowed", [], [])
+
+
+def test_special_files_are_not_read(ws):
+    import os
+
+    os.mkfifo(ws / "pipe.ass")
+    (track,) = report(point_at(ws, "pipe.ass")).tracks  # must not block
+    assert track.status == "unreadable"
+
+
+def test_line_separators_cannot_add_events(s, ws):
+    srt = write(
+        ws,
+        "in.srt",
+        "1\n00:00:01,000 --> 00:00:02,000\nHi\u2028"
+        "Dialogue: 0,0:00:09.00,0:00:10.00,Default,,0,0,0,,X\u0085y\n",
+    )
+    s.apply(subtitles.import_subtitles, str(srt))
+    (event,) = report(s.current).tracks[0].events
+    assert event.text.startswith("Hi\nDialogue")
+
+
+def test_srt_without_blank_lines_between_cues(s, ws):
+    srt = write(
+        ws,
+        "in.srt",
+        "1\n00:00:01,000 --> 00:00:02,000\nHello\n2\n00:00:03,000 --> 00:00:04,000\nWorld\n",
+    )
+    s.apply(subtitles.import_subtitles, str(srt))
+    assert [e.text for e in report(s.current).tracks[0].events] == ["Hello", "World"]
+
+
+def test_vtt_entities_and_tags(s, ws):
+    vtt = write(
+        ws, "in.vtt",
+        "WEBVTT\n\n00:01.000 --> 00:02.000\n<i.loud>Fort</i> &amp; <00:01.500>clair&nbsp;&lt;3\n",
+    )  # fmt: skip
+    r = s.apply(subtitles.import_subtitles, str(vtt))
+    assert report(s.current).tracks[0].events[0].text == "{\\i1}Fort{\\i0} & clair <3"
+    assert any("tags" in w for w in r.warnings)
+
+
+def test_ass_override_tags_from_srt_are_kept(s, ws):
+    srt = write(ws, "in.srt", "1\n00:00:01,000 --> 00:00:02,000\n{\\an8}Top {note}\n")
+    r = s.apply(subtitles.import_subtitles, str(srt))
+    assert report(s.current).tracks[0].events[0].text == "{\\an8}Top (note)"
+    assert len([w for w in r.warnings if "braces" in w]) == 1
+
+
+def test_offset_cannot_push_past_100_hours(s, ws):
+    srt = write(ws, "in.srt", "1\n99:59:59,000 --> 99:59:59,500\nx\n")
+    assert code(s, str(srt), offset=60) == "invalid_range"
+
+
+def test_long_timestamps(s, ws):
+    srt = write(ws, "in.srt", "1\n12:34:56,789 --> 12:35:00,000\nlate\n")
+    s.apply(subtitles.import_subtitles, str(srt))
+    (event,) = report(s.current).tracks[0].events
+    assert event.start == round((12 * 3600 + 34 * 60 + 56.789) * 30000 / 1001)
+    assert "12:34:56." in (ws / "step1.kdenlive.ass").read_text(encoding="utf-8")
+
+
+def test_fractional_frame_rate_23_976(s, ws):
+    text = s.current.read_text(encoding="utf-8").replace(
+        'frame_rate_num="30000"', 'frame_rate_num="24000"'
+    )
+    s.current = ws / "film.kdenlive"
+    s.current.write_text(text, encoding="utf-8")
+    srt = write(ws, "in.srt", "1\n00:00:01,001 --> 00:00:02,002\nx\n")
+    s.apply(subtitles.import_subtitles, str(srt))
+    (event,) = report(s.current).tracks[0].events
+    assert (event.start, event.end) == (24, 48)
+
+
+def test_unknown_sequence_is_an_error(ws):
+    with pytest.raises(ProjectError) as err:
+        subtitles.list_subtitles(kdenlive_doc.load(str(ws / "kd26-subtitle.kdenlive")), "nope")
+    assert err.value.code == "sequence_not_found"
+
+
+def test_replacing_keeps_unrelated_sequence_data(ws):
+    s = subtitled(ws)
+    before = props(next(iter(kdenlive_doc.load(str(s.current)).sequence_tractors())))
+    s.apply(subtitles.import_subtitles, str(write(ws, "in.srt", SRT)), replace=True)
+    after = props(next(iter(kdenlive_doc.load(str(s.current)).sequence_tractors())))
+    changed = {k for k in before.keys() | after.keys() if before.get(k) != after.get(k)}
+    assert changed <= {"kdenlive:sequenceproperties.subtitlesList"}
+
+
+def test_replacing_in_place_backs_up_and_restores_on_failure(ws, monkeypatch):
+    project = ws / "kd26-subtitle.kdenlive"
+    ass = ws / "kd26-subtitle.kdenlive.ass"
+    original = ass.read_bytes()
+    edit = writer.open_for_edit(str(project))
+    subtitles.import_subtitles(edit, str(write(ws, "in.srt", SRT)), replace=True)
+    real = writer._write_atomically
+
+    def failing(path, data, *, replace):  # type: ignore[no-untyped-def]
+        if path == project:
+            raise OSError("disk full")
+        return real(path, data, replace=replace)
+
+    monkeypatch.setattr(writer, "_write_atomically", failing)
+    with pytest.raises(OSError):
+        writer.save(edit, str(project), overwrite=True, expected_sha256=edit.sha256)
+    assert ass.read_bytes() == original  # the project still points at it: restored
+    monkeypatch.setattr(writer, "_write_atomically", real)
+    edit = writer.open_for_edit(str(project))
+    subtitles.import_subtitles(edit, str(write(ws, "in.srt", SRT)), replace=True)
+    writer.save(edit, str(project), overwrite=True, expected_sha256=edit.sha256)
+    (backup,) = ws.glob("kd26-subtitle.kdenlive.ass.backup-*")
+    assert backup.read_bytes() == original
+    assert report(project).tracks[0].event_count == 3
+
+
+def test_copy_to_another_folder_keeps_subtitles_readable(ws, tmp_path):
+    edit = writer.open_for_edit(str(ws / "kd26-subtitle.kdenlive"))
+    out = tmp_path / "copies" / "c.kdenlive"
+    out.parent.mkdir()
+    writer.save(edit, str(out))
+    (track,) = report(out).tracks
+    assert track.status == "ok" and track.event_count == 1

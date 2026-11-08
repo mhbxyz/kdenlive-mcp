@@ -568,9 +568,11 @@ filter on the sequence (`av.filename`, relative) and listed in
 `kdenlive:sequenceproperties.subtitlesList`.
 
 **Reading:** `list_subtitles` reports each subtitle track: `file` (resolved), `reference` (as
-stored), `status` (`ok`, `missing`, `unreadable`), `styles` and `events` (`start`, exclusive
+stored), `status` (`ok`, `missing`, `unreadable` for a special file, more than 10 MB or not
+UTF-8, `not_allowed` outside the allowed roots: such a file is not read), `styles` and `events` (`start`, exclusive
 `end` in frames, `start_timecode`, `layer`, `style`, `text` with `\n` between lines; ASS style
-codes such as `{\i1}` are kept), sorted by start; `max_events` bounds the list (`truncated`).
+codes such as `{\i1}` are kept), sorted by start; `max_events` bounds the list (`truncated`). An unknown `sequence` is
+`[sequence_not_found]`.
 
 **Importing:**
 
@@ -578,18 +580,20 @@ codes such as `{\i1}` are kept), sorted by start; `max_events` bounds the list (
 |---|---|
 | Formats | SubRip `.srt` and WebVTT `.vtt`. Others (ASS, SBV…) are refused with a conversion hint. |
 | Encodings | UTF-8 (with or without BOM) and UTF-16 with a BOM. Anything else is refused (`[invalid_argument]`, with an `iconv` hint): it cannot be detected reliably. |
-| Timing | Cue times are rounded to the nearest frame, then written to the nearest centisecond (ASS precision), so a subtitle edge can render up to one frame early or late. A cue shorter than a frame lasts one frame (warning). `offset` adds frames to every cue; a cue starting before frame 0 is `[invalid_range]`. Cues ending after 100 hours are `[invalid_range]`. |
+| Timing | Cue times are rounded to the nearest frame (half up), then written to the nearest centisecond (ASS precision), so a subtitle edge can render up to one frame early or late. A cue shorter than a frame lasts one frame (warning). `offset` adds frames to every cue; a cue starting before frame 0 is `[invalid_range]`. Cues ending after 100 hours are `[invalid_range]`. |
 | Overlaps | Kept: an overlapping cue goes to the next free ASS layer (`layers` in the result), as Kdenlive stores overlapping subtitles. |
-| Text | Unicode kept; several lines kept (`\N`); `<i>`, `<b>`, `<u>` become ASS style codes; `<font>` and WebVTT voice/class tags and cue settings are dropped (warnings); `{` `}` become `(` `)` because ASS would hide the text between them (warning). |
+| Text | Unicode kept; several lines kept (`\N`); other line separators (U+2028, U+0085…) become line breaks and control characters are removed, so text can never start a new ASS line; `<i>`, `<b>`, `<u>` (also WebVTT `<i.class>`) become ASS style codes; `<font>`, WebVTT voice, class, language and timestamp tags and cue settings are dropped (warnings); WebVTT entities (`&amp;`, `&nbsp;`…) are decoded; ASS override blocks such as `{\an8}` are kept, other `{` `}` become `(` `)` because ASS would hide the text between them (warning). SubRip cues not separated by a blank line are still split at each timing line. |
 | Style | Kdenlive's default style (Arial 40, white, outline 1, bottom centre), the frame size from the project profile. Styles are not imported. |
 | File | `<destination file name>.ass` next to the saved project, written with it (`saved.side_files`), like Kdenlive's *Save As*. An existing file there is refused (`[output_exists]`) unless `overwrite`, which backs it up first. |
-| Existing subtitles | Refused (`[subtitles_exist]`, with the number of events) unless `replace=true`; the **old ASS file is never modified** (the copy gets its own file). Several subtitle tracks cannot be replaced (`[unsupported_structure]`). |
+| Existing subtitles | Refused (`[subtitles_exist]`, with the number of events) unless `replace=true`. Written to a **new destination**, the copy gets its own ASS file and the old one is untouched. Replaced **in place** (`destination` = `path`, `overwrite`, `expected_sha256`), the project's own ASS file is backed up first (`<name>.ass.backup-<UTC timestamp>`, first + 4 most recent kept) and restored if the project cannot be written. Several subtitle tracks cannot be replaced (`[unsupported_structure]`). |
 | Sequences | Only the project's main sequence (the one whose uuid is the document's): Kdenlive names other sequences' files differently, not verified yet (`[unsupported_structure]`). |
 | Malformed input | Empty files, files without cues, timing lines that do not parse (with the line number), cues ending before they start, a `.vtt` without `WEBVTT`: `[invalid_argument]`. |
 
 - **Rendering:** projects with subtitles render with the melt engine under `auto` (Kdenlive
-  26.08.2's `kdenlive --render` crashes on them, #16), which burns them in with libass using the
-  ASS style. Requested `engine="kdenlive"` warns first.
+  26.08.2's `kdenlive --render` crashes on them, #16; a bug report is prepared on the issue),
+  which burns them in with libass using the ASS style. Verified with the default preset
+  `MP4-H264/AAC` (H.264 + AAC, the preset's default quality) and `engine="auto"`. Requested
+  `engine="kdenlive"` warns first.
 - **Verified:** an imported SRT (Unicode, two lines, an overlap on layer 1, italics, braces) and a
   replacement with an offset of the subtitles of a Kdenlive-made project reopen in Kdenlive 26.08.2
   without dialogs; after its own save, the events read back identical (frames, layers, text). Its

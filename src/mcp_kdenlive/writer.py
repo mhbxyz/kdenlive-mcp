@@ -287,20 +287,52 @@ def _prepare_side_files(
     return side
 
 
-def _write_side_files(side: list[tuple[Path, bytes]]) -> list[Path]:
-    """Write the files; an existing one is backed up first. Returns the files created."""
-    created = []
+Undo = list[tuple[Path, bytes | None, Path | None]]
+
+
+def _write_side_files(side: list[tuple[Path, bytes]]) -> Undo:
+    """Write the files; an existing one is backed up first (first + 4 most recent kept).
+
+    Returns how to undo: (path, previous content or None if created, backup made)."""
+    undo: Undo = []
     for target, data in side:
         if target.exists():
-            if target.read_bytes() == data:
+            previous = target.read_bytes()
+            if previous == data:
                 continue
-            stamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S.%fZ")
-            shutil.copy2(target, target.with_name(f"{target.name}.backup-{stamp}"))
+            backup = target.with_name(f"{target.name}.backup-{_stamp()}")
+            shutil.copy2(target, backup)
+            _rotate_side_backups(target)
             _write_atomically(target, data, replace=True)
+            undo.append((target, previous, backup))
         else:
             _write_atomically(target, data, replace=False)
-            created.append(target)
-    return created
+            undo.append((target, None, None))
+    return undo
+
+
+def _undo_side_files(undo: Undo) -> None:
+    """The project was not written: put its side files back as they were."""
+    for path, previous, backup in undo:
+        with contextlib.suppress(OSError):
+            if previous is None:
+                path.unlink()
+            else:
+                _write_atomically(path, previous, replace=True)
+                if backup is not None:
+                    backup.unlink()
+
+
+def _stamp() -> str:
+    return datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+
+
+def _rotate_side_backups(target: Path) -> None:
+    pattern = re.compile(re.escape(target.name) + r"\.backup-\d{8}T\d{6}\.\d{6}Z")
+    backups = sorted(p for p in target.parent.iterdir() if pattern.fullmatch(p.name))
+    for old in backups[1 : -(KEEP_BACKUPS - 1)]:
+        with contextlib.suppress(OSError):
+            old.unlink()
 
 
 KEEP_BACKUPS = 5
@@ -362,14 +394,12 @@ def save(
         shutil.copy2(dest, backup_path)
         backup = str(backup_path)
         _rotate_backups(dest)
-    created = _write_side_files(side)
+    undo = _write_side_files(side)
     if not unchanged:
         try:
             _write_atomically(dest, data, replace=dest.exists())
         except BaseException:
-            for path in created:  # the project was not written: do not leave its files behind
-                with contextlib.suppress(OSError):
-                    path.unlink()
+            _undo_side_files(undo)
             raise
     reloaded = kdenlive_doc.load(str(dest))  # must still be a readable Kdenlive project
     return SaveResult(

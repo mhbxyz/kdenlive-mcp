@@ -92,7 +92,7 @@ Kdenlive's own *Save As*, tracks, clips, bin media, internal transitions and gro
 | Kdenlive-made crossfades, then trims, splits, removals and moves around them (#61) | ✅ | ✅ (e2e) | ✅ (e2e) |
 | Effects (crop, brightness, greyscale, sepia, gamma, fades from/to black) and crossfades added, updated and removed by the server (#14) | ✅ (values compared; Kdenlive rewrites keyframe positions as timecodes) | ✅ (e2e) | ✅ |
 | Titles (centred, lower third, positioned; then trimmed, split, moved) added by the server (#15) | ✅ (text and style compared) | ✅ | ✅ (e2e) |
-| Subtitles imported from SRT (new, or replacing a Kdenlive-made track, with an offset) (#16) | ✅ (events compared) | — (crashes on subtitles, #16) | ✅ (e2e) |
+| Subtitles imported from SRT and WebVTT (new, or replacing a Kdenlive-made track, with an offset) (#16) | ✅ (events compared) | — (crashes on subtitles, #16) | ✅ (e2e) |
 | Kdenlive-made project with subtitles | ✅ | ❌ Kdenlive crashes (SIGSEGV), reproduced without this server (#16) | ✅ |
 
 ## Fixture corpus
