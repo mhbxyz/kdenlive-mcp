@@ -592,7 +592,8 @@ class RenderRun:
         self.plan = plan
         # In the server's cache, not /tmp: a Flatpak Kdenlive cannot see /tmp (#65).
         self.workdir = work_dir("kdenlive-mcp-render-", env)
-        environ = policy.child_env(env)
+        # The display variables are not in the child allow-list: Kdenlive renders never see them.
+        environ = policy.child_env(env, **self._display(plan, env))
         environ.update(
             {
                 "QT_QPA_PLATFORM": "offscreen",
@@ -607,13 +608,6 @@ class RenderRun:
                 "KDENLIVE_MCP_PRIVATE_DIRS": "1",
             }
         )
-        environ.pop("DISPLAY", None)
-        environ.pop("WAYLAND_DISPLAY", None)
-        if plan.engine == "melt":
-            # MLT 7.22's Qt module (titles, qtblend track compositing) refuses to load without a
-            # display even with QT_QPA_PLATFORM=offscreen (#90); Qt still draws offscreen.
-            source = os.environ if env is None else env
-            environ.update({k: source[k] for k in DISPLAY_VARIABLES if source.get(k)})
         self.env = environ
         (self.workdir / "tmp").mkdir()
         self.log_path = self.workdir / "render.log"
@@ -665,22 +659,32 @@ class RenderRun:
         scene.write_text(text, encoding="utf-8")
         return scene
 
+    @staticmethod
+    def _display(plan: RenderPlan, env: Mapping[str, str] | None) -> dict[str, str]:
+        """For melt only: MLT 7.22's Qt module (titles, qtblend track compositing) refuses to
+        load without an X11 display, even with QT_QPA_PLATFORM=offscreen (#90)."""
+        if plan.engine != "melt":
+            return {}
+        source = os.environ if env is None else env
+        return {k: source[k] for k in DISPLAY_VARIABLES if source.get(k)}
+
     def _process_error(self, exit_code: int) -> str | None:
         """Why the finished process cannot have produced a good render, if it cannot."""
         plan = self.plan
+        program = "melt" if plan.engine == "melt" else "Kdenlive"
         if exit_code != 0:
-            program = "melt" if plan.engine == "melt" else "Kdenlive"
             return f"{program} exited with status {exit_code}."
         if plan.engine == "melt" and self._qt_module_refused():
             return (
-                "MLT's Qt module did not load (no display): titles would be MLT's 'INVALID' "
-                "placeholder and video tracks would not be composited. Run the server with a "
-                "display (DISPLAY or WAYLAND_DISPLAY), under `xvfb-run -a`, or with a newer "
-                "MLT (7.42 renders headless)."
+                "MLT's Qt module did not load (no X11 display): titles would be MLT's 'INVALID' "
+                "placeholder and video tracks would not be composited. Give the server an X11 "
+                "display (DISPLAY, e.g. in the MCP client's env; Wayland alone is not enough "
+                "for MLT 7.22), run it under `xvfb-run -a`, or use a newer MLT (7.42 renders "
+                "headless)."
             )
         temp = plan.temp_output
         if not temp.is_file() or temp.stat().st_size == 0:
-            return "Kdenlive reported success but produced no output file."
+            return f"{program} reported success but produced no output file."
         return None
 
     def _qt_module_refused(self) -> bool:

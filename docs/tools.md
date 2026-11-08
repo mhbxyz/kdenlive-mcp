@@ -162,7 +162,8 @@ exits 0. The melt engine therefore passes `DISPLAY`, `WAYLAND_DISPLAY` and `XAUT
 server's environment (Qt still draws offscreen: no window opens), and a render whose log shows the
 module refusing to load **fails** with an explanation instead of succeeding. On such a system,
 add `DISPLAY` to the server's `env` in the MCP client configuration (many clients start servers
-with a minimal environment), or run it under `xvfb-run -a`. MLT 7.42 renders headless.
+with a minimal environment), or run it under `xvfb-run -a`. MLT 7.22 asks for X11: a Wayland
+session needs XWayland's `DISPLAY`. MLT 7.42 renders headless.
 
 ### Kdenlive engine checks
 

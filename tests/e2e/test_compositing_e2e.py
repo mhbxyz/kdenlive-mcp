@@ -8,7 +8,7 @@ import pytest
 pytestmark = pytest.mark.anyio
 
 
-@pytest.mark.parametrize("engine", ["auto", "melt"])
+@pytest.mark.parametrize("engine", ["auto", "melt", "kdenlive"])
 async def test_upper_track_shows_the_lower_one_where_it_is_cropped(tmp_path, media_tools, engine):
     red = dl.make_clip(tmp_path / "media" / "red.mp4", 3, color="red", tone_hz=None)
     blue = dl.make_clip(tmp_path / "media" / "blue.mp4", 3, color="blue", tone_hz=None)
@@ -36,10 +36,10 @@ async def test_upper_track_shows_the_lower_one_where_it_is_cropped(tmp_path, med
         out = tmp_path / "out.mp4"
         try:
             await s.call("render_project", path=str(proj), output=str(out), engine=engine)
-        except dl.ToolFailed as err:  # Kdenlive 23.08 has no --render: auto uses melt anyway
-            if err.code != "unsupported_kdenlive":
-                raise
-            pytest.skip("no kdenlive --render")
+        except dl.ToolFailed as err:
+            if engine == "kdenlive" and err.code == "unsupported_kdenlive":
+                pytest.skip("this Kdenlive has no --render (before 24.02)")
+            raise
 
     # the crop keeps 640 px of V2, centred in the frame; V1 must show on both sides
     assert dl.dominant(dl.region_rgb(out, 1.5, (0.4, 0.4, 0.2, 0.2))) == "blue"
