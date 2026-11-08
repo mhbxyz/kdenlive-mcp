@@ -149,7 +149,7 @@ permission system. None reached the server.
 2. **No loudness measurement:** voice harmonisation and ducking levels are guesses.
 3. **Checking the result is indirect:** stills come from an image-sequence render, and audio
    cannot be checked at all.
-4. **`create_project` makes two video tracks:** this is Kdenlive's default, but it is not
-   obvious from the result. The tool description could say so.
+4. **`create_project` makes two video tracks:** this is Kdenlive's default, but it was not
+   obvious. Its description now says so (this branch).
 5. **Fixed on this branch:** command-line renders running alongside made edits warn about an
    open project.
