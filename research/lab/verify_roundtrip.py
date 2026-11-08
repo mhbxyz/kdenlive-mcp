@@ -53,7 +53,15 @@ def clips(path: Path) -> list[tuple]:
         for t in tl.tracks
         for c in t.clips
     )
-    return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects]
+    # guides and clip markers (#12)
+    from mcp_kdenlive import markers
+
+    found = markers.list_markers(doc, tl.sequence_uuid)
+    marks = sorted(
+        (m.target, m.position, m.duration, m.comment, m.category)
+        for m in found.guides + found.clip_markers
+    )
+    return [tracks, timeline, bin_media, internal, groups, mixes, layers, effects, marks]
 
 
 def verify(path: Path) -> bool:

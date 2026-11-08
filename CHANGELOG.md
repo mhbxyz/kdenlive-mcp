@@ -17,6 +17,8 @@ migration notes in the same entry.
 
 ### Added
 
+- **Guides and clip markers (#12):** `list_markers`, `add_marker`, `update_marker` and `remove_marker` for timeline guides (chapters) and clip markers, with comments, categories and durations, in Kdenlive 26.08's format.
+
 - **Audio level and fades (#13):** `set_clip_volume` (constant dB level, Kdenlive's *Volume* effect) and `set_clip_fades` (fade-in/fade-out in frames, Kdenlive's *Fade in*/*Fade out*) on a clip's audio. `get_timeline` reports each clip's `audio` settings.
 
 - **Editing tracks with crossfades (#61):** `insert_clip`, `move_clip`, `trim_clip`, `split_clip` and `remove_clip` now work on tracks that contain Kdenlive same-track mixes. Mixed clips keep their mix: they cannot be moved, their mixed side cannot be trimmed, and they cannot be split inside the mix. Removing a mixed clip removes its mixes and trims the partner back to the original cut. Verified with mixes made by Kdenlive 26.08.2.

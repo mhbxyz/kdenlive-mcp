@@ -30,6 +30,7 @@ from mcp_kdenlive import (
 from mcp_kdenlive import audio as audio_mod
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.errors import ProjectError
+from mcp_kdenlive.markers import MarkerEditResult
 
 SERVER_NAME = "kdenlive-mcp"
 
@@ -67,7 +68,7 @@ ProjectPath = Annotated[
 
 class EditResult(BaseModel):
     saved: writer.SaveResult
-    marker: markers.MarkerEditResult | None = None
+    markers: MarkerEditResult | None = None
     media: list[edits.MediaAdded] | None = None
     track: edits.TrackAdded | None = None
     timeline: timeline_edit.TimelineEditResult | None = None
@@ -116,7 +117,7 @@ def _register_markers(server: MCPServer) -> None:
             saved = writer.save(
                 edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
             )
-            return EditResult(saved=saved, marker=result)
+            return EditResult(saved=saved, markers=result)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
