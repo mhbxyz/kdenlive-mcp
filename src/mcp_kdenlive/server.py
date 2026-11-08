@@ -23,6 +23,7 @@ from mcp_kdenlive import (
     media,
     project,
     render,
+    timeline_edit,
     writer,
 )
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
@@ -66,6 +67,25 @@ class EditResult(BaseModel):
     saved: writer.SaveResult
     media: list[edits.MediaAdded] | None = None
     track: edits.TrackAdded | None = None
+    timeline: timeline_edit.TimelineEditResult | None = None
+
+
+Revision = Annotated[
+    str,
+    Field(
+        description="sha256 of the project file (file.sha256 from get_timeline) that the clip "
+        "ref comes from; the edit is refused if the file changed since."
+    ),
+]
+ClipRef = Annotated[str, Field(description="Clip ref 'track:layer:entry' from get_timeline.")]
+Sequence = Annotated[
+    str | None, Field(description="Sequence uuid or name; default: active sequence.")
+]
+TIMELINE_RULES = (
+    " Positions are frames at the project rate; nothing ripples and nothing is overwritten "
+    "(overlaps fail). A clip grouped with its audio/video counterpart is edited together with "
+    "it. The result is written to `destination` with the save_project_copy rules."
+)
 
 
 def _tool_error(exc: ProjectError) -> ToolError:
@@ -485,3 +505,164 @@ def _register_editing(server: MCPServer) -> None:
             return EditResult(saved=saved, track=track)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
+
+    def _timeline_edit(
+        path: str,
+        destination: str,
+        overwrite: bool,
+        expected_sha256: str | None,
+        operation: Callable[[writer.EditableProject], timeline_edit.TimelineEditResult],
+    ) -> EditResult:
+        try:
+            edit = writer.open_for_edit(path)
+            result = operation(edit)
+            saved = writer.save(
+                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
+            )
+            return EditResult(saved=saved, timeline=result)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="insert_clip",
+        title="Insert clip",
+        annotations=EDIT,
+        description=(
+            "Place a bin clip (bin_id from list_project_media / get_timeline) on a track at "
+            "frame `start`, optionally a source sub-range [source_in, source_out] (inclusive). "
+            "A clip with audio and video put on a video track also gets its audio on "
+            "`audio_track` (default A1; null for video only), grouped like Kdenlive."
+            + TIMELINE_RULES
+        ),
+    )
+    def insert_clip(
+        path: ProjectPath,
+        bin_id: str,
+        track: Annotated[str, Field(description="Track label, e.g. V1.")],
+        start: Annotated[int, Field(ge=0)],
+        destination: Destination,
+        source_in: Annotated[int, Field(ge=0)] = 0,
+        source_out: int | None = None,
+        audio_track: str | None = "A1",
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _timeline_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: timeline_edit.insert_clip(
+                e, bin_id, track, start, source_in, source_out, audio_track, sequence
+            ),
+        )
+
+    @server.tool(
+        name="move_clip",
+        title="Move clip",
+        annotations=EDIT,
+        description=(
+            "Move a clip to frame `start`, optionally to another track of the same kind."
+            + TIMELINE_RULES
+        ),
+    )
+    def move_clip(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        start: Annotated[int, Field(ge=0)],
+        destination: Destination,
+        track: str | None = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _timeline_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: timeline_edit.move_clip(e, clip, revision, start, track, sequence),
+        )
+
+    @server.tool(
+        name="trim_clip",
+        title="Trim clip",
+        annotations=EDIT,
+        description=(
+            "Change a clip's timeline bounds to [start, end) (either may be omitted); the source "
+            "in/out points follow, like resizing in Kdenlive. Extending is limited by the source "
+            "length." + TIMELINE_RULES
+        ),
+    )
+    def trim_clip(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        destination: Destination,
+        start: int | None = None,
+        end: int | None = None,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _timeline_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: timeline_edit.trim_clip(e, clip, revision, start, end, sequence),
+        )
+
+    @server.tool(
+        name="split_clip",
+        title="Split clip",
+        annotations=EDIT,
+        description=(
+            "Cut a clip at timeline frame `at` into two adjacent clips (razor)." + TIMELINE_RULES
+        ),
+    )
+    def split_clip(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        at: Annotated[int, Field(ge=1)],
+        destination: Destination,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _timeline_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: timeline_edit.split_clip(e, clip, revision, at, sequence),
+        )
+
+    @server.tool(
+        name="remove_clip",
+        title="Remove clip",
+        annotations=EDIT,
+        description=(
+            "Remove a clip from the timeline, leaving a gap (neighbours do not move; the bin clip "
+            "stays)." + TIMELINE_RULES
+        ),
+    )
+    def remove_clip(
+        path: ProjectPath,
+        clip: ClipRef,
+        revision: Revision,
+        destination: Destination,
+        sequence: Sequence = None,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        return _timeline_edit(
+            path,
+            destination,
+            overwrite,
+            expected_sha256,
+            lambda e: timeline_edit.remove_clip(e, clip, revision, sequence),
+        )

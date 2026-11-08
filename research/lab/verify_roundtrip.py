@@ -37,7 +37,14 @@ def clips(path: Path) -> list[tuple]:
         for p in (kdenlive_doc.props(x) for x in seq.findall("transition"))
         if p.get("internal_added")
     )
-    return [tracks, timeline, bin_media, internal]
+    import json
+
+    raw = kdenlive_doc.props(seq).get("kdenlive:sequenceproperties.groups", "").strip()
+    groups = sorted(
+        tuple(sorted(leaf["data"] for leaf in g.get("children", [])))
+        for g in (json.loads(raw) if raw else [])
+    )
+    return [tracks, timeline, bin_media, internal, groups]
 
 
 def verify(path: Path) -> bool:
