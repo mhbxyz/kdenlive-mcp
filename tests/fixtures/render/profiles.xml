@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Subset of Kdenlive 26.08.2 /usr/share/kdenlive/export/profiles.xml (GPL-2.0-or-later data, unmodified profile elements) used to test preset argument substitution for the melt engine (#42). -->
+<profiles version="1">
+<group id="tests" name="Tests">
+<profile name="MP4-H264/AAC" extension="mp4"
+   qualities="15,45" defaultquality="23"
+   audiobitrates="64,128,160,256,384" defaultaudiobitrate="160"
+   args="f=mp4 movflags=+faststart vcodec=libx264 crf=%quality g=15 acodec=aac ab=%audiobitrate+'k'"
+   defaultspeedindex="6" speeds="preset=veryslow;preset=slower;preset=slow;preset=medium;preset=fast;preset=faster;preset=veryfast;preset=superfast;preset=ultrafast"/>
+<profile name="MPEG-2" extension="mpg"
+   qualities="3,15" defaultquality="5"
+   audioqualities="3,7" defaultaudioquality="3"
+   args="properties=MPEG-2 qscale=%quality aq=%audioquality"
+   speeds="subq=5 cmp=2 subcmp=2 trellis=1 bf=2;subq=3 cmp=1 subcmp=1 trellis=1 bf=2;subq=1"/>
+<profile name="WebM-VP9/Opus (libre)" extension="webm"
+   qualities="15,45" defaultquality="25"
+   audioqualities="10,0" defaultaudioquality="5"
+   args="f=webm vcodec=libvpx-vp9 crf=%quality vb=15M qcomp=1 g=15 row-mt=1 tile-columns=4 frame-parallel=1 acodec=libopus compression_level=%audioquality"/>
+<profile name="AC3" extension="ac3" audiobitrates="64,128,160,256,384" defaultaudiobitrate="160" args="ab=%audiobitrate+'k' vn=1 video_off=1"/>
+<profile name="WAV" extension="wav" args="properties=WAV video_off=1"/>
+<profile name="VOB (DVD)" extension="vob"
+   qualities="5,15" defaultquality="5"
+   audiobitrates="128,160,192" defaultaudiobitrate="160"
+   args="properties=dv_%dv_standard/DVD mlt_profile=dv_%dv_standard f=dvd vcodec=mpeg2video acodec=ac3 qscale=%quality ab=%audiobitrate+'k'"
+   speeds="subq=5 cmp=2 subcmp=2 trellis=1 bf=2;subq=3 cmp=1 subcmp=1 trellis=1 bf=2;subq=1"/>
+<profile name="NVENC H264 ABR" extension="mp4"
+   bitrates="30000,1000" defaultbitrate="6000"
+   audiobitrates="64,128,160,256,384" defaultaudiobitrate="160"
+   args="f=mp4 vcodec=h264_nvenc vb=%bitrate+'k' acodec=aac ab=%audiobitrate+'k'"/>
+</group>
+</profiles>
