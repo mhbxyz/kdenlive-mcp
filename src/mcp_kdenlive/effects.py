@@ -70,6 +70,11 @@ class Spec:
     notes: str = ""
 
 
+_BLACK_FADE_NOTE = (
+    "Rendered by Kdenlive 25.04.3 and later; Kdenlive 24.12.3 renders the clip without the fade."
+)
+
+
 def _pixels(name: str) -> Param:
     return Param(name, "int", 0, 10000, 0, "pixels", f"Pixels removed from the {name} edge.")
 
@@ -135,6 +140,7 @@ SPECS: dict[str, Spec] = {
             (Param("duration", "int", 1, 100000, 30, "frames", "Length of the fade."),),
             (("start", "1"), ("level", "1"), ("alpha", "0=0;-1=1")),
             edge="start",
+            notes=_BLACK_FADE_NOTE,
         ),
         Spec(
             "fade_to_black",
@@ -144,6 +150,7 @@ SPECS: dict[str, Spec] = {
             (Param("duration", "int", 1, 100000, 30, "frames", "Length of the fade."),),
             (("start", "1"), ("level", "1"), ("alpha", "0=1;-1=0")),
             edge="end",
+            notes=_BLACK_FADE_NOTE,
         ),
     )
 }
@@ -168,6 +175,7 @@ class EffectInfo(BaseModel):
     available: bool | None = Field(description="MLT has the service; null if not checked.")
     parameters: list[ParamInfo]
     verified_with: str
+    notes: str = Field(description="Compatibility notes; empty when there are none.")
 
 
 class EffectCatalog(BaseModel):
@@ -216,6 +224,7 @@ def catalog(env: Mapping[str, str] | None = None) -> EffectCatalog:
                     for p in s.params
                 ],
                 verified_with=VERIFIED_WITH,
+                notes=s.notes,
             )
             for s in SPECS.values()
         ],

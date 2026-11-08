@@ -994,6 +994,14 @@ def add_mix(
     plan = []
     for t, left in tl.partners(track, item):
         tl.check_editable(t)
+        existing = next((m for m in tl.mixes(t) if m.at_end_of(left)), None)
+        if existing is not None:
+            raise ProjectError(
+                "invalid_argument",
+                f"The clip on {t.label} already ends in a mix (frames "
+                f"{existing.start}-{existing.end}).",
+                "Use remove_mix first to change it.",
+            )
         right = _next_clip(tl, t, left)
         if right is None:
             raise ProjectError(
@@ -1001,7 +1009,7 @@ def add_mix(
                 f"No clip starts where the clip on {t.label} ends (frame {left.end}).",
                 "Move the next clip so it touches this one; a crossfade joins two adjacent clips.",
             )
-        if any(m.at_end_of(left) or m.right.element is right.element for m in tl.mixes(t)):
+        if any(m.right.element is right.element for m in tl.mixes(t)):
             raise ProjectError(
                 "invalid_argument", f"There is already a mix at frame {left.end} on {t.label}."
             )

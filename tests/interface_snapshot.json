@@ -846,6 +846,7 @@
    "EffectInfo.id",
    "EffectInfo.mlt_service",
    "EffectInfo.name",
+   "EffectInfo.notes",
    "EffectInfo.parameters",
    "EffectInfo.target",
    "EffectInfo.verified_with",

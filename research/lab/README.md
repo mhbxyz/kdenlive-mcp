@@ -8,7 +8,7 @@ They are **not** part of the `mcp-kdenlive` package and are not supported interf
 | `kdgui.sh` / `kdgui.py` | Run Kdenlive headlessly (`kwin_wayland --virtual`) with isolated XDG directories, a private session D-Bus and a private AT-SPI bus. Then run a small command script against it: list dialogs, click buttons, fill the save dialog, call D-Bus methods. |
 | `kdrender.sh` | Run `kdenlive --render` offscreen with isolated XDG directories and a private D-Bus. |
 | `kdsum.py` | Summarize a `.kdenlive` file: bin, sequences, tracks, playlist entries, transitions. |
-| `verify_roundtrip.py` | Open projects in real Kdenlive, *Save As* a copy, and compare timelines (exit 0 if identical and no load dialog). Run with `uv run python research/lab/verify_roundtrip.py FILE...`. The GUI driver uses `/usr/bin/python3` (needs `gi`); override with `KDGUI_PYTHON`. |
+| `verify_roundtrip.py` | Open projects in real Kdenlive, *Save As* a copy, and compare timelines (exit 0 if identical and no load dialog). Run with `uv run python research/lab/verify_roundtrip.py FILE...`; it also compares mixes, layers, effects with their parameter values, and markers, and prints the differences. Set `KDENLIVE_MCP_ALLOWED_ROOTS` to the files' folder, and `KD_KEEP=1` to keep Kdenlive's copy (`*.kdenlive-resaved.kdenlive`). The GUI driver uses `/usr/bin/python3` (needs `gi`); override with `KDGUI_PYTHON`. |
 
 Requirements: Linux, Kdenlive, `kwin_wayland`, `qdbus6`, `dbus-run-session`, `at-spi2-core`
 (`at-spi2-registryd`) and Python GObject bindings for `Atspi` 2.0.

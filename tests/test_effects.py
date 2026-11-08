@@ -62,6 +62,9 @@ def test_catalog_lists_verified_effects_with_parameters():
     assert (crop["top"].unit, crop["top"].minimum, crop["top"].default) == ("pixels", 0, 0)
     assert catalog["brightness"].target == "video"
     assert catalog["crop"].verified_with == "Kdenlive 26.08.2"
+    # #14: Kdenlive 24.12.3 renders these files without the black fades (25.04.3 and later do)
+    assert "24.12" in catalog["fade_to_black"].notes and "25.04" in catalog["fade_from_black"].notes
+    assert catalog["crop"].notes == ""
 
 
 # ------------------------------------------------------------------ add / update -------
@@ -154,8 +157,10 @@ def test_add_and_remove_a_crossfade(s):
         track = next(t for t in s.timeline().tracks if t.label == label)
         assert [(m.service, m.start, m.end, m.cut) for m in track.mixes] == [(service, 30, 50, 40)]
         assert [c.layer for c in track.clips] == [0, 1]
-    with pytest.raises(ProjectError):
-        s.apply(effects.add_mix, "V1@0", s.rev(), 20)  # already mixed
+    with pytest.raises(ProjectError) as again:
+        s.apply(effects.add_mix, "V1@0", s.rev(), 20)  # already mixed: say so, not "move"
+    assert again.value.code == "invalid_argument"
+    assert "already" in str(again.value) and "remove_mix" in str(again.value)
     s.apply(effects.remove_mix, "V1@0", s.rev())
     v1 = next(t for t in s.timeline().tracks if t.label == "V1")
     assert v1.mixes == [] and [(c.start, c.end) for c in v1.clips] == [(0, 40), (40, 80)]
