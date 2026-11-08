@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0rc1] - 2026-11-08
+
+Release candidate for 0.1.0, published to TestPyPI only to rehearse the release pipeline.
+
 ### Added
 
 - **Server:** stdio MCP server `kdenlive-mcp` (distribution `mcp-kdenlive`), with `diagnose_environment` and a `kdenlive-mcp diagnose` CLI.
