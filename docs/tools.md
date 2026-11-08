@@ -51,7 +51,7 @@ whose text starts with a stable code in brackets, e.g. `[not_found] … Hint: �
 - **Ordering:** tracks are listed in MLT order. `index` is the MLT track index (0 is the background and is omitted).
 - **Labels:** `label` follows Kdenlive's convention, derived from the order. `V1` is the lowest video track and `A1` is the audio track directly below the video tracks.
 - **Layers:** each Kdenlive track has two playlists. `layer` 1 holds the second clip of a same-track mix, and `mixes` lists those transitions: `start` is where the right clip starts, `end` (exclusive) where the left clip ends, and `cut` the frame where the clips met before the mix (`end - cut_offset`).
-- **Clip references:** `ref` (`track:layer:entry`) identifies a clip *in this file revision only*.
+- **Clip references:** `ref` is `<track>@<start>`, e.g. `V1@90` (with `#1` appended for the secondary layer when two clips start on the same frame). It stays the same as long as the clip does not move. `group` lists the refs of the clips edited together with it (Kdenlive audio/video pair).
 
 ### Limits
 
@@ -169,7 +169,7 @@ returns a job immediately.
 - **Lifetime:** jobs are in memory and belong to one server process. When the server exits (the client closes the stdio session), running renders are stopped and cleaned up. Nothing persists across restarts: an unknown job id returns `[unknown_job]`. The 50 most recent finished jobs are kept.
 - **Abrupt exit:** if the server is killed with SIGKILL, it cannot stop its renders. Kdenlive keeps running until it finishes, and its partial `.<name>.kdenlive-mcp-*.partial.*` file stays next to the output.
 
-## `create_project(output, media_path, profile="auto", overwrite=False)`
+## `create_project(destination, media_path, profile="auto", overwrite=False)`
 
 Creates a new `.kdenlive` file. The media clip is in the bin and at frame 0 of
 "Sequence 1":
@@ -222,7 +222,7 @@ it writes a verified copy without changing anything.
 | Situation | Behaviour |
 |---|---|
 | New destination | Written atomically: temporary file, fsync, link. |
-| Destination exists | `[output_exists]`, unless `overwrite=true`. The old file is first copied to `<name>.backup-<UTC timestamp>.kdenlive`. |
+| Destination exists | `[output_exists]`, unless `overwrite=true`. The old file is first copied to `<name>.backup-<UTC timestamp>.kdenlive`; the 5 most recent backups of a file are kept. If nothing changed (same content), nothing is written and no backup is made (`saved.written: false`). |
 | Destination is the source | `[source_protected]`, unless `overwrite=true` **and** `expected_sha256` equals the sha256 of the version read (from `inspect_project`). A backup is kept. |
 | Source changed since it was read | `[conflict]`, nothing written. The source is re-hashed just before writing. |
 | Destination appears open in Kdenlive | `[open_in_kdenlive]`, with the evidence (#62): a `kdenlive` process started with that file; a Kdenlive autosave lock of unsaved changes; or a running Kdenlive whose **window title** names a project with the same file name (read-only, over the session D-Bus, see [security.md](security.md), *Open projects*). This last signal also catches a project opened from Kdenlive's *Open* dialog without changes. |
@@ -316,7 +316,7 @@ After Kdenlive's save, these were identical:
 
 ### Rules
 
-- **Units and references:** frames at the project rate; timeline `[start, end)`, source in/out inclusive. Clips are referenced by `ref` (`track:layer:entry`) from `get_timeline`, together with `revision`, the `file.sha256` returned by that same call. If the file changed since, the edit is refused (`[stale_revision]`), because refs could point at another clip.
+- **Units and references:** frames at the project rate; timeline `[start, end)`, source in/out inclusive. Clips are referenced by `ref` (`V1@90`) from `get_timeline`, together with `revision`, the `file.sha256` returned by that same call. If the file changed since, the edit is refused (`[stale_revision]`). To edit **in place** (`destination` = `path`, `overwrite=true`), `revision` is enough: it is used as `expected_sha256` when that is omitted. The 0.1 form `index:layer:entry` is still accepted.
 - **No ripple, no overwrite:** neighbours never move, and any overlap is refused (`[overlap]`). The only exception is removing a clip that is part of a crossfade: its partner is trimmed back to the original cut (see below). Trimming and extending are limited by the source length.
 - **Groups:** a clip in a Kdenlive audio/video group (`AVSplit`) is moved, trimmed, split and removed together with its counterpart, as Kdenlive does by default. Groups are updated (a split creates a group for the new right halves).
 - **Kdenlive's layout:** like Kdenlive 26.08, each clip instance on the timeline gets its own `<chain>`, a copy of the bin clip. On AV media, `set.test_audio` or `set.test_image` disables the unused half.
@@ -390,7 +390,7 @@ audio clip is changed (the video is not), and a video-only clip is refused
 | Stored in | the sequence (`kdenlive:sequenceproperties.guides`) | the bin clip (`kdenlive:markers`), so every instance of the clip shows it |
 
 - **Format:** Kdenlive 26.08's JSON, `{"comment", "duration", "pos", "type"}`, written with sorted keys and UTF-8 like Kdenlive. Keys the server does not know are kept.
-- **Identity:** a marker is its target plus its position; Kdenlive keeps one per position, so adding at a taken position is refused (`[invalid_argument]`), and a missing one is `[not_found]`.
+- **Identity:** a marker is its target plus its position; Kdenlive keeps one per position, so adding at a taken position is refused (`[invalid_argument]`), and a missing one is `[marker_not_found]`.
 - **Categories:** `category` is an index from the project's categories (`list_markers` → `categories`, 9 by default: index, name, color); an unknown index is refused.
 - **Duration:** 0 for a point marker; a range marker needs `position + duration` to fit in a clip.
 - **Sequences:** guides belong to one sequence (`sequence`, default: the active one, like `get_timeline`). Markers stored on a sequence's own bin clip are not listed or edited.

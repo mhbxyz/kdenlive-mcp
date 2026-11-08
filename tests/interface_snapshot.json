@@ -17,7 +17,16 @@
    "path",
    "position"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "add_media_to_bin": {
   "params": [
@@ -32,7 +41,16 @@
    "media_paths",
    "path"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "add_track": {
   "params": [
@@ -49,7 +67,16 @@
    "kind",
    "path"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "cancel_render_job": {
   "params": [
@@ -58,25 +85,63 @@
   "required": [
    "job_id"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "cancel_requested",
+   "created_at",
+   "elapsed_seconds",
+   "finished_at",
+   "job_id",
+   "output",
+   "preset",
+   "progress",
+   "progress_note",
+   "project",
+   "queue_position",
+   "result",
+   "started_at",
+   "state",
+   "timeout_seconds"
+  ]
  },
  "create_project": {
   "params": [
+   "destination",
    "media_path",
-   "output",
    "overwrite",
    "profile"
   ],
   "required": [
-   "media_path",
-   "output"
+   "destination",
+   "media_path"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "clip_duration_frames",
+   "frame_rate",
+   "kdenlive_format",
+   "media",
+   "media_reference",
+   "notes",
+   "profile",
+   "project",
+   "project_sha256",
+   "tracks",
+   "warnings"
+  ]
  },
  "diagnose_environment": {
   "params": [],
   "required": [],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "filesystem",
+   "notes",
+   "platform",
+   "ready",
+   "server_version",
+   "tools"
+  ]
  },
  "get_render_job": {
   "params": [
@@ -85,7 +150,24 @@
   "required": [
    "job_id"
   ],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "cancel_requested",
+   "created_at",
+   "elapsed_seconds",
+   "finished_at",
+   "job_id",
+   "output",
+   "preset",
+   "progress",
+   "progress_note",
+   "project",
+   "queue_position",
+   "result",
+   "started_at",
+   "state",
+   "timeout_seconds"
+  ]
  },
  "get_timeline": {
   "params": [
@@ -96,7 +178,24 @@
   "required": [
    "path"
   ],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "compositions",
+   "conventions",
+   "duration_frames",
+   "duration_timecode",
+   "file",
+   "frame_rate",
+   "guides",
+   "notes",
+   "returned_clips",
+   "sequence_name",
+   "sequence_uuid",
+   "total_clips",
+   "tracks",
+   "truncated",
+   "warnings"
+  ]
  },
  "insert_clip": {
   "params": [
@@ -119,7 +218,16 @@
    "start",
    "track"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "inspect_project": {
   "params": [
@@ -128,7 +236,19 @@
   "required": [
    "path"
   ],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "bin_clip_count",
+   "document_version",
+   "file",
+   "format_generation",
+   "kdenlive_version",
+   "mlt_version",
+   "notes",
+   "profile",
+   "sequences",
+   "warnings"
+  ]
  },
  "list_markers": {
   "params": [
@@ -138,12 +258,20 @@
   "required": [
    "path"
   ],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "categories",
+   "clip_markers",
+   "guides"
+  ]
  },
  "list_profiles": {
   "params": [],
   "required": [],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "profiles"
+  ]
  },
  "list_project_media": {
   "params": [
@@ -154,17 +282,39 @@
   "required": [
    "path"
   ],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "asset_files",
+   "counts",
+   "items",
+   "missing",
+   "notes",
+   "probed",
+   "project",
+   "root",
+   "total_items",
+   "truncated"
+  ]
  },
  "list_render_jobs": {
   "params": [],
   "required": [],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "jobs",
+   "max_concurrent",
+   "notes"
+  ]
  },
  "list_render_presets": {
   "params": [],
   "required": [],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "notes",
+   "presets",
+   "sources"
+  ]
  },
  "move_clip": {
   "params": [
@@ -185,7 +335,16 @@
    "revision",
    "start"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "probe_media": {
   "params": [
@@ -194,7 +353,14 @@
   "required": [
    "path"
   ],
-  "read_only": true
+  "read_only": true,
+  "output": [
+   "detail",
+   "path",
+   "probe",
+   "status",
+   "symlink_target"
+  ]
  },
  "relink_media": {
   "params": [
@@ -209,7 +375,16 @@
    "mapping",
    "path"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "remove_clip": {
   "params": [
@@ -227,7 +402,16 @@
    "path",
    "revision"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "remove_marker": {
   "params": [
@@ -244,7 +428,16 @@
    "path",
    "position"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "render_project": {
   "params": [
@@ -259,7 +452,23 @@
    "output",
    "path"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "elapsed_seconds",
+   "error",
+   "exit_code",
+   "log_tail",
+   "notes",
+   "output",
+   "preset",
+   "process_completed",
+   "project",
+   "project_sha256",
+   "sequence",
+   "state",
+   "validation",
+   "warnings"
+  ]
  },
  "save_project_copy": {
   "params": [
@@ -272,7 +481,20 @@
    "destination",
    "path"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "backup",
+   "changes",
+   "destination",
+   "notes",
+   "rebased_paths",
+   "sha256",
+   "size_bytes",
+   "source",
+   "source_sha256",
+   "warnings",
+   "written"
+  ]
  },
  "set_clip_fades": {
   "params": [
@@ -292,7 +514,16 @@
    "path",
    "revision"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "set_clip_volume": {
   "params": [
@@ -312,7 +543,16 @@
    "path",
    "revision"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "split_clip": {
   "params": [
@@ -332,7 +572,16 @@
    "path",
    "revision"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "start_render": {
   "params": [
@@ -347,7 +596,24 @@
    "output",
    "path"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "cancel_requested",
+   "created_at",
+   "elapsed_seconds",
+   "finished_at",
+   "job_id",
+   "output",
+   "preset",
+   "progress",
+   "progress_note",
+   "project",
+   "queue_position",
+   "result",
+   "started_at",
+   "state",
+   "timeout_seconds"
+  ]
  },
  "trim_clip": {
   "params": [
@@ -367,7 +633,16 @@
    "path",
    "revision"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  },
  "update_marker": {
   "params": [
@@ -388,6 +663,15 @@
    "path",
    "position"
   ],
-  "read_only": false
+  "read_only": false,
+  "output": [
+   "audio",
+   "markers",
+   "media",
+   "relink",
+   "saved",
+   "timeline",
+   "track"
+  ]
  }
 }

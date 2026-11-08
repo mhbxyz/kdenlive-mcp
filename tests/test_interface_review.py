@@ -80,3 +80,28 @@ def test_backups_are_rotated(s, monkeypatch):
         writer.save(edit, str(source), overwrite=True, expected_sha256=edit.sha256)
     backups = sorted(s.ws.glob(f"{source.stem}.backup-*.kdenlive"))
     assert len(backups) == writer.KEEP_BACKUPS
+
+
+@pytest.mark.anyio
+async def test_revision_is_enough_to_edit_in_place(tmp_path):
+    from mcp import Client
+
+    from mcp_kdenlive.server import build_server
+
+    shutil.copytree(FIX / "kd26", tmp_path / "p")
+    proj = tmp_path / "p" / "kd26-ntsc-timeline.kdenlive"
+    async with Client(build_server()) as client:
+        tl = (await client.call_tool("get_timeline", {"path": str(proj)})).structured_content
+        result = await client.call_tool(
+            "split_clip",
+            {
+                "path": str(proj),
+                "clip": "V1@0",
+                "revision": tl["file"]["sha256"],
+                "at": 30,
+                "destination": str(proj),
+                "overwrite": True,
+            },
+        )
+    assert result.is_error is False, result.content
+    assert result.structured_content["saved"]["written"] is True

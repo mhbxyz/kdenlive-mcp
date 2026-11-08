@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -237,3 +238,16 @@ def test_size_limit_is_enforced():
 def test_invalid_max_clips():
     with pytest.raises(ProjectError):
         project.timeline(load(KD26 / "kd26-ntsc.kdenlive"), max_clips=0)
+
+
+def test_ambiguous_sequence_names(tmp_path):
+    src = (UP / "test-nesting.resaved-26.08.2.kdenlive").read_text(encoding="utf-8")
+    doc_path = tmp_path / "twins.kdenlive"
+    names = re.findall(r'<property name="kdenlive:clipname">([^<]*)</property>', src)
+    seq_names = [n for n in names if n.startswith("Sequence")]
+    assert len(set(seq_names)) >= 2
+    first, second = sorted(set(seq_names))[:2]
+    doc_path.write_text(src.replace(f">{second}<", f">{first}<"), encoding="utf-8")
+    with pytest.raises(ProjectError) as err:
+        project.timeline(load(doc_path), first)
+    assert err.value.code == "ambiguous_sequence"

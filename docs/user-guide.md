@@ -78,7 +78,7 @@ because a model manipulated by a web page or a document could then reach any of 
 ## 4. Working safely with Kdenlive
 
 - **Close the project in Kdenlive first.** Kdenlive does not notice files changed on disk and overwrites them when it saves; an external change to an open project is lost.
-- **Copies by default.** Editing tools write to the `destination` you give. Overwriting the original needs `overwrite=true` plus the `expected_sha256` of the version that was read. Replaced files are backed up as `<name>.backup-<timestamp>.kdenlive`.
+- **Copies by default.** Editing tools write to the `destination` you give. Overwriting the original needs `overwrite=true` plus the `expected_sha256` of the version that was read. Replaced files are backed up as `<name>.backup-<timestamp>.kdenlive` (the 5 most recent are kept).
 - **Disk state only.** Rendering uses the project saved on disk, not unsaved changes in a running Kdenlive.
 
 ## 5. Upgrade, check, uninstall

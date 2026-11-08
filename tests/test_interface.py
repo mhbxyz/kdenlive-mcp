@@ -30,6 +30,7 @@ async def test_tools_match_snapshot():
             "params": sorted(t.input_schema.get("properties", {})),
             "required": sorted(t.input_schema.get("required", [])),
             "read_only": bool(t.annotations and t.annotations.read_only_hint),
+            "output": sorted((t.output_schema or {}).get("properties", {})),
         }
         for t in tools
     }
@@ -45,6 +46,16 @@ def test_error_codes_are_documented():
     section = doc.split("### Error codes", 1)[1].split("\n## ", 1)[0]
     documented = set(re.findall(r"`([a-z_]+)`", section))
     assert raised == documented
+
+
+def test_every_error_code_is_exercised_by_a_test():
+    """Each documented code is expected by at least one test (#63)."""
+    raised = set()
+    for path in (ROOT / "src" / "mcp_kdenlive").glob("*.py"):
+        raised |= set(re.findall(r'ProjectError\(\s*"([a-z_]+)"', path.read_text(encoding="utf-8")))
+    tests = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "tests").rglob("*.py"))
+    untested = sorted(code for code in raised if f'"{code}"' not in tests)
+    assert untested == []
 
 
 def _run_check(tmp_path, pyproject_version: str, *args: str, changelog: str = "", server=None):

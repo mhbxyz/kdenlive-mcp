@@ -207,7 +207,7 @@ def _find(items: list[dict[str, Any]], position: int, target: _Target) -> dict[s
     found = [m for m in items if _int(m.get("pos")) == position]
     where = "the timeline" if target.label == TIMELINE else f"clip {target.label}"
     if not found:
-        raise ProjectError("not_found", f"No marker at frame {position} on {where}.")
+        raise ProjectError("marker_not_found", f"No marker at frame {position} on {where}.")
     if len(found) > 1:
         raise ProjectError(
             "unsupported_structure",
