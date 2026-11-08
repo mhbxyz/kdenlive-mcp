@@ -148,12 +148,12 @@ def is_wrapper(program: str | None, env: Mapping[str, str] | None = None) -> boo
     return Path(program).parent == cache_dir(env) / "flatpak-bin"
 
 
-@lru_cache(maxsize=4)
-def _permissions(where: str) -> str:
+@lru_cache(maxsize=8)
+def _permissions(where: str, program: str) -> str:
     """The app's effective `filesystems` (user overrides included), e.g. 'host;xdg-run/…'."""
     try:
         done = subprocess.run(  # noqa: S603 - fixed argument list
-            [FLATPAK, "info", f"--{where}", "--show-permissions", APP],
+            [program, "info", f"--{where}", "--show-permissions", APP],
             capture_output=True,
             text=True,
             timeout=15,
@@ -170,7 +170,7 @@ def _permissions(where: str) -> str:
 
 def permissions(env: Mapping[str, str] | None = None) -> str:
     where = installation(env)
-    return _permissions(where) if where else "host"
+    return _permissions(where, FLATPAK) if where else "host"
 
 
 def _xdg_dir(name: str, home: Path) -> Path:
