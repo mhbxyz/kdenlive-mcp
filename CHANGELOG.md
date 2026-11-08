@@ -18,6 +18,7 @@ migration notes in the same entry.
 ### Added
 
 - **Guides and clip markers (#12):** `list_markers`, `add_marker`, `update_marker` and `remove_marker` for timeline guides (chapters) and clip markers, with comments, categories and durations, in Kdenlive 26.08's format.
+- **Relink media (#17):** `relink_media` points bin clips at moved or replacement files, on the bin clip and every timeline instance, after checking with MLT that the new file covers what the timeline uses. New error code `media_mismatch`.
 
 - **Audio level and fades (#13):** `set_clip_volume` (constant dB level, Kdenlive's *Volume* effect) and `set_clip_fades` (fade-in/fade-out in frames, Kdenlive's *Fade in*/*Fade out*) on a clip's audio. `get_timeline` reports each clip's `audio` settings.
 

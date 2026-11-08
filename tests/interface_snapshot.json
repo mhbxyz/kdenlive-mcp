@@ -196,6 +196,21 @@
   ],
   "read_only": true
  },
+ "relink_media": {
+  "params": [
+   "destination",
+   "expected_sha256",
+   "mapping",
+   "overwrite",
+   "path"
+  ],
+  "required": [
+   "destination",
+   "mapping",
+   "path"
+  ],
+  "read_only": false
+ },
  "remove_clip": {
   "params": [
    "clip",

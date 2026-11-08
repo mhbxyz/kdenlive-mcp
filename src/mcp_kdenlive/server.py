@@ -28,6 +28,7 @@ from mcp_kdenlive import (
     writer,
 )
 from mcp_kdenlive import audio as audio_mod
+from mcp_kdenlive import relink as relink_mod
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.markers import MarkerEditResult
@@ -73,6 +74,7 @@ class EditResult(BaseModel):
     track: edits.TrackAdded | None = None
     timeline: timeline_edit.TimelineEditResult | None = None
     audio: audio_mod.AudioEditResult | None = None
+    relink: relink_mod.RelinkResult | None = None
 
 
 Revision = Annotated[
@@ -628,6 +630,41 @@ def _register_editing(server: MCPServer) -> None:
                 edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
             )
             return EditResult(saved=saved, media=added)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="relink_media",
+        title="Relink media",
+        annotations=EDIT,
+        description=(
+            "Point bin clips at new media files, for example after moving a media folder. "
+            "`mapping` maps a bin_id, a stored reference or a resolved path (from "
+            "list_project_media) to the new absolute path. Every copy of the clip (bin and "
+            "timeline instances) is updated; timing, ids and effects are kept. The new file is "
+            "read by MLT first: fewer frames than the timeline uses, or a missing video/audio "
+            "stream it uses, is refused ([media_mismatch]); other differences are warnings. "
+            "Clips using a proxy are refused. The result is written to `destination` with the "
+            "save_project_copy rules."
+        ),
+    )
+    def relink_media(
+        path: ProjectPath,
+        mapping: Annotated[
+            dict[str, str],
+            Field(description="{bin_id | old reference | old resolved path: new absolute path}"),
+        ],
+        destination: Destination,
+        overwrite: Overwrite = False,
+        expected_sha256: ExpectedSha = None,
+    ) -> EditResult:
+        try:
+            edit = writer.open_for_edit(path)
+            result = relink_mod.relink_media(edit, mapping)
+            saved = writer.save(
+                edit, destination, overwrite=overwrite, expected_sha256=expected_sha256
+            )
+            return EditResult(saved=saved, relink=result)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 
