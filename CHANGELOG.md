@@ -7,6 +7,13 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-08
+
+Coverage and compatibility (milestone M7): effects and crossfades, titles, subtitles, the melt
+render engine, Flatpak Kdenlive, other Kdenlive releases, and four end-to-end demos.
+**Contains a breaking change**: unknown tool arguments are now refused (see *Changed*, with its
+migration).
+
 ### Documentation
 
 - **Other Kdenlive releases (#66):** the official 24.12.3 and 25.04.3 AppImages, through `KDENLIVE_MCP_KDENLIVE`, are detected and render projects written by this server and by Kdenlive 26.08.2 (`docs/compatibility.md`; integration test with `KDENLIVE_MCP_TEST_KDENLIVE`). Projects *saved* by these releases are tracked in #86.
@@ -39,7 +46,7 @@ migration notes in the same entry.
 
 - **Chained crossfades (#92):** crossfades can follow each other (A→B→C) as in Kdenlive, clips alternating between the track's two layers; only a next clip on the *same* layer that is already in another crossfade is refused.
 
-- **Unknown arguments are refused (#15):** every tool now answers `[invalid_argument]` naming the unknown arguments and listing the accepted ones, instead of silently ignoring them (e.g. `bold` on `add_title`). Input schemas declare `additionalProperties: false`. **Migration:** drop arguments a tool does not list.
+- **Breaking — unknown arguments are refused (#15):** every tool now answers `[invalid_argument]` naming the unknown arguments and listing the accepted ones, instead of silently ignoring them (e.g. `bold` on `add_title`). Input schemas declare `additionalProperties: false`. **Migration:** drop arguments a tool does not list.
 
 - **Work folders (#65):** temporary folders for renders and MLT probes are created in `$XDG_CACHE_HOME/kdenlive-mcp/tmp` instead of the system temp folder.
 

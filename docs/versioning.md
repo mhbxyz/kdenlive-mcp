@@ -110,7 +110,25 @@ recorded session of a real client (Claude Code, Opus 5.5) doing a six-step in-pl
 | Annotations | Reads: read-only, idempotent. Writes: destructive (they may replace a file with `overwrite`), not idempotent. `cancel_render_job`: not read-only, idempotent. |
 | Error codes | One catalog (below); every code is raised in `src/` and expected by at least one test (`test_every_error_code_is_exercised_by_a_test`). `not_found` is only for project files; markers use `marker_not_found`. |
 
-Tools added in M7 get the same review before `1.0.0rc1` (#68).
+### Tools added in M7 (0.3)
+
+`list_effects`, `add_effect`, `update_effect`, `remove_effect`, `add_mix`, `remove_mix`,
+`add_title`, `list_subtitles`, `import_subtitles`, and `engine` on the render tools were reviewed
+against the decisions above, with four real-client sessions (the demos, `examples/demos/RESULTS.md`).
+
+| Topic | Decision |
+|---|---|
+| Names | `verb_object`, like the others; crossfades are `add_mix` / `remove_mix` (Kdenlive's *mix*), listed under `transitions` by `list_effects`. |
+| Writes | Every new edit tool takes `destination`, `overwrite`, `expected_sha256`; tools that address a clip take `clip` and `revision`. `add_title` and `import_subtitles` address no clip, like `insert_clip`. Side files (subtitles) are written with the project and listed in `saved.side_files`. |
+| Units | Frames for positions and durations (`duration`, `offset`, fades), pixels for title geometry, colours as `#RRGGBB[AA]`, effect parameters with their unit in `list_effects`. |
+| Addressing effects | By `index` in the clip's `effects` (as `get_timeline` lists them), not by an id: Kdenlive has none. |
+| Truncation | `list_subtitles.max_events` reports `truncated`. |
+| Unknown arguments | Refused on every tool (`[invalid_argument]`, schemas say `additionalProperties: false`), **breaking**: an option a tool does not have (e.g. `bold` on a title) is never silently dropped. |
+| Errors | One new code, `subtitles_exist`; everything else reuses the catalog. |
+| Annotations | Reads (`list_effects`, `list_subtitles`): read-only, idempotent. Writes: destructive, not idempotent. |
+
+Deferred to #68, from the real-client runs: subtitles written from text (no file), a loudness
+reading, frame extraction to check a render, and effect parameter values in `get_timeline`.
 
 ## One version, checked everywhere
 
