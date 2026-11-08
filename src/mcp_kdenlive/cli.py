@@ -7,6 +7,8 @@ import logging
 import sys
 
 from mcp_kdenlive import __version__
+from mcp_kdenlive.environment import EnvironmentReport, diagnose
+from mcp_kdenlive.server import build_server
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -28,9 +30,11 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _print_human(report) -> None:  # type: ignore[no-untyped-def]
-    print(f"kdenlive-mcp {report.server_version} on {report.platform.system} "
-          f"{report.platform.release} (Python {report.platform.python})")
+def _print_human(report: EnvironmentReport) -> None:
+    print(
+        f"kdenlive-mcp {report.server_version} on {report.platform.system} "
+        f"{report.platform.release} (Python {report.platform.python})"
+    )
     for tool in report.tools:
         flag = "required" if tool.required else "optional"
         line = f"  {tool.name:<9} {tool.status.value:<16} {flag:<9}"
@@ -46,18 +50,15 @@ def _print_human(report) -> None:  # type: ignore[no-untyped-def]
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    logging.basicConfig(level=args.log_level, stream=sys.stderr,
-                        format="%(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=args.log_level, stream=sys.stderr, format="%(levelname)s %(name)s: %(message)s"
+    )
     if args.command == "diagnose":
-        from mcp_kdenlive.environment import diagnose
-
         report = diagnose()
         if args.json:
             print(report.model_dump_json(indent=2))
         else:
             _print_human(report)
         return 0 if report.ready else 1
-    from mcp_kdenlive.server import build_server
-
     build_server().run("stdio")
     return 0

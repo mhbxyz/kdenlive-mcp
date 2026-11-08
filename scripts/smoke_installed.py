@@ -22,13 +22,16 @@ def main() -> None:
         if not found:
             raise SystemExit("FAIL: kdenlive-mcp console script not installed")
         exe = Path(found)
-    out = subprocess.run([str(exe), "--version"], capture_output=True, text=True, timeout=60, check=True)
+    out = subprocess.run(
+        [str(exe), "--version"], capture_output=True, text=True, timeout=60, check=True
+    )
     print(out.stdout.strip())
     if expected and out.stdout.strip() != f"kdenlive-mcp {expected}":
         raise SystemExit(f"FAIL: version {out.stdout.strip()!r} != {expected!r}")
 
-    proc = subprocess.Popen([str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(
+        [str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
 
     def send(msg: dict) -> dict | None:
         assert proc.stdin and proc.stdout
@@ -39,19 +42,36 @@ def main() -> None:
         while True:
             line = proc.stdout.readline()
             if not line:
-                raise SystemExit(f"FAIL: server closed stdout: {proc.stderr.read() if proc.stderr else ''}")
+                raise SystemExit(
+                    f"FAIL: server closed stdout: {proc.stderr.read() if proc.stderr else ''}"
+                )
             data = json.loads(line)  # raises if stdout carries non-protocol output
             if data.get("id") == msg["id"]:
                 return data
 
     try:
-        init = send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": {"name": "smoke", "version": "0"}}})
+        init = send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "smoke", "version": "0"},
+                },
+            }
+        )
         assert init and init["result"]["serverInfo"]["name"] == "kdenlive-mcp", init
         send({"jsonrpc": "2.0", "method": "notifications/initialized"})
-        call = send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                     "params": {"name": "diagnose_environment", "arguments": {}}})
+        call = send(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "diagnose_environment", "arguments": {}},
+            }
+        )
         assert call and call["result"]["isError"] is False, call
         ready = call["result"]["structuredContent"]["ready"]
         print(f"OK: stdio round trip, diagnose_environment ready={ready}")

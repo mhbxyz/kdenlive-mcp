@@ -9,8 +9,14 @@ from mcp_kdenlive import __version__
 
 
 def _run(args, env):
-    return subprocess.run([sys.executable, "-m", "mcp_kdenlive", *args], capture_output=True,
-                          text=True, timeout=60, env=dict(os.environ, **env), check=False)
+    return subprocess.run(
+        [sys.executable, "-m", "mcp_kdenlive", *args],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=dict(os.environ, **env),
+        check=False,
+    )
 
 
 def test_version():

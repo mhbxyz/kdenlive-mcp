@@ -21,7 +21,7 @@ ffprobe) are available on this machine before using project or rendering tools.
 The server works on local files only and never opens a network listener."""
 
 READ_ONLY = ToolAnnotations(
-    readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
+    read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False
 )
 
 

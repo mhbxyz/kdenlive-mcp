@@ -7,6 +7,7 @@ that helper processes cannot keep pipes open or survive the call.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -31,10 +32,8 @@ class Completed:
 
 
 def _kill_group(proc: subprocess.Popen[str]) -> None:
-    try:
+    with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
 
 
 def run(
