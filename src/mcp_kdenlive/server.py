@@ -13,7 +13,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import Field
 
-from mcp_kdenlive import __version__, kdenlive_doc, media, project, render
+from mcp_kdenlive import __version__, jobs, kdenlive_doc, media, project, render
 from mcp_kdenlive.environment import EnvironmentReport, diagnose
 from mcp_kdenlive.kdenlive_doc import ProjectError
 
@@ -39,8 +39,15 @@ def _tool_error(exc: ProjectError) -> ToolError:
     return ToolError(str(exc))
 
 
-def build_server() -> MCPServer:
+def build_server(job_manager: jobs.JobManager | None = None) -> MCPServer:
     """Create the MCP server with every tool registered."""
+    manager_holder: list[jobs.JobManager] = [job_manager] if job_manager else []
+
+    def manager() -> jobs.JobManager:
+        if not manager_holder:
+            manager_holder.append(jobs.JobManager())
+        return manager_holder[0]
+
     server = MCPServer(
         name=SERVER_NAME,
         title="Kdenlive MCP",
@@ -203,6 +210,95 @@ def build_server() -> MCPServer:
                 path, output, preset, overwrite=overwrite, allow_missing_media=allow_missing_media
             )
             return render.render(plan, timeout=timeout_seconds)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    job_annotations = ToolAnnotations(
+        read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False
+    )
+
+    @server.tool(
+        name="start_render",
+        title="Start render job",
+        description=(
+            "Start rendering a Kdenlive project in the background and return a job id "
+            "immediately. Same checks and guarantees as render_project (preset, output, "
+            "missing media, atomic publication after validation). Poll get_render_job for the "
+            "state (queued, running, succeeded, failed, cancelled) and cancel with "
+            "cancel_render_job. Jobs live in memory and are stopped when the server exits."
+        ),
+        annotations=job_annotations,
+    )
+    def start_render(
+        path: ProjectPath,
+        output: Annotated[str, Field(description="Absolute path of the file to create.")],
+        preset: Annotated[
+            str, Field(description="Kdenlive preset name (see list_render_presets).")
+        ] = render.DEFAULT_PRESET,
+        overwrite: Annotated[bool, Field(description="Replace an existing output file.")] = False,
+        allow_missing_media: Annotated[
+            bool, Field(description="Render even if media files are missing.")
+        ] = False,
+        timeout_seconds: Annotated[
+            float, Field(gt=0, le=render.MAX_TIMEOUT, description="Stop the render after this.")
+        ] = render.DEFAULT_TIMEOUT,
+    ) -> jobs.JobInfo:
+        try:
+            plan = render.prepare(
+                path, output, preset, overwrite=overwrite, allow_missing_media=allow_missing_media
+            )
+            return manager().submit(plan, timeout_seconds)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="get_render_job",
+        title="Get render job",
+        description=(
+            "State of a render job: queued (with queue position), running (elapsed time; "
+            "progress only when Kdenlive reports it), or ended with the full result "
+            "(exit status, output validation, log tail)."
+        ),
+        annotations=READ_ONLY,
+    )
+    def get_render_job(
+        job_id: Annotated[str, Field(description="Id returned by start_render.")],
+    ) -> jobs.JobInfo:
+        try:
+            return manager().get(job_id)
+        except ProjectError as exc:
+            raise _tool_error(exc) from exc
+
+    @server.tool(
+        name="list_render_jobs",
+        title="List render jobs",
+        description="List render jobs of this server session, most recent first.",
+        annotations=READ_ONLY,
+    )
+    def list_render_jobs() -> jobs.JobList:
+        return manager().list()
+
+    @server.tool(
+        name="cancel_render_job",
+        title="Cancel render job",
+        description=(
+            "Request cancellation of a queued or running render job. The returned job has "
+            "cancel_requested=true; its state becomes 'cancelled' once Kdenlive and its child "
+            "processes have exited and the partial output was removed. Cancelling a finished "
+            "job changes nothing."
+        ),
+        annotations=ToolAnnotations(
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=True,
+            open_world_hint=False,
+        ),
+    )
+    def cancel_render_job(
+        job_id: Annotated[str, Field(description="Id returned by start_render.")],
+    ) -> jobs.JobInfo:
+        try:
+            return manager().cancel(job_id)
         except ProjectError as exc:
             raise _tool_error(exc) from exc
 

@@ -342,12 +342,17 @@ class RenderRun:
                 "QT_QPA_PLATFORM": "offscreen",
                 "XDG_CONFIG_HOME": str(self.workdir / "config"),
                 "XDG_CACHE_HOME": str(self.workdir / "cache"),
+                # kdenlive_render looks for running Kdenlive instances (org.kde.kdenlive-* sockets)
+                # in the temp dir to report progress to them; a private TMPDIR keeps renders from
+                # talking to the user's open Kdenlive, and holds the temporary MLT scene list.
+                "TMPDIR": str(self.workdir / "tmp"),
                 "DBUS_SESSION_BUS_ADDRESS": f"unix:path={self.workdir / 'no-session-bus'}",
             }
         )
         environ.pop("DISPLAY", None)
         environ.pop("WAYLAND_DISPLAY", None)
         self.env = environ
+        (self.workdir / "tmp").mkdir()
         self.log_path = self.workdir / "render.log"
         self.started_at = time.monotonic()
         self.running: Running | None = None
@@ -369,8 +374,24 @@ class RenderRun:
         except OSError:
             return []
 
+    def progress(self) -> tuple[int, int] | None:
+        """(percent, frame) from kdenlive_render's own log, when it has written one."""
+        log = self.plan.temp_output.with_name(self.plan.temp_output.name + ".log")
+        try:
+            lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return None
+        for line in reversed(lines):
+            parts = line.split("\t")
+            if len(parts) == 3 and all(p.strip().isdigit() for p in parts):
+                percent, frame = int(parts[2]), int(parts[1])
+                if 0 <= percent <= 100:
+                    return percent, frame
+        return None
+
     def cleanup(self) -> None:
         self.plan.temp_output.unlink(missing_ok=True)
+        self.plan.temp_output.with_name(self.plan.temp_output.name + ".log").unlink(missing_ok=True)
         shutil.rmtree(self.workdir, ignore_errors=True)
 
     def finish(self, exit_code: int, *, cancelled: bool = False) -> RenderResult:

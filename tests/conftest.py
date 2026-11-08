@@ -37,3 +37,8 @@ def all_tools_stubbed(make_stub, stub_env) -> dict[str, str]:  # type: ignore[no
     make_stub("ffprobe", 'echo "ffprobe version n9.0.2 Copyright (c) 2007-2026"')
     make_stub("ffmpeg", 'echo "ffmpeg version n9.0.2 Copyright (c) 2000-2026"')
     return stub_env
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
