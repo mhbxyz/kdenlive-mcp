@@ -84,7 +84,8 @@ vulnerabilities inside those programs' decoders (FFmpeg parses media; keep it up
   - XDG directories;
   - plugin paths and library settings: `MLT_*`, `QT_*`, `KDE_*`, `FREI0R_PATH`, `LADSPA_PATH`, `LV2_PATH`, `LD_LIBRARY_PATH`, `LIBVA_*`, `VDPAU_*`, `MESA_*`, fontconfig;
   - `KDENLIVE_MCP_*`;
-  - only for the read-only Kdenlive window check (#62): `DBUS_SESSION_BUS_ADDRESS`.
+  - only for the read-only Kdenlive window check (#62): `DBUS_SESSION_BUS_ADDRESS`;
+  - only for melt renders (#90): `DISPLAY`, `WAYLAND_DISPLAY`, `XAUTHORITY`, because MLT 7.22's Qt module refuses to load without a display. Qt is still forced offscreen (`QT_QPA_PLATFORM=offscreen`), so no window is opened; Kdenlive renders never receive them. A Flatpak melt therefore also gets the display socket its app permissions allow.
 
   Tokens and credentials of other tools in the server's environment are not inherited.
 - **Render presets.** Kdenlive's preset files (system, user, downloaded) are data: with the melt engine only `key=value` encoder settings are passed, and presets naming outputs, inputs or URLs are refused (#42).

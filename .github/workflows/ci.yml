@@ -127,7 +127,7 @@ jobs:
       - name: Install Kdenlive, MLT and FFmpeg from Ubuntu
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends kdenlive melt ffmpeg fonts-dejavu-core
+          sudo apt-get install -y -q --no-install-recommends kdenlive melt ffmpeg fonts-dejavu-core xvfb xauth
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
@@ -135,4 +135,5 @@ jobs:
           enable-cache: false
       - run: uv sync
       - run: uv run kdenlive-mcp diagnose
-      - run: uv run pytest -ra -m "integration or e2e" -p no:cacheprovider --cov --cov-report=term
+      # MLT 7.22's Qt module (titles, track compositing) needs an X display, even offscreen (#90)
+      - run: xvfb-run -a uv run pytest -ra -m "integration or e2e" -p no:cacheprovider --cov --cov-report=term

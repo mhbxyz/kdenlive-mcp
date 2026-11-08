@@ -580,6 +580,11 @@ def prepare(
 
 
 # ---------------------------------------------------------------- execution ----------
+DISPLAY_VARIABLES = ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY")
+QT_MODULE_REFUSED = "The MLT Qt module requires a"  # "... X11 environment" / "X11 or Wayland ..."
+MAX_LOG_SCAN = 4 * 1024 * 1024
+
+
 class RenderRun:
     """One Kdenlive render process plus its private configuration directory."""
 
@@ -587,7 +592,8 @@ class RenderRun:
         self.plan = plan
         # In the server's cache, not /tmp: a Flatpak Kdenlive cannot see /tmp (#65).
         self.workdir = work_dir("kdenlive-mcp-render-", env)
-        environ = policy.child_env(env)
+        # The display variables are not in the child allow-list: Kdenlive renders never see them.
+        environ = policy.child_env(env, **self._display(plan, env))
         environ.update(
             {
                 "QT_QPA_PLATFORM": "offscreen",
@@ -602,8 +608,6 @@ class RenderRun:
                 "KDENLIVE_MCP_PRIVATE_DIRS": "1",
             }
         )
-        environ.pop("DISPLAY", None)
-        environ.pop("WAYLAND_DISPLAY", None)
         self.env = environ
         (self.workdir / "tmp").mkdir()
         self.log_path = self.workdir / "render.log"
@@ -654,6 +658,42 @@ class RenderRun:
         scene = self.workdir / "scene.kdenlive"
         scene.write_text(text, encoding="utf-8")
         return scene
+
+    @staticmethod
+    def _display(plan: RenderPlan, env: Mapping[str, str] | None) -> dict[str, str]:
+        """For melt only: MLT 7.22's Qt module (titles, qtblend track compositing) refuses to
+        load without an X11 display, even with QT_QPA_PLATFORM=offscreen (#90)."""
+        if plan.engine != "melt":
+            return {}
+        source = os.environ if env is None else env
+        return {k: source[k] for k in DISPLAY_VARIABLES if source.get(k)}
+
+    def _process_error(self, exit_code: int) -> str | None:
+        """Why the finished process cannot have produced a good render, if it cannot."""
+        plan = self.plan
+        program = "melt" if plan.engine == "melt" else "Kdenlive"
+        if exit_code != 0:
+            return f"{program} exited with status {exit_code}."
+        if plan.engine == "melt" and self._qt_module_refused():
+            return (
+                "MLT's Qt module did not load (no X11 display): titles would be MLT's 'INVALID' "
+                "placeholder and video tracks would not be composited. Give the server an X11 "
+                "display (DISPLAY, e.g. in the MCP client's env; Wayland alone is not enough "
+                "for MLT 7.22), run it under `xvfb-run -a`, or use a newer MLT (7.42 renders "
+                "headless)."
+            )
+        temp = plan.temp_output
+        if not temp.is_file() or temp.stat().st_size == 0:
+            return f"{program} reported success but produced no output file."
+        return None
+
+    def _qt_module_refused(self) -> bool:
+        try:
+            with self.log_path.open("rb") as fh:
+                head = fh.read(MAX_LOG_SCAN)
+        except OSError:
+            return False
+        return QT_MODULE_REFUSED.encode() in head
 
     def log_tail(self) -> list[str]:
         try:
@@ -721,14 +761,10 @@ class RenderRun:
                     "Render cancelled; partial output removed.",
                 )
                 return result
-            if exit_code != 0:
-                program = "melt" if plan.engine == "melt" else "Kdenlive"
-                result.error = f"{program} exited with status {exit_code}."
+            result.error = self._process_error(exit_code)
+            if result.error:
                 return result
             temp = plan.temp_output
-            if not temp.is_file() or temp.stat().st_size == 0:
-                result.error = "Kdenlive reported success but produced no output file."
-                return result
             result.validation = validate_output(temp, plan.expected_seconds)
             if not result.validation.ok:
                 result.error = "The produced file failed validation: " + "; ".join(

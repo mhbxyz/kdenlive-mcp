@@ -201,6 +201,55 @@ def test_melt_progress_is_read_from_its_log(no_cli_kdenlive):
     assert os.path.exists(str(plan.project_path))
 
 
+def test_melt_keeps_the_display_for_mlts_qt_module(no_cli_kdenlive):
+    """#90: MLT 7.22's Qt module (titles, qtblend compositing) refuses to load without X11."""
+    env, _, ws = no_cli_kdenlive
+    env = dict(env, DISPLAY=":99", WAYLAND_DISPLAY="wayland-9", XAUTHORITY="/x/auth", UNRELATED="u")
+    plan = render.prepare(str(ws / "kd26-ntsc-timeline.kdenlive"), str(ws / "o.mp4"), env=env)
+    run = render.RenderRun(plan, env)
+    assert {k: run.env.get(k) for k in ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY")} == {
+        "DISPLAY": ":99", "WAYLAND_DISPLAY": "wayland-9", "XAUTHORITY": "/x/auth",
+    }  # fmt: skip
+    assert run.env["QT_QPA_PLATFORM"] == "offscreen"  # no window either way
+    assert "UNRELATED" not in run.env
+    run.cleanup()
+
+
+def test_kdenlive_engine_still_runs_without_a_display(tmp_path, make_stub, stub_env, monkeypatch):
+    sysdata = tmp_path / "sys" / "kdenlive" / "export"
+    sysdata.mkdir(parents=True)
+    shutil.copy(PRESETS, sysdata / "profiles.xml")
+    make_stub("kdenlive", 'echo "--render --render-preset"')
+    env = dict(stub_env, XDG_DATA_DIRS=str(tmp_path / "sys"), XDG_DATA_HOME=str(tmp_path / "u"),
+               DISPLAY=":99", WAYLAND_DISPLAY="wayland-9")  # fmt: skip
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    shutil.copytree(FIX / "kd26", tmp_path / "p")
+    ws = tmp_path / "p"
+    plan = render.prepare(str(ws / "kd26-ntsc-timeline.kdenlive"), str(ws / "o.mp4"), env=env)
+    assert plan.engine == "kdenlive"
+    run = render.RenderRun(plan, env)
+    assert "DISPLAY" not in run.env and "WAYLAND_DISPLAY" not in run.env
+    run.cleanup()
+
+
+def test_melt_render_without_the_qt_module_fails_clearly(no_cli_kdenlive):
+    env, _, ws = no_cli_kdenlive
+    plan = render.prepare(str(ws / "kd26-ntsc-timeline.kdenlive"), str(ws / "o.mp4"), env=env)
+    run = render.RenderRun(plan, env)
+    run.log_path.write_text(
+        "[mlt_producer 0x1] The MLT Qt module requires a X11 environment.\n"
+        "Please either run melt from an X session or use a fake X server like xvfb:\n"
+        + "Current Frame: 1, percentage: 1\r"
+        * 5000  # the message is long gone from the tail
+    )
+    plan.temp_output.write_bytes(b"x")
+    result = run.finish(0)
+    assert result.state is render.RenderState.FAILED
+    assert result.error is not None and "xvfb-run" in result.error and "DISPLAY" in result.error
+    assert not plan.output.exists()
+
+
 # ------------------------------------------------------------------ real tools ---------
 needs_melt = pytest.mark.skipif(
     shutil.which("melt") is None or shutil.which("ffprobe") is None,
