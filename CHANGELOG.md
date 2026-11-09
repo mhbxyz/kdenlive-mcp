@@ -7,6 +7,13 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+### Changed
+
+- **README:** rewritten as the project's front page: what the server does and why, a demo video
+  (Claude Code cutting a trailer, Kdenlive showing each saved version, in `assets/`), a
+  "Linux only" badge and notice (#98), and the install steps. Settings, client configuration and
+  development instructions now live only in the documentation the README links to.
+
 ## [0.3.0] - 2026-11-08
 
 Coverage and compatibility (milestone M7): effects and crossfades, titles, subtitles, the melt
