@@ -17,7 +17,7 @@ titles and subtitles, mix the sound, render, and check the result. Everything ru
 machine, and what comes out is an ordinary Kdenlive project you can open and keep editing.
 
 <p align="center">
-  <a href="https://github.com/mhbxyz/kdenlive-mcp/blob/main/assets/kdenlive-mcp-demo.mp4">
+  <a href="https://github.com/mhbxyz/kdenlive-mcp/raw/main/assets/kdenlive-mcp-demo.mp4">
     <img src="https://github.com/mhbxyz/kdenlive-mcp/raw/main/assets/kdenlive-mcp-demo.webp"
          alt="Claude Code cutting a Big Buck Bunny trailer with kdenlive-mcp, while Kdenlive shows each saved version"
          width="100%">
@@ -26,7 +26,7 @@ machine, and what comes out is an ordinary Kdenlive project you can open and kee
   <sub><b>One prompt, one trailer, 2½ minutes.</b> Claude Code (left) cuts a 30-second trailer:
   six shots, crossfades, titles, subtitles, music, effects and guides, then renders it and checks
   the file. Kdenlive (right) opens each version as it is saved. Sped up 4×;
-  <a href="https://github.com/mhbxyz/kdenlive-mcp/blob/main/assets/kdenlive-mcp-demo.mp4">watch the full video with the rendered trailer and its sound</a>.</sub>
+  <a href="https://github.com/mhbxyz/kdenlive-mcp/raw/main/assets/kdenlive-mcp-demo.mp4">full video with the rendered trailer and its sound</a> (MP4, 15 MB).</sub>
 </p>
 
 > [!IMPORTANT]
