@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 
 from pydantic import BaseModel, Field
 
+from mcp_kdenlive import fontmetrics
 from mcp_kdenlive.edits import _next_bin_id, _next_id
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.policy import child_env
@@ -179,6 +180,36 @@ def _box(
     return TitleBox(x=mx, y=top, width=width - 2 * mx, height=box_height)
 
 
+def text_width(font: str, italic: bool, size: int, text: str) -> float | None:
+    """Width of the widest line in pixels, from the font file fontconfig picks, or None."""
+    path = fontmetrics.font_file(font, italic=italic)
+    return None if path is None else fontmetrics.text_width(path, size, text)
+
+
+def _fit(
+    box: TitleBox, width: float | None, align: str, frame_width: int, warnings: list[str]
+) -> TitleBox:
+    """Shrink the box to the text and put it where the alignment places the text (#15).
+
+    Kdenlive's title editor shows a text item at its position with the text's own width: a box
+    across the frame with centred text would show, and be saved back, at the box's left edge.
+    """
+    if width is None:
+        warnings.append(
+            "The text width could not be measured from the font file: the title is drawn as "
+            "asked, but Kdenlive's title editor will show it at the left of its box "
+            f"(x={box.x}) and keep it there if you edit it."
+        )
+        return box
+    if width > box.width:
+        warnings.append(
+            f"The text is about {round(width)} px wide, wider than the {box.width} px available."
+        )
+    offset = {"left": 0.0, "center": (box.width - width) / 2, "right": box.width - width}[align]
+    left = max(0, min(round(box.x + offset), frame_width - 1))
+    return TitleBox(x=left, y=box.y, width=max(1, round(width)), height=box.height)
+
+
 def _document(
     text: str,
     frames: int,
@@ -272,6 +303,7 @@ def add_title(
     box = _box(*size, text.count("\n") + 1, font_size, vertical, x, y)
     warnings: list[str] = []
     family, checked = _font(font, warnings)
+    box = _fit(box, text_width(family, italic, font_size, text), align, size[0], warnings)
     emoji = sorted({c for c in text if ord(c) in EMOJI})
     if emoji:
         warnings.append(

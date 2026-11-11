@@ -9,11 +9,16 @@ migration notes in the same entry.
 
 ### Fixed
 
+- **Titles edited in Kdenlive moved to the left (#15):** a centred or right-aligned title made
+  by `add_title` jumped to the left of the frame as soon as it was changed in Kdenlive's title
+  editor (*Update Title*). The editor places a text item at its position with the text's own
+  width and ignores the wider box the server wrote. The server now measures the text from the
+  font file and writes it where it appears, like Kdenlive; `title.box` reports that box. Found
+  during the manual checks (#67).
 - **melt engine and proxy clips (#42):** a project where Kdenlive used a proxy for a clip was
   rendered from the proxy (Kdenlive stores the proxy as the clip's `resource`), so the result was
   blurred, 640 pixels wide scaled up. The melt engine now renders those clips from their original
   media, like Kdenlive, and warns how many it switched. The `kdenlive` engine was not affected.
-
 - **Rendering projects saved by Kdenlive 24.12 or 25.04 (#86):** when a subtitle ended after the
   last clip, `render_project` and `start_render` rejected a correct render ("duration differs from
   the timeline"). These releases end the project's output at the last subtitle, and melt and

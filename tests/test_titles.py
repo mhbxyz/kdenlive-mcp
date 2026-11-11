@@ -18,8 +18,9 @@ Captured in the GUI lab (research/lab): a .kdenlivetitle opened in the title edi
      <background color="0,0,0,0"/>
     </kdenlivetitle>
 
-MLT's kdenlivetitle producer centres the text inside `box-width` when `alignment` is 4
-(Qt::AlignHCenter), which the server uses for centred titles (checked with melt 7.42).
+MLT's kdenlivetitle producer aligns lines inside `box-width` (`alignment` 4 = Qt::AlignHCenter),
+but Kdenlive's title editor ignores `box-width` for ordinary text: it shows the item at its
+position with the text's own width. So the server writes the text box where the text is (#15).
 """
 
 from __future__ import annotations
@@ -40,9 +41,15 @@ FIX = Path(__file__).parent / "fixtures"
 FONTS = {"Noto Sans", "DejaVu Sans", "Liberation Serif"}
 
 
+def fake_width(font: str, italic: bool, size: int, text: str) -> float:
+    """Half the font size per character of the longest line (real fonts: fontmetrics)."""
+    return size * 0.5 * max(len(line) for line in text.split("\n"))
+
+
 @pytest.fixture
 def s(tmp_path, monkeypatch) -> Session:
     monkeypatch.setattr(titles, "installed_fonts", lambda: FONTS)
+    monkeypatch.setattr(titles, "text_width", fake_width)
     shutil.copytree(FIX / "kd26", tmp_path / "p")
     session = Session(tmp_path / "p")  # kd26-ntsc-timeline: 1280x720 29.97, AV clip [0,60)
     session.apply(edits.add_track, "video")  # V2, above the footage
@@ -125,12 +132,17 @@ def test_style(s):
 @pytest.mark.parametrize(
     ("options", "alignment", "x", "y", "width"),
     [
-        # presets: a box inside 5 % margins (64 px, 36 px); one line of 80 px is 109 px high
-        ({}, "4", 64, 305, 1152),  # centred
-        ({"vertical": "bottom"}, "4", 64, 575, 1152),  # 720 - 36 - 109
-        ({"vertical": "top", "align": "left"}, "1", 64, 36, 1152),
-        ({"align": "right"}, "2", 64, 305, 1152),
-        ({"x": 300, "y": 200, "align": "left"}, "1", 300, 200, 980),  # box to the right edge
+        # Kdenlive's title editor places a text item at its position with the text's own width
+        # (box-width only matters for "%s" templates), so the server writes where the text is:
+        # "Titre" at 80 px is 200 px wide here; inside 5 % margins (64 px, 36 px), 1152 px wide;
+        # one line of 80 px is 109 px high.
+        ({}, "4", 540, 305, 200),  # centred: 64 + (1152 - 200) / 2
+        ({"vertical": "bottom"}, "4", 540, 575, 200),  # 720 - 36 - 109
+        ({"vertical": "top", "align": "left"}, "1", 64, 36, 200),
+        ({"align": "right"}, "2", 1016, 305, 200),  # 64 + 1152 - 200
+        ({"x": 300, "y": 200, "align": "left"}, "1", 300, 200, 200),
+        ({"x": 300, "y": 200, "align": "center"}, "4", 690, 200, 200),  # centred in [300, 1280)
+        ({"x": 300, "y": 200, "align": "right"}, "2", 1080, 200, 200),  # ends at the edge
     ],
 )
 def test_position(s, options, alignment, x, y, width):
@@ -319,3 +331,64 @@ def test_bin_ids_do_not_reuse_folder_ids(s, tmp_path):
     s.current = tmp_path / "folders.kdenlive"
     s.current.write_text(text, encoding="utf-8")
     assert int(s.apply(titles.add_title, "Hi", "V2", 0).bin_id) > 40
+
+
+def test_unmeasured_text_keeps_a_box_across_the_frame(s, monkeypatch):
+    """Without font metrics the box spans the safe area: MLT still centres the text, but
+    Kdenlive's title editor would show it at the box's left edge, so the result says so."""
+    monkeypatch.setattr(titles, "text_width", lambda *a: None)
+    r = s.apply(titles.add_title, "Titre", "V2", 0, font_size=80)
+    content = document(s, r.bin_id).find("item/content")
+    assert content is not None and content.get("box-width") == "1152"
+    assert (r.box.x, r.box.width) == (64, 1152)
+    assert any("title editor" in w for w in r.warnings)
+
+
+def test_text_wider_than_the_safe_area(s):
+    r = s.apply(titles.add_title, "W" * 40, "V2", 0, font_size=80)  # 1600 px here
+    assert r.box.x == 0 and r.box.width == 1600  # centred on the frame, clamped at its left
+    assert any("wider than" in w for w in r.warnings)
+
+
+# ------------------------------------------------------------------ font metrics -------
+def _system_font() -> Path | None:
+    from mcp_kdenlive import fontmetrics
+
+    for family in ("Noto Sans", "DejaVu Sans", "Liberation Sans"):
+        found = fontmetrics.font_file(family, italic=False)
+        if found:
+            return found
+    return None
+
+
+def test_font_metrics_read_advance_widths():
+    from mcp_kdenlive import fontmetrics
+
+    path = _system_font()
+    if path is None:
+        pytest.skip("no Noto Sans, DejaVu Sans or Liberation Sans")
+    width = fontmetrics.text_width(path, 100, "WWWW")
+    assert width is not None and width > 0
+    assert width == pytest.approx(4 * (fontmetrics.text_width(path, 100, "W") or 0))
+    assert (fontmetrics.text_width(path, 100, "iiii") or 0) < width
+    two_lines = fontmetrics.text_width(path, 100, "ii\nWWWW")
+    assert two_lines == pytest.approx(width)  # the widest line
+
+
+def test_noto_sans_matches_kdenlive_title_editor():
+    """Kdenlive 26.08.2's title editor reports 473 px for this line at 90 px (box-width)."""
+    from mcp_kdenlive import fontmetrics
+
+    path = fontmetrics.font_file("Noto Sans", italic=False)
+    if path is None or "NotoSans" not in path.name:
+        pytest.skip("Noto Sans is not installed")
+    assert fontmetrics.text_width(path, 90, "Été à Kyōto\nJour 1") == pytest.approx(473, abs=2)
+
+
+def test_unreadable_font_files_give_no_width(tmp_path):
+    from mcp_kdenlive import fontmetrics
+
+    bad = tmp_path / "bad.ttf"
+    bad.write_bytes(b"not a font")
+    assert fontmetrics.text_width(bad, 90, "Hi") is None
+    assert fontmetrics.text_width(tmp_path / "missing.ttf", 90, "Hi") is None

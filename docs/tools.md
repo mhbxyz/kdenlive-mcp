@@ -534,7 +534,7 @@ editor (manual check on #15); nothing is turned into an image.
 | `font`, `font_size` | An installed family (checked with fontconfig, case-insensitive; default: the first installed of Noto Sans, DejaVu Sans, Liberation Sans, Cantarell, Arial); pixels, default 1/12 of the frame height. |
 | `color`, `outline`, `outline_color`, `italic` | `#RRGGBB` or `#RRGGBBAA`; outline width 0–50 px. |
 | `align`, `vertical` | `left`/`center`/`right` × `top`/`center`/`bottom`, inside 5 % margins. |
-| `x`, `y` | Instead of `vertical`: top-left of the text box in pixels (both or neither); the box then reaches the right edge and `align` applies inside it. |
+| `x`, `y` | Instead of `vertical`: top-left of the area in pixels (both or neither); the area then reaches the right edge and `align` places the text inside it. |
 
 - **Result** (`title`): `bin_id` (use `insert_clip` to place the same title again), `font`
   actually used, `font_checked`, `box` (`x`, `y`, `width`, estimated `height`), `clips`
@@ -549,14 +549,22 @@ editor (manual check on #15); nothing is turned into an image.
   when `fc-list` cannot be run the font is not checked and a warning says so (MLT then
   substitutes a font). Fonts are looked up on every call, so a newly installed font is found.
   A Flatpak Kdenlive sees the fonts of its runtime and of the host (`/run/host/fonts`).
+- **Placement, as Kdenlive's title editor sees it (#15):** the editor shows a text item at its
+  stored position with the width of the text itself (the stored box width only matters for
+  `%s` templates). So the server measures the text (glyph advances from the font file
+  fontconfig picks, within about 1 px of Kdenlive on its own titles) and writes the item where
+  the alignment puts the text: a centred title stays centred when it is edited in Kdenlive.
+  `box` reports that text box. When the width cannot be measured (no `fc-match`, unreadable
+  font), the box spans the area as before and a warning says the editor will show the text at
+  its left edge; text wider than the area is warned about.
 - **Vertical position is estimated:** the box height is `lines × font_size × 1.3625` (measured
   on Kdenlive's own titles with Noto Sans); other fonts may sit a few pixels higher or lower.
 - **Not supported:** bold, underline, shadows, gradients, images, scrolling, typewriter and
   several text items per title; edit them in Kdenlive's title editor. Passing such an option is
   refused (`[invalid_argument]`, like any unknown argument of any tool).
 - **Sizes and timing:** text taller than the frame inside the margins, or an `x` that leaves the
-  box narrower than the font size, is `[invalid_range]`; the width of the text itself is not
-  measured. A title lasts `duration` frames: `trim_clip` can shorten it but not extend it past
+  box narrower than the font size, is `[invalid_range]`; text wider than the frame is only
+  warned about. A title lasts `duration` frames: `trim_clip` can shorten it but not extend it past
   that (Kdenlive's editor can); make a longer one with `add_title` instead.
 - **Emoji** (U+1F000–U+1FAFF) are not drawn by MLT's title renderer (seen with MLT 7.42): the
   result carries a warning. CJK text renders through font fallback; symbols such as ☀ ✂ ★ render
