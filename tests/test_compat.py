@@ -105,6 +105,11 @@ def test_melt_renders_every_complete_fixture(entry, tmp_path):
         check=False,
     ).stdout.strip()
     expected = entry["active_duration_frames"]
+    if "render_frames" in entry:
+        # Kdenlive 24.12 and 25.04 end the project output at the last subtitle, not the last
+        # clip (#86, docs/compatibility.md).
+        assert int(frames) == entry["render_frames"]
+        return
     # Kdenlive 26.08 stores a project tractor one frame longer than the last clip (docs/tools.md).
     assert int(frames) in (expected, expected + 1)
 

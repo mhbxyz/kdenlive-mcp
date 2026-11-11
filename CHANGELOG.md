@@ -14,6 +14,20 @@ migration notes in the same entry.
   blurred, 640 pixels wide scaled up. The melt engine now renders those clips from their original
   media, like Kdenlive, and warns how many it switched. The `kdenlive` engine was not affected.
 
+- **Rendering projects saved by Kdenlive 24.12 or 25.04 (#86):** when a subtitle ended after the
+  last clip, `render_project` and `start_render` rejected a correct render ("duration differs from
+  the timeline"). These releases end the project's output at the last subtitle, and melt and
+  `kdenlive --render` render that length. The expected duration is now the project's output (its
+  project tractor), and the sequence's duration only when the file has none.
+
+### Added
+
+- **Fixtures saved by Kdenlive 24.12.3 and 25.04.3 (#86):** crossfades, subtitles, a montage,
+  keyframed effects, guides and a title, each saved by the official AppImages. They read like
+  the 26.08.2 files they came from, survive a no-op save, can be edited and render with melt.
+  `docs/compatibility.md` lists the format differences. `research/lab/kdx11.py` drives an
+  isolated Kdenlive (AppImages included) on a private X display.
+
 ### Changed
 
 - **README:** rewritten as the project's front page: what the server does and why, a demo video

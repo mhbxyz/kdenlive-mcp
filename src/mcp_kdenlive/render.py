@@ -31,7 +31,7 @@ from mcp_kdenlive import flatpak, kdenlive_doc, media, policy, project, safexml
 from mcp_kdenlive.environment import check_visible, locate, work_dir
 from mcp_kdenlive.errors import ProjectError
 from mcp_kdenlive.process import ProcessTimeout, Running, run, start
-from mcp_kdenlive.timecode import FrameRate
+from mcp_kdenlive.timecode import FrameRate, frames_to_seconds
 
 DEFAULT_PRESET = "MP4-H264/AAC"
 DEFAULT_TIMEOUT = 3600.0
@@ -577,7 +577,7 @@ def prepare(
         preset=chosen,
         overwrite=overwrite,
         kdenlive=kdenlive_exe or "",
-        expected_seconds=active.duration_seconds if active else None,
+        expected_seconds=_expected_seconds(doc, active),
         sequence=active.name if active else None,
         temp_output=temp,
         warnings=warnings,
@@ -813,6 +813,18 @@ def _proxied_clips(doc: kdenlive_doc.KdenliveDocument) -> dict[str, str]:
         if proxy and proxy != "-" and original and p.get("resource") == proxy:
             found[proxy] = original
     return found
+
+
+def _expected_seconds(
+    doc: kdenlive_doc.KdenliveDocument, active: project.SequenceSummary | None
+) -> float | None:
+    """The duration a render must have: the project output, else the active sequence."""
+    if active is None:
+        return None
+    frames = doc.output_frames()
+    if frames is None:
+        return active.duration_seconds
+    return round(frames_to_seconds(frames, doc.rate), 3)
 
 
 def validate_output(path: Path, expected_seconds: float | None) -> OutputValidation:

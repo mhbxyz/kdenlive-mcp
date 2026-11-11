@@ -583,3 +583,22 @@ def test_render_failed_when_kdenlive_cannot_start(env, tmp_path, fake_probe, mon
         render.render(plan, timeout=5, env=env)
     assert err.value.code == "render_failed"
     monkeypatch.setattr(render.RenderRun, "start", original)
+
+
+@pytest.mark.parametrize(
+    ("fixture", "seconds"),
+    [
+        ("kd26/kd26-subtitle.kdenlive", 2.035),  # 26.08: one frame after the last clip
+        # 24.12 and 25.04 end the output at the last subtitle (7.007 s), past the clips (#86)
+        ("kd26/kd24.12-subtitle.kdenlive", 7.007),
+        ("kd26/kd25.04-subtitle.kdenlive", 7.007),
+        ("kd26/kd26-ntsc-timeline.kdenlive", 2.002),
+        ("kd26/generated-montage.kdenlive", 6.340),  # written by this server: the clips
+    ],
+)
+def test_expected_duration_is_the_project_output(env, tmp_path, fixture, seconds):
+    """What melt and kdenlive --render produce: the project's output tractor, not the clips."""
+    plan = render.prepare(
+        str((FIX / fixture).resolve()), str(tmp_path / "o.mp4"), env=env, engine="kdenlive"
+    )
+    assert plan.expected_seconds == pytest.approx(seconds, abs=0.001)
