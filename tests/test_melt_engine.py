@@ -321,3 +321,67 @@ def _mean_volume(path: Path) -> float:
     ).stderr  # fmt: skip
     match = re.search(r"mean_volume: (-?[\d.]+) dB", err)
     return float(match.group(1)) if match else -91.0
+
+
+def _use_proxy(project: Path, original: str, proxy: str) -> None:
+    """Make `project` look like Kdenlive saved it with a proxy for `original` (#42):
+    Kdenlive stores the proxy as the clip's `resource` and the media in `kdenlive:originalurl`."""
+    import xml.etree.ElementTree as ET
+
+    from mcp_kdenlive import safexml
+
+    root = safexml.parse_bytes(project.read_bytes())
+    for element in root:
+        if element.tag not in ("producer", "chain"):
+            continue
+        props = {p.get("name"): p for p in element.findall("property")}
+        if props.get("resource") is None or props["resource"].text != original:
+            continue
+        props["resource"].text = proxy
+        for name, value in (("kdenlive:proxy", proxy), ("kdenlive:originalurl", original)):
+            if name not in props:
+                props[name] = ET.SubElement(element, "property", {"name": name})
+            props[name].text = value
+    ET.ElementTree(root).write(project, encoding="utf-8", xml_declaration=True)
+
+
+def test_melt_renders_the_original_media_not_the_proxy(no_cli_kdenlive):
+    """Kdenlive renders proxied clips from their original media; so must the melt engine."""
+    env, args_file, ws = no_cli_kdenlive
+    shutil.copy(ws / "media" / "pal clip é.mp4", ws / "ntsc-proxy & co.mov")
+    project = ws / "kd26-ntsc-timeline.kdenlive"
+    _use_proxy(project, "media/ntsc.mp4", "ntsc-proxy & co.mov")
+    plan = render.prepare(str(project), str(ws / "out.mp4"), env=env, engine="melt")
+    assert any("proxy" in w and "original" in w for w in plan.warnings)
+    run = render.RenderRun(plan, env)
+    run.start()
+    assert run.running is not None
+    run.running.proc.wait(10)
+    scene = Path(args_file.read_text().splitlines()[0]).read_text(encoding="utf-8")
+    assert '<property name="resource">ntsc-proxy &amp; co.mov</property>' not in scene
+    assert scene.count('<property name="resource">media/ntsc.mp4</property>') == 3
+    assert scene.count('<property name="kdenlive:proxy">ntsc-proxy &amp; co.mov</property>') == 3
+    assert "ntsc-proxy &amp; co.mov" in project.read_text(encoding="utf-8")  # project untouched
+    run.cleanup()
+
+
+@pytest.mark.integration
+@needs_melt
+def test_melt_render_of_a_proxied_project_matches_the_original(tmp_path):
+    shutil.copytree(FIX / "kd26", tmp_path / "p")
+    ws = tmp_path / "p"
+    reference = render.render(
+        render.prepare(str(ws / "kd26-ntsc-timeline.kdenlive"), str(tmp_path / "ref.mp4"),
+                       engine="melt"),
+        timeout=300,
+    )  # fmt: skip
+    assert reference.state is render.RenderState.SUCCEEDED
+    shutil.copy(ws / "media" / "pal clip é.mp4", ws / "proxy.mov")
+    _use_proxy(ws / "kd26-ntsc-timeline.kdenlive", "media/ntsc.mp4", "proxy.mov")
+    result = render.render(
+        render.prepare(str(ws / "kd26-ntsc-timeline.kdenlive"), str(tmp_path / "o.mp4"),
+                       engine="melt"),
+        timeout=300,
+    )  # fmt: skip
+    assert result.state is render.RenderState.SUCCEEDED, result.error or result.log_tail
+    assert _mean_rgb(tmp_path / "o.mp4", 1.0) == _mean_rgb(tmp_path / "ref.mp4", 1.0)

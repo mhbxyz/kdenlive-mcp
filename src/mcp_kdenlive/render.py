@@ -52,9 +52,13 @@ _NOISE = (
 ENGINES = {"auto", "kdenlive", "melt"}
 MELT_PROGRESS = re.compile(r"Current Frame:\s*(\d+), percentage:\s*(\d+)")
 MELT_NOTE = (
-    "Rendered with MLT's melt, not Kdenlive's own render path: proxy clips, render zones and "
+    "Rendered with MLT's melt, not Kdenlive's own render path: render zones and "
     "Kdenlive-specific render options are ignored, and the preset's defaults are used for "
     "quality, bitrate and speed."
+)
+PROXY_NOTE = (
+    "{count} clip(s) use a proxy: rendered from the original media, like Kdenlive "
+    "(proxies are for editing only)."
 )
 
 
@@ -354,6 +358,7 @@ class RenderPlan:
     melt: str | None = None
     consumer_args: list[str] = field(default_factory=list)
     effective_root: Path | None = None
+    proxies: dict[str, str] = field(default_factory=dict)  # proxy reference -> original
 
 
 def _bounded_tail(text: str) -> list[str]:
@@ -558,9 +563,13 @@ def prepare(
     _check_sandbox_paths(doc, out, report, engine, kdenlive_exe, melt_exe, environ)
     temp = out.with_name(f".{out.name}.kdenlive-mcp-{uuid.uuid4().hex[:8]}.partial{out.suffix}")
     consumer: list[str] = []
+    proxies: dict[str, str] = {}
     if engine == "melt":
         definitions = preset_definitions([path for path, _ in preset_files(environ)])
         consumer = melt_consumer_args(definitions.get(chosen.name, {}), doc.rate)
+        proxies = _proxied_clips(doc)
+        if proxies:
+            warnings.append(PROXY_NOTE.format(count=len(proxies)))
     return RenderPlan(
         project_path=doc.path,
         project_sha256=doc.info.sha256,
@@ -575,6 +584,7 @@ def prepare(
         engine=engine,
         melt=melt_exe,
         consumer_args=consumer,
+        proxies=proxies,
         effective_root=Path(media._Resolver(doc).effective),
     )
 
@@ -649,8 +659,17 @@ class RenderRun:
         Kdenlive (and this server) treat a stored root that no longer exists as a moved project
         and resolve relative media against the project's folder; melt does not, and renders a
         blank, silent picture (found in the #42 review).
+
+        Clips using a proxy are switched back to their original media, as Kdenlive does when it
+        renders: the file stores the proxy as their `resource` (#42).
         """
         text = self.plan.project_path.read_text(encoding="utf-8")
+        for proxy, original in self.plan.proxies.items():
+            for name in ("resource", "warp_resource"):
+                text = text.replace(
+                    f'<property name="{name}">{html.escape(proxy, quote=False)}</property>',
+                    f'<property name="{name}">{html.escape(original, quote=False)}</property>',
+                )
         root = html.escape(str(self.plan.effective_root), quote=True)
         text, count = re.subn(r'(<mlt\b[^>]*?\sroot=)"[^"]*"', rf'\1"{root}"', text, count=1)
         if not count:
@@ -781,6 +800,19 @@ class RenderRun:
             return result
         finally:
             self.cleanup()
+
+
+def _proxied_clips(doc: kdenlive_doc.KdenliveDocument) -> dict[str, str]:
+    """Proxy reference -> original reference, for clips whose stored resource is their proxy."""
+    found: dict[str, str] = {}
+    for element in doc.root:
+        if element.tag not in ("producer", "chain"):
+            continue
+        p = kdenlive_doc.props(element)
+        proxy, original = p.get("kdenlive:proxy"), p.get("kdenlive:originalurl")
+        if proxy and proxy != "-" and original and p.get("resource") == proxy:
+            found[proxy] = original
+    return found
 
 
 def validate_output(path: Path, expected_seconds: float | None) -> OutputValidation:
