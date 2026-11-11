@@ -3,8 +3,10 @@
 `kdenlive-mcp` lets an AI assistant that speaks MCP inspect, edit and render your Kdenlive
 projects **on your own Linux machine**. It runs locally over stdio; nothing is sent anywhere.
 
-> **Release status.** The first public release is **0.1.0** (PyPI `mcp-kdenlive`). Features
-> listed in the roadmap (#1) but not in [docs/tools.md](tools.md) are **planned**, not available.
+> **Release status.** The latest release is on [PyPI](https://pypi.org/project/mcp-kdenlive/)
+> (`mcp-kdenlive`, see the [changelog](../CHANGELOG.md)); 1.0 release candidates are installed
+> with `pipx install --pip-args=--pre mcp-kdenlive`. Features listed in the roadmap (#1) but not
+> in [docs/tools.md](tools.md) are **planned**, not available.
 
 ## 1. Install the system programs
 

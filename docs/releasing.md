@@ -55,8 +55,8 @@ tag vX.Y.Z[rcN] ─► build (once)
 `docs/versioning.md` (*Path to 1.0*) defines when 1.0 can be released. For release candidates:
 
 - **Rehearsals** (`0.y.zrcN`) stop after TestPyPI, as described in *Pipeline*.
-- **`1.0.0rcN`** must be installable by testers. Before tagging it, `release.yml` is changed
-  (#68) so that `rc` tags of a `1.0.0` release also go to **PyPI**, where installers ignore
+- **`1.0.0rcN`** must be installable by testers: `release.yml` sends `rc` tags of a `1.0.0`
+  release (and only those) to **PyPI** too (#68, output `to_pypi`), where installers ignore
   pre-releases unless asked (`pipx install --pip-args=--pre mcp-kdenlive==1.0.0rc1`). They do
   **not** go to the MCP Registry, so registry users keep the latest final version.
 - **Feedback log:** each real project used during the period (what was done, client, Kdenlive

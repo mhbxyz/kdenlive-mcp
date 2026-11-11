@@ -7,6 +7,19 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+## [1.0.0rc1] - 2026-11-11
+
+First release candidate of 1.0 (milestone M8). The interface is frozen: from 1.0.0 on, a breaking
+change needs a new major version (`docs/versioning.md`). Published to PyPI as a pre-release for
+the feedback period (#68): `pipx install --pip-args=--pre mcp-kdenlive==1.0.0rc1`. No breaking
+change since 0.3.0.
+
+**Tested automatically:** unit, integration and end-to-end suites on Python 3.11–3.14, Kdenlive
+23.08 (CI) and 26.08.2 (locally), renders through 24.12.3, 25.04.3 and 26.08.3 (AppImages) and the
+Flathub Kdenlive, projects saved by 24.12.3 and 25.04.3, four demos played by an MCP client.
+**Verified by hand:** the GUI checklists of #8–#17, #42, #61, #62 and #65 in Kdenlive 26.08.2,
+and a round trip of 22 projects through Kdenlive 26.08.3 (`docs/compatibility.md`, #67).
+
 ### Fixed
 
 - **Titles edited in Kdenlive moved to the left (#15):** a centred or right-aligned title made

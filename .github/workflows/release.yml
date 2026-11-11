@@ -2,6 +2,7 @@ name: Release
 
 # Publishes only for maintainer-created tags vX.Y.Z (final) or vX.Y.ZaN/bN/rcN (pre-release).
 #   pre-release tags: build → TestPyPI → verify install from TestPyPI → GitHub pre-release
+#   1.0.0rcN tags:    build → TestPyPI → verify install → PyPI → GitHub pre-release (testers, #68)
 #   final tags:       build → TestPyPI → verify install → PyPI → MCP Registry → GitHub release
 # The exact files built in `build` are the ones published everywhere. No long-lived tokens:
 # PyPI Trusted Publishing (OIDC) through the `testpypi` / `pypi` environments (tags v* only).
@@ -30,6 +31,7 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
+      to_pypi: ${{ steps.meta.outputs.to_pypi }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,7 +48,12 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [[ "$version" =~ (a|b|rc)[0-9]+$ ]]; then echo "prerelease=true"; else echo "prerelease=false"; fi >> "$GITHUB_OUTPUT"
+          if [[ "$version" =~ (a|b|rc)[0-9]+$ ]]; then prerelease=true; else prerelease=false; fi
+          # Release candidates of 1.0.0 go to PyPI for the feedback period: installers skip them
+          # unless asked (--pre). They never go to the MCP Registry (docs/releasing.md, #68).
+          if [[ "$prerelease" == false || "$version" =~ ^1\.0\.0rc[0-9]+$ ]]; then to_pypi=true; else to_pypi=false; fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "to_pypi=$to_pypi" >> "$GITHUB_OUTPUT"
       - run: uv build --no-sources
       - run: uv run --no-project python scripts/check_dist.py dist
       - name: Smoke-test the exact artifacts
@@ -130,7 +137,7 @@ jobs:
   pypi:
     name: Publish to PyPI
     needs: [build, verify-testpypi]
-    if: needs.build.outputs.prerelease == 'false'
+    if: needs.build.outputs.to_pypi == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
@@ -210,6 +217,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
           PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          TO_PYPI: ${{ needs.build.outputs.to_pypi }}
         run: |
           set -euo pipefail
           python3 scripts/release_notes.py "$VERSION" > notes.md
@@ -218,7 +226,10 @@ jobs:
             echo "## Artifacts"
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
-            if [ "$PRERELEASE" = true ]; then
+            if [ "$PRERELEASE" = true ] && [ "$TO_PYPI" = true ]; then
+              echo "- PyPI (pre-release, install with \`--pre\`): https://pypi.org/project/mcp-kdenlive/$VERSION/ (with PEP 740 attestations)"
+              echo "- Not published to the MCP Registry (release candidate)"
+            elif [ "$PRERELEASE" = true ]; then
               echo "- Published to TestPyPI only: https://test.pypi.org/project/mcp-kdenlive/$VERSION/"
             else
               echo "- PyPI: https://pypi.org/project/mcp-kdenlive/$VERSION/ (with PEP 740 attestations)"

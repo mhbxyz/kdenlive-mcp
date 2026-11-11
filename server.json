@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/mhbxyz/kdenlive-mcp",
-  "version": "0.4.0.dev0",
+  "version": "1.0.0rc1",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "mcp-kdenlive",
-      "version": "0.4.0.dev0",
+      "version": "1.0.0rc1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
