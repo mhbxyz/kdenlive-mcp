@@ -156,13 +156,38 @@ expected reading of each fixture is in `tests/fixtures/compat.json`.
 
 ## Manual GUI checks
 
-CI cannot open Kdenlive's interface. The lab automates *open → save → compare* locally, but
-interactive editing must be checked by hand. The checklists are kept in the issues (#8, #10, #11,
-#12, #13, #17, #61, #62; all linked from #67) and in the release notes as known limitations. For every new Kdenlive version, open each
-`kd26/*` fixture and run through this checklist:
+CI cannot open Kdenlive's interface. The checklists of #8, #10, #11, #12, #13, #14, #15, #16,
+#17, #42, #61, #62 and #65 (all linked from #67) were run on 2026-11-11 in Kdenlive **26.08.2**
+through the X11 lab (`research/lab/kdx11.py`): an isolated Kdenlive (private XDG directories,
+session bus and X display) driven by keyboard and mouse, every step checked on a screenshot,
+renders and audio measured rather than watched or listened to. Results are in each issue.
 
-- [ ] Opens without a dialog; bin thumbnails appear; the profile in *Project Settings* matches `compat.json`.
-- [ ] Timeline matches `get_timeline`: tracks and names, clip positions, gaps, groups (moving one half moves the other).
-- [ ] Trim, move, undo and redo work; save, close, reopen keeps the edits.
-- [ ] GUI render of `generated-montage` has the expected length and cuts.
-- [ ] `kd26-subtitle` shows the subtitle "Bonjour é ✓" at 00:00:02.
+| Area | Verified by hand in Kdenlive 26.08.2 |
+|---|---|
+| Created projects (#8) | Open without dialog, thumbnails, profile, AV group and ungroup, trim/move/undo/redo, save and reopen, GUI render with sound, Clip Properties, media outside the project folder with accents, audio-only project |
+| Bin and tracks (#10) | Added clips and durations, duplicate detection on re-import, track order and names, mute/hide/lock, clips dropped on new tracks survive save, groups after track insertion, new audio track mixed in the render |
+| Timeline edits (#11) | Positions match `get_timeline`, split halves, group moves, trim limits, undo/redo, GUI render identical to the melt render frame by frame |
+| Crossfades (#61) | Mixes shown and resizable, split/trim/remove copies, a mix added in Kdenlive read back by `get_timeline`, renders without black frames or drops |
+| Open-project rule (#62) | `[open_in_kdenlive]` after *File › Open* and *Open Recent*, also from Claude Code and with the Flatpak Kdenlive; no warning once the project is closed; the warning when the server cannot see Kdenlive's bus |
+| Audio (#13) | Volume and fades in the effect stack, handles, Kdenlive's changes read back, `set_clip_volume` updates the same effect, GUI render envelope identical to the server's |
+| Guides and markers (#12) | Ruler, colours, ranges, clip markers on every instance and in the clip monitor, edits read back, export, undo/redo |
+| Relinking (#17) | No missing-clip dialog, identical render before and after the move, different-file warning, same result as Kdenlive's own relink |
+| melt engine (#42) | Demo project rendered identical to Kdenlive's render dialog; proxied clips rendered from the originals (fixed in #112) |
+| Flatpak (#65) | Tools detected as `flatpak` from an MCP client, create/edit/render, project opened in the Flatpak Kdenlive, `[invalid_path]` with a restricted app |
+| Effects (#14) | Effect stacks, Fade to Black box, edits in Kdenlive read back, mix properties and resize, deleted mix, `update_effect` after Kdenlive's edits |
+| Titles (#15) | One editable text item, font, size, alignment, lower third; a title stays in place when edited in Kdenlive's title editor (fixed in #113) |
+| Subtitles (#16) | Track and text, edits read back, overlapping cues on two layers, styles, GUI render with burned subtitles |
+
+Not checked: a **system** Flatpak installation (needs root). With **Kdenlive 26.08.3** (official
+AppImage, the latest release on 2026-11-11), 22 projects (the `kd26` and upstream fixtures,
+including the 24.12/25.04 ones, and every project made for the checks above) open without a
+dialog and survive its *Save As*: tracks, clips, mixes, effects, guides, markers and subtitles read
+the same. `kdenlive --render` 26.08.3 renders the fixtures (`KDENLIVE_MCP_TEST_KDENLIVE`).
+
+For a new Kdenlive version, repeat at least:
+
+- [ ] Each `kd26/*` fixture opens without a dialog and survives *Save As* (`research/lab/kdx11.py`); `get_timeline`, `list_markers` and `list_subtitles` read the same before and after.
+- [ ] Bin thumbnails, the profile in *Project Settings*, groups (moving one half moves the other).
+- [ ] Trim, move, undo and redo; save, close, reopen keeps the edits.
+- [ ] GUI render of `generated-montage` equals the melt render.
+- [ ] A title made by `add_title`, edited in the title editor, stays in place.

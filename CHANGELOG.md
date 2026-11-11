@@ -27,6 +27,9 @@ migration notes in the same entry.
 
 ### Added
 
+- **Manual verifications (#67):** the GUI checklists of M4–M7 were run in Kdenlive 26.08.2 with
+  the X11 lab, and projects re-saved by Kdenlive 26.08.3; `docs/compatibility.md` lists what was
+  verified by hand. Two bugs found on the way are fixed (#112, #113).
 - **Fixtures saved by Kdenlive 24.12.3 and 25.04.3 (#86):** crossfades, subtitles, a montage,
   keyframed effects, guides and a title, each saved by the official AppImages. They read like
   the 26.08.2 files they came from, survive a no-op save, can be edited and render with melt.
