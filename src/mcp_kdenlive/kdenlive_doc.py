@@ -101,6 +101,23 @@ class KdenliveDocument:
         tractors = [el for el in self.root if el.tag == "tractor"]
         return tractors[-1:] if tractors else []
 
+    def output_frames(self) -> int | None:
+        """Length of what MLT and ``kdenlive --render`` play from this file: the project tractor.
+
+        Usually the active sequence, sometimes one frame longer (26.08); Kdenlive 24.12 and 25.04
+        also stretch it to the last subtitle (#86). None when the file has no project tractor.
+        """
+        tractors = [el for el in self.root if el.tag == "tractor"]
+        if not tractors or not props(tractors[-1]).get("kdenlive:projectTractor"):
+            return None
+        last = tractors[-1]
+        if last.get("out") is None:
+            return None
+        try:
+            return self.time(last.get("out")) - self.time(last.get("in"), default=0) + 1
+        except ProjectError:
+            return None
+
     def active_sequence_uuid(self) -> str | None:
         return self.doc_property("activetimeline") or self.doc_property("uuid")
 

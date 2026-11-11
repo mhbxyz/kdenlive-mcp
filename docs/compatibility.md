@@ -6,12 +6,12 @@ Statuses are defined in [docs/versioning.md](versioning.md#external-software-sup
 
 | Component | tested | supported | untested | unsupported |
 |---|---|---|---|---|
-| Kdenlive | 26.08.2 (everything); 23.08.5 (reading, editing, rendering with the melt engine); 24.12.3 and 25.04.3 (rendering this server's and 26.08's projects, see below) | 23.04 – 26.08 for reading and editing (document version 1.1); rendering with `kdenlive --render` from 24.02, with melt before | other versions | `engine="kdenlive"` before 24.02 (refused with `[unsupported_kdenlive]`); editing documents older than 1.1 |
+| Kdenlive | 26.08.2 (everything); 23.08.5 (reading, editing, rendering with the melt engine); 24.12.3 and 25.04.3 (reading, editing and rendering projects they saved; rendering this server's and 26.08's projects, see below); 26.08.3 (rendering) | 23.04 – 26.08 for reading and editing (document version 1.1); rendering with `kdenlive --render` from 24.02, with melt before | other versions | `engine="kdenlive"` before 24.02 (refused with `[unsupported_kdenlive]`); editing documents older than 1.1 |
 | MLT | 7.42.0, 7.22.0 | 7.x | — | — |
 | FFmpeg / ffprobe | n9.0.2, 6.1.1 | ≥ 6 | older | — |
 | Python | 3.11, 3.12, 3.13, 3.14 | — | 3.15+ | ≤ 3.10 |
 | Linux | CachyOS (rolling), Ubuntu 24.04 (CI) | other distributions | Snap Kdenlive through wrappers | — |
-| AppImage (download.kde.org) | 24.12.3, 25.04.3 through `KDENLIVE_MCP_KDENLIVE`: detection and rendering | — | other releases | — |
+| AppImage (download.kde.org) | 24.12.3, 25.04.3, 26.08.3 through `KDENLIVE_MCP_KDENLIVE`: detection and rendering | — | other releases | — |
 | Flatpak (Flathub `org.kde.kdenlive`) | 26.08.3 (user installation, with its melt 7.43.0 and FFmpeg 9.0.2): detection, probing, creation, both render engines | system installation | — | files in `/tmp`, `/usr`, `/etc`… (the sandbox cannot see them; refused with `[invalid_path]`) |
 | macOS, Windows | — | — | — | not supported |
 | MCP clients | see [docs/clients.md](clients.md) | standard stdio MCP clients | desktop/IDE variants | cloud-only clients without a local bridge |
@@ -31,13 +31,14 @@ new minor version (from 1.0: as decided in the changelog). Tested clients and ve
 
 ## Other Kdenlive releases (#66)
 
-Checked on 2026-11-08 with the official AppImages from download.kde.org (SHA-256 verified),
-pointed to by `KDENLIVE_MCP_KDENLIVE`:
+Checked on 2026-11-08 and 2026-11-11 with the official AppImages from download.kde.org (SHA-256
+verified), pointed to by `KDENLIVE_MCP_KDENLIVE`:
 
 | Kdenlive | Detection | `kdenlive --render` of projects written by this server and by Kdenlive 26.08.2 | Projects saved by this release |
 |---|---|---|---|
-| 24.12.3 (AppImage) | ✅ version, `--render` detected | ✅ montage, crossfades, AV pair: picture and sound | pending (#86) |
-| 25.04.3 (AppImage) | ✅ version, `--render` detected | ✅ same | pending (#86) |
+| 24.12.3 (AppImage) | ✅ version, `--render` detected | ✅ montage, crossfades, AV pair: picture and sound | ✅ read, edited, rendered with melt (#86) |
+| 25.04.3 (AppImage) | ✅ version, `--render` detected | ✅ same | ✅ same (#86) |
+| 26.08.3 (AppImage) | ✅ version, `--render` detected | ✅ same | — (same format as 26.08.2) |
 
 Effects and crossfades written by the server (#14) render the same with both releases. Finding:
 Kdenlive's *default* fade from/to black (an alpha fade) renders as no fade with 24.12.3 (and with
@@ -48,9 +49,24 @@ brightness form (*Fade to Black* checked), which renders with 24.12.3, 25.04.3, 
 binaries listed in `KDENLIVE_MCP_TEST_KDENLIVE` (`:`-separated; skipped when unset). AppImages are
 supported through `KDENLIVE_MCP_KDENLIVE`; they bundle their own MLT, used by `kdenlive --render`.
 
-Projects *saved* by 24.x/25.x need Kdenlive's GUI: in the headless lab these AppImages
-register on neither the accessibility bus nor the session D-Bus, so the files are produced by
-hand (#86).
+Projects *saved* by 24.12.3 and 25.04.3 (#86) were made by driving the AppImages' GUI on a
+private X display (`research/lab/kdx11.py`; they register on neither the accessibility bus nor the
+session D-Bus, so the AT-SPI lab cannot drive them). Crossfades, subtitles, a montage, keyframed
+effects, guides and a title read exactly like the 26.08.2 files they came from (tracks, clips,
+mixes, effects, guides, markers, subtitle events), survive a no-op save and can be edited
+(`tests/test_older_saves.py`). Differences found in the files:
+
+- **Project length with subtitles:** 24.12 and 25.04 end the project's output (the project
+  tractor) at the last subtitle when it ends after the last clip; 26.08 ends it one frame after
+  the last clip. melt and `kdenlive --render` render that length, so a render of such a project
+  is longer than the clips. Since #86 the server checks a render against the project's output
+  length. An edit by the server sets the output back to the clips' end, like 26.08.
+- **Title font name:** 25.04.3 (AppImage) stored its default title font as `Sans Serif`, the
+  name its bundled fontconfig resolves; 26.08.2 writes the family (`Noto Sans`).
+- **Lab only:** the 24.12.3 AppImage kept *Add Title Clip* disabled and reported title fonts as
+  missing (see the font note below), so its title fixture comes from the 25.04.3 one.
+- Everything else (document version 1.1, sequences, mixes, groups, effects, guides JSON, ASS
+  subtitles) is written the same way.
 
 Titles (#15): the 25.04.3 AppImage renders the server's titles (centred, lower third, positioned).
 The 24.12.3 AppImage renders **no title at all** on this machine, also from the file saved by
@@ -106,20 +122,22 @@ expected reading of each fixture is in `tests/fixtures/compat.json`.
 | Audio and video tracks, AV groups, gaps | `kd26/kd26-ntsc-timeline`, `kd26/generated-montage`, `upstream/clip-ids*` |
 | Split / trim / sub-range / named tracks / 6 tracks | `kd26/generated-montage` |
 | Unicode media, track names and subtitle text | `kd26/*` |
-| Subtitles (ASS) | `kd26/kd26-subtitle` |
+| Subtitles (ASS) | `kd26/kd*-subtitle` |
+| Saved by Kdenlive 24.12.3 and 25.04.3 | `kd26/kd24.12-*`, `kd26/kd25.04-*`, `upstream/test-keyframes.resaved-24.12.3`, `…-25.04.3` |
+| Guides with categories and Unicode comments | `kd26/kd*-guides` |
 | Effects, keyframes | `upstream/test-keyframes*`, `upstream/test-nesting-effects*` |
 | Multiple and nested sequences | `upstream/test-nesting*` |
 | Same-track mixes (crossfades) made by Kdenlive 26.08.2, video and audio | `kd26/kd26-mixes` |
 | Same-track mixes, document 1.04 | `upstream/test-mix`, `upstream/av` |
 | Missing effect asset (LUT), missing proxy | `upstream/test-missing`, `upstream/missing-proxy` |
 | Empty timeline | `kd26/kd26-ntsc` |
-| Titles | **not covered yet**: creating one requires the Kdenlive title editor (#15) |
+| Titles made in Kdenlive's title editor | `kd26/kd*-title` |
 
 `tests/test_compat.py` checks:
 
 - **Every fixture:** it reads exactly as recorded (version, frame rate, sequences, duration, clips, tracks, missing items).
 - **Every editable fixture:** it survives a no-op save, with canonical XML identical.
-- **Every complete fixture, with real tools:** melt renders it with the expected number of frames (Kdenlive 26.08 stores one extra frame, which is tolerated).
+- **Every complete fixture, with real tools:** melt renders it with the expected number of frames (Kdenlive 26.08 stores one extra frame, which is tolerated; `render_frames` in `compat.json` records the 24.12/25.04 subtitle projects, longer than their clips).
 - **Kdenlive 26.08.2 fixtures, where Kdenlive has command-line rendering:** `kdenlive --render` renders them; the subtitle crash is an expected failure.
 
 ### Regenerating

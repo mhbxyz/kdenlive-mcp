@@ -7,6 +7,7 @@ They are **not** part of the `mcp-kdenlive` package and are not supported interf
 |---|---|
 | `kdgui.sh` / `kdgui.py` | Run Kdenlive headlessly (`kwin_wayland --virtual`) with isolated XDG directories, a private session D-Bus and a private AT-SPI bus. Then run a small command script against it: list dialogs, click buttons, fill the save dialog, call D-Bus methods. |
 | `kdrender.sh` | Run `kdenlive --render` offscreen with isolated XDG directories and a private D-Bus. |
+| `kdx11.py` | Run any Kdenlive, including an extracted official AppImage, on a private Xvfb display with isolated XDG directories and session bus, and drive it by keyboard and mouse (XTEST) with screenshots as evidence. Used for the 24.12.3/25.04.3 fixtures (#86) and the manual GUI checks (#67). Needs Xvfb, `python-xlib` and Pillow. |
 | `kdsum.py` | Summarize a `.kdenlive` file: bin, sequences, tracks, playlist entries, transitions. |
 | `verify_roundtrip.py` | Open projects in real Kdenlive, *Save As* a copy, and compare timelines (exit 0 if identical and no load dialog). Run with `uv run python research/lab/verify_roundtrip.py FILE...`; it also compares mixes, layers, effects with their parameter values, markers, titles (text and style from `xmldata`), and subtitles (events from the ASS file), and prints the differences. Set `KDENLIVE_MCP_ALLOWED_ROOTS` to the files' folder, and `KD_KEEP=1` to keep Kdenlive's copy (`*.kdenlive-resaved.kdenlive`). The GUI driver uses `/usr/bin/python3` (needs `gi`); override with `KDGUI_PYTHON`. |
 
@@ -33,7 +34,9 @@ over AT-SPI (`dsettextn 0`) does not load the preview, and *OK* does nothing. A 
 server's import is therefore checked by round trip: Kdenlive opens the ASS the server wrote and
 re-saves the same events.
 Finding (#66): the official 24.12.3 AppImage starts in the lab but registers neither on the
-accessibility bus nor on the session D-Bus, so the lab cannot drive it.
+accessibility bus nor on the session D-Bus, so the lab cannot drive it. `kdx11.py` drives it instead, through X11 input events (#86). Without a sound server, start
+the AppImages with `SDL_AUDIODRIVER=dummy` after their hooks (kdx11 does): otherwise 24.12/25.04
+show "Could not create the video preview window" and quit.
 
 ## Safety rules
 

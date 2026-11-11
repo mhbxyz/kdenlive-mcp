@@ -443,6 +443,344 @@
     "same_track_mix",
     "secondary_layer"
    ]
+  },
+  {
+   "file": "kd26/kd24.12-mixes.kdenlive",
+   "written_by": "Kdenlive 24.12.3 (official AppImage: kd26-mixes.kdenlive saved with Save As)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 130,
+   "active_clips": 6,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "same_track_mix",
+    "secondary_layer"
+   ]
+  },
+  {
+   "file": "kd26/kd24.12-subtitle.kdenlive",
+   "written_by": "Kdenlive 24.12.3 (official AppImage: kd26-subtitle.kdenlive saved with Save As (Kdenlive wrote the ASS file))",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 60,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "subtitles_ass",
+    "unicode_text"
+   ],
+   "render_frames": 210
+  },
+  {
+   "file": "kd26/kd24.12-montage.kdenlive",
+   "written_by": "Kdenlive 24.12.3 (official AppImage: generated-montage.kdenlive saved with Save As)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 190,
+   "active_clips": 8,
+   "tracks": [
+    "A3",
+    "A2",
+    "A1",
+    "V1",
+    "V2",
+    "V3"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "gaps",
+    "av_group",
+    "split",
+    "trim",
+    "subrange",
+    "named_tracks",
+    "unicode_track_name",
+    "six_tracks"
+   ]
+  },
+  {
+   "file": "kd26/kd24.12-guides.kdenlive",
+   "written_by": "Kdenlive 24.12.3 (official AppImage: kd26-ntsc-timeline.kdenlive with two guides added in the GUI)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 60,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "unicode_media_name",
+    "guides",
+    "guide_categories"
+   ]
+  },
+  {
+   "file": "kd26/kd24.12-title.kdenlive",
+   "written_by": "Kdenlive 24.12.3 (official AppImage: kd26-ntsc-timeline.kdenlive with a title clip on V2 (title made by 25.04.3, see PROVENANCE.md))",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 150,
+   "active_clips": 3,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "unicode_media_name",
+    "title_clip",
+    "unicode_text"
+   ]
+  },
+  {
+   "file": "upstream/test-keyframes.resaved-24.12.3.kdenlive",
+   "written_by": "Kdenlive 24.12.3 (official AppImage: test-keyframes.resaved-26.08.2.kdenlive saved with Save As)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 5,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "effects",
+    "keyframes"
+   ]
+  },
+  {
+   "file": "kd26/kd25.04-mixes.kdenlive",
+   "written_by": "Kdenlive 25.04.3 (official AppImage: kd26-mixes.kdenlive saved with Save As)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 130,
+   "active_clips": 6,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "same_track_mix",
+    "secondary_layer"
+   ]
+  },
+  {
+   "file": "kd26/kd25.04-subtitle.kdenlive",
+   "written_by": "Kdenlive 25.04.3 (official AppImage: kd26-subtitle.kdenlive saved with Save As (Kdenlive wrote the ASS file))",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 60,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "subtitles_ass",
+    "unicode_text"
+   ],
+   "render_frames": 210
+  },
+  {
+   "file": "kd26/kd25.04-montage.kdenlive",
+   "written_by": "Kdenlive 25.04.3 (official AppImage: generated-montage.kdenlive saved with Save As)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 190,
+   "active_clips": 8,
+   "tracks": [
+    "A3",
+    "A2",
+    "A1",
+    "V1",
+    "V2",
+    "V3"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "gaps",
+    "av_group",
+    "split",
+    "trim",
+    "subrange",
+    "named_tracks",
+    "unicode_track_name",
+    "six_tracks"
+   ]
+  },
+  {
+   "file": "kd26/kd25.04-guides.kdenlive",
+   "written_by": "Kdenlive 25.04.3 (official AppImage: kd26-ntsc-timeline.kdenlive with two guides added in the GUI)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 60,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "unicode_media_name",
+    "guides",
+    "guide_categories"
+   ]
+  },
+  {
+   "file": "kd26/kd25.04-title.kdenlive",
+   "written_by": "Kdenlive 25.04.3 (official AppImage: kd26-ntsc-timeline.kdenlive with a title clip on V2 added in the title editor)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    30000,
+    1001
+   ],
+   "sequences": 1,
+   "active_duration_frames": 150,
+   "active_clips": 3,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "fractional_fps",
+    "av_group",
+    "unicode_media_name",
+    "title_clip",
+    "unicode_text"
+   ]
+  },
+  {
+   "file": "upstream/test-keyframes.resaved-25.04.3.kdenlive",
+   "written_by": "Kdenlive 25.04.3 (official AppImage: test-keyframes.resaved-26.08.2.kdenlive saved with Save As)",
+   "document_version": "1.1",
+   "generation": 5,
+   "frame_rate": [
+    25,
+    1
+   ],
+   "sequences": 1,
+   "active_duration_frames": 5,
+   "active_clips": 2,
+   "tracks": [
+    "A2",
+    "A1",
+    "V1",
+    "V2"
+   ],
+   "missing": 0,
+   "editable": true,
+   "features": [
+    "effects",
+    "keyframes"
+   ]
   }
  ]
 }
