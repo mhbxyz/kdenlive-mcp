@@ -7,6 +7,13 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+### Fixed
+
+- **melt engine and proxy clips (#42):** a project where Kdenlive used a proxy for a clip was
+  rendered from the proxy (Kdenlive stores the proxy as the clip's `resource`), so the result was
+  blurred, 640 pixels wide scaled up. The melt engine now renders those clips from their original
+  media, like Kdenlive, and warns how many it switched. The `kdenlive` engine was not affected.
+
 ### Changed
 
 - **README:** rewritten as the project's front page: what the server does and why, a demo video

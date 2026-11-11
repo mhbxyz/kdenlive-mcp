@@ -141,7 +141,7 @@ defaults (`defaultquality`…, else the middle of the range), `+'k'` suffixes ar
 `%dv_standard` is `pal` at 25 fps and `ntsc` otherwise, and the default speed option is
 appended. A preset with another placeholder is refused (`[unknown_preset]`). The result's
 `engine` says which one ran, and a melt render carries a warning: it is **not Kdenlive's own
-render path** (proxy clips, render zones and Kdenlive-specific render options are ignored).
+render path** (render zones and Kdenlive-specific render options are ignored).
 
 Safety: the melt engine only passes `key=value` encoder settings from a preset. A preset whose
 arguments name an output or input (`target=`, `resource=`, a bare path, `-consumer`…), contain a
@@ -150,14 +150,19 @@ downloaded files, and the server's output checks must not be bypassed.
 
 Like Kdenlive, melt reads the project with its media resolved from the folder Kdenlive would use:
 when the stored `root` no longer exists (a moved project), melt renders a copy whose `root` is
-the project's folder (without it, melt rendered a blank, silent picture). Kdenlive's consumer
+the project's folder (without it, melt rendered a blank, silent picture). Clips using a proxy
+are rendered from their original media, like Kdenlive does: Kdenlive stores the proxy as the
+clip's `resource` and the media in `kdenlive:originalurl`, and that copy puts the original back
+(a warning counts them). Without it, melt rendered the 640-pixel proxies (#42). Kdenlive's consumer
 defaults `rescale=bilinear` and `deinterlacer=onefield` are added; with no default speed, the
 middle speed entry is used, as Kdenlive does.
 
 Verified: CI renders the fixtures with the melt engine on Ubuntu's Kdenlive 23.08 / MLT 7.22
 and checks picture and sound; locally, melt and Kdenlive 26.08.2 renders of a project with
 crossfades have the same streams and duration, frame colours within 12/255 and mean audio level
-within 1.5 dB. Known differences: no proxies or render zones, Kdenlive's `in`/`out` not set.
+within 1.5 dB. A project whose clip Kdenlive proxied renders, losslessly, identical to the same
+project without proxy, with both engines (#42). Known differences: no render zones, Kdenlive's
+`in`/`out` not set.
 
 **Display (MLT 7.22, #90):** MLT's Qt module draws titles and composites video tracks
 (`qtblend`, used by every Kdenlive 26 project with two video tracks or more). With MLT 7.22
