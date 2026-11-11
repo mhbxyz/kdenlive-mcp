@@ -19,7 +19,6 @@ migration notes in the same entry.
   rendered from the proxy (Kdenlive stores the proxy as the clip's `resource`), so the result was
   blurred, 640 pixels wide scaled up. The melt engine now renders those clips from their original
   media, like Kdenlive, and warns how many it switched. The `kdenlive` engine was not affected.
-
 - **Rendering projects saved by Kdenlive 24.12 or 25.04 (#86):** when a subtitle ended after the
   last clip, `render_project` and `start_render` rejected a correct render ("duration differs from
   the timeline"). These releases end the project's output at the last subtitle, and melt and
