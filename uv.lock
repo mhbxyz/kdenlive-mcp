@@ -650,7 +650,7 @@ wheels = [
 
 [[package]]
 name = "mcp-kdenlive"
-version = "1.0.0rc2"
+version = "1.0.0rc3.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
