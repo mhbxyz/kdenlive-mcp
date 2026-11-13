@@ -25,7 +25,9 @@ Check = tuple[str, bool, str]
 
 
 def cues(srt: Path) -> int:
-    return len(re.findall(r"-->", srt.read_text(encoding="utf-8"))) if srt.is_file() else -1
+    if not srt.is_file():
+        return -1
+    return sum(" --> " in line for line in srt.read_text(encoding="utf-8").splitlines())
 
 
 async def read(work: Path, project: Path) -> dict[str, Any]:
