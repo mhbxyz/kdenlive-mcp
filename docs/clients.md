@@ -100,5 +100,12 @@ npx @modelcontextprotocol/inspector --cli /path/to/kdenlive-mcp --method tools/c
 ## Optional protocol features
 
 - **Tools only:** the server exposes tools only. No resources, prompts, sampling, elicitation or roots are required.
+- **Instructions:** the server sends MCP instructions with the editing method: plan in frames,
+  one working file edited in place with each result's `saved.sha256` as the next `revision`,
+  check before rendering, say what could not be seen or heard. On the demos this removed the
+  method mistakes of a bare agent and cut cost by 7–11 %; an orchestrator with sub-agents cost
+  35 % more for the same result (`docs/research/orchestration.md`). The essentials are in the
+  first 512 characters (Codex) and the whole text is under Claude Code's 4,096. No extra skill or
+  sub-agent set-up is needed.
 - **Text fallback:** clients without structured-output support read the JSON text content; a test checks it is identical to `structuredContent`.
 - **Annotations:** tool annotations (`readOnlyHint`, …) are advisory and safe to ignore.
