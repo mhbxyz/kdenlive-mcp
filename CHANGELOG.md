@@ -7,6 +7,13 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+## [1.0.0rc2] - 2026-11-13
+
+Second release candidate of 1.0. No interface change since 1.0.0rc1: the server now tells
+assistants how to work with it. Install for testing with
+`pipx install --pip-args=--pre mcp-kdenlive==1.0.0rc2`. The feedback period (#68) restarts for
+at least 7 days.
+
 ### Changed
 
 - **Server instructions:** the MCP instructions now carry the editing method (plan in frames,
