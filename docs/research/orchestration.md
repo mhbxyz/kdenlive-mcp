@@ -93,6 +93,23 @@ Per demo, two runs each (checks · cost · time):
    In Codex's `auto` mode that asks for approval on every edit (sources §5.1). Worth revisiting
    with care, since annotations are hints a client may trust.
 
+## Follow-up: the method shipped as the server's instructions (2026-11-13)
+
+Recommendation 1 was implemented: the server's own instructions now carry a condensed method
+(1.4 kB, the four steps in the first 512 characters). The `single` arm, which needs no set-up
+on the client, was run again on the four demos, twice each (`runs-v2`):
+
+| Arm | Checks passed | Cost (sum) | Wall time (sum) | Tool calls | Server errors |
+|---|---|---|---|---|---|
+| `single`, old instructions (above) | 93/94 | 12.66 USD | 1247 s | 367 | 11 |
+| `single`, new instructions | 94/94 | 11.34 USD (−10 %) | 1130 s (−9 %) | 335 | 8 |
+
+Four of the eight errors are the harmless "project does not exist yet" checks of the interview
+brief. The other four were each recovered at once: a render to a folder that did not exist (the
+instructions now say outputs need an existing folder), one write without `overwrite`, one stale
+revision, one crossfade on a clip already in a mix. The interview's voices passed in both runs,
+but with a guessed +12 dB, which the client said it could not measure: still a gap for #102.
+
 ## Reproducing
 
 ```sh

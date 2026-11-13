@@ -7,6 +7,15 @@ migration notes in the same entry.
 
 ## [Unreleased]
 
+### Changed
+
+- **Server instructions:** the MCP instructions now carry the editing method (plan in frames,
+  one working file edited in place with chained revisions, check every requested item before
+  rendering, say what was not seen or heard), instead of three general sentences. In a 32-run
+  comparison on the demos (`docs/research/orchestration.md`), this method removed a bare agent's
+  mistakes (writing over the source without `overwrite`, stale revisions, folders that do not
+  exist) and lowered cost; sub-agents did not help. Not part of the versioned interface.
+
 ## [1.0.0rc1] - 2026-11-11
 
 First release candidate of 1.0 (milestone M8). The interface is frozen: from 1.0.0 on, a breaking

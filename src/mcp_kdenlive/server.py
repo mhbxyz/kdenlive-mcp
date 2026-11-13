@@ -38,11 +38,30 @@ from mcp_kdenlive.markers import MarkerEditResult
 
 SERVER_NAME = "kdenlive-mcp"
 
+# The method that made assistants cheaper and mistake-free on the demos (docs/research/
+# orchestration.md). Essentials first: Codex reads the first 512 characters most; Claude Code
+# keeps 4096 (tests/test_server_instructions.py).
 INSTRUCTIONS = """\
-Local MCP server for Kdenlive projects on Linux.
-Call diagnose_environment first to check which external programs (Kdenlive, MLT melt,
-ffprobe) are available on this machine before using project or rendering tools.
-The server works on local files only and never opens a network listener."""
+Edits Kdenlive projects, local files only. Method:
+1. Read first: probe_media the inputs or get_timeline the project; plan clips, mixes, titles \
+and guides in frames.
+2. One working file: create_project (or save_project_copy) once, then edit in place \
+(destination = path, overwrite=true), passing each result's saved.sha256 as the next revision.
+3. Before rendering, read the project back and check each requested item.
+4. You cannot see or hear a render: say what you checked.
+
+Details:
+- diagnose_environment shows which programs (Kdenlive, melt, ffprobe) are available.
+- Frames: timeline [start, end), source in/out inclusive. Use the clip refs each result returns.
+- Crossfades (add_mix) need handles: trim inside the media, not at its first or last frame.
+- Cutaways and titles go on a track above the footage (add_track first).
+- Order that works: clips, trims and moves, crossfades, effects and audio, titles, subtitles \
+(import_subtitles reads an SRT or WebVTT file), guides.
+- Do not write one file per step: overwriting keeps rotating backups.
+- Errors start with a [code] and a hint; after [stale_revision], read the timeline again.
+- render_project validates streams and duration; use start_render + get_render_job for long \
+renders. Outputs need a media extension and an existing folder.
+- Only folders allowed by KDENLIVE_MCP_ALLOWED_ROOTS are reachable."""
 
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False
